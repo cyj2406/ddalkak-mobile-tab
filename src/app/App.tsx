@@ -780,13 +780,12 @@ function SearchFilterBar({ placeholder = "검색어를 입력해 주세요" }: {
       <div className="flex-1 relative">
         <div className="absolute left-3 top-1/2 -translate-y-1/2"><IconSearch /></div>
         <input
-          className="w-full h-10 bg-[#f8fafc] rounded-[14px] pl-9 pr-3 outline-none border border-[#e8eff5]"
+          className="w-full h-10 bg-white rounded-[14px] pl-9 pr-3 outline-none border border-[#e2e8f0]"
           placeholder={placeholder}
           style={{ ...f, fontWeight: 400, fontSize: 13, color: "#0a0a0a" }}
         />
       </div>
-      <button className="h-10 bg-white border border-[#e2e8f0] rounded-[14px] flex items-center gap-1.5 px-3 shrink-0"
-        style={{ boxShadow: "0px 1px 2px rgba(0,0,0,0.05)" }}>
+      <button className="h-10 bg-white border border-[#e2e8f0] rounded-[14px] flex items-center gap-1.5 px-3 shrink-0">
         <IconFilter />
         <span style={{ ...f, fontWeight: 600, fontSize: 13, color: "#334155" }}>필터</span>
       </button>
@@ -1210,7 +1209,7 @@ function FavoritesScreen() {
       {/* Card grid */}
       <div className="grid grid-cols-2 gap-3 px-4 pb-6">
         {favoritesCards.map((card, i) => (
-          <TemplateCard key={i} title={card.title} isVideo={card.isVideo} />
+          <TemplateCard key={i} title={card.title} />
         ))}
       </div>
     </main>
