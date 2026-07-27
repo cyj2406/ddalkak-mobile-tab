@@ -8,6 +8,9 @@ import svgCard from "@/imports/Container/svg-n3rzud15nf";
 import imgImageNet from "@/imports/새대화딸깍/70598a9173139973c519fbc9c881094e41ef9297.png";
 import imgUserAvatar from "@/imports/새대화딸깍/ec4bf4c83826b512a10ccb46952ef28cdb24b8d8.png";
 
+import { MobileEditorNotice } from "@/app/components/viewer/MobileEditorNotice";
+import { ScrollableChips } from "@/app/components/common/ScrollableChips";
+
 
 // ─── 타입 ──────────────────────────────────────────────────────────────────────
 type Screen = "home" | "image-ai" | "landing-ai" | "forms-ai" | "docs-ai" | "audio-ai" | "ppt-ai" | "video-ai" | "favorites" | "mywork" | "credit-history" | "notifications-all";
@@ -1604,14 +1607,9 @@ function CreditHistoryScreen({ onCharge }: { onCharge: () => void }) {
         </div>
       </div>
 
-      {/* 필터 탭 (폭이 좁으면 스크롤 대신 줄바꿈되어 카테고리가 잘리지 않는다) */}
-      <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
-        {TABS.map((tab, i) => (
-          <button key={tab} onClick={() => setActiveTab(i)} className="shrink-0 h-8 rounded-full px-4"
-            style={{ background: i === activeTab ? "#0a0a0a" : "white", border: i === activeTab ? "none" : "1px solid #e2e8f0" }}>
-            <span style={{ ...f, fontWeight: 600, fontSize: 13, color: i === activeTab ? "white" : "#6b7280", whiteSpace: "nowrap" }}>{tab}</span>
-          </button>
-        ))}
+      {/* 필터 탭 (한 줄 가로 스크롤 · 화면 좌우 끝까지 엣지 블리드) */}
+      <div className="px-4 pb-3">
+        <ScrollableChips items={TABS} activeIndex={activeTab} onChange={setActiveTab} />
       </div>
 
       {/* 내역 리스트 */}
@@ -2979,18 +2977,15 @@ function LandingFormCard({ onGenerate }: { onGenerate: () => void }) {
       <CardBody>
         <FcPreview open={prevOpen} onToggle={() => setPrevOpen(v=>!v)}><Preview /></FcPreview>
         <FcHelper text="섹션별 내용을 확인하고 편집하세요" />
-        {/* 섹션 탭 */}
-        <div className="overflow-x-auto" style={{ scrollbarWidth:"none" }}>
-          <div className="flex gap-2 pb-1" style={{ minWidth:"max-content" }}>
-            {LANDING_SECTIONS.map((sec, i) => (
-              <button key={i} onClick={() => set("activeSection",i)}
-                className="h-9 px-3.5 rounded-full shrink-0"
-                style={{ ...f, fontSize:12.5, fontWeight:600, border:`1.5px solid ${s.activeSection===i?"#3B5BFE":"#E3E6EB"}`, background:s.activeSection===i?"#ECEFFE":"white", color:s.activeSection===i?"#3B5BFE":"#4B5262" }}>
-                {sec}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* 섹션 탭 — 카드 좌우 끝선까지 흐르는 가로 스크롤 (공용 컴포넌트) */}
+        <ScrollableChips
+          variant="outline"
+          centerActiveOnChange
+          edgeClassName="-mx-[18px] px-[18px]"
+          items={LANDING_SECTIONS}
+          activeIndex={s.activeSection}
+          onChange={(i) => set("activeSection", i)}
+        />
         {/* 제목 */}
         <div className="flex flex-col gap-[10px]">
           <FcLabel label="제목" />
@@ -3079,18 +3074,15 @@ function DetailFormCard({ onGenerate }: { onGenerate: () => void }) {
       <CardBody>
         <FcPreview open={prevOpen} onToggle={() => setPrevOpen(v=>!v)}><Preview /></FcPreview>
         <FcHelper text="섹션별 내용을 확인하고 편집하세요" />
-        {/* 섹션 탭 */}
-        <div className="overflow-x-auto" style={{ scrollbarWidth:"none" }}>
-          <div className="flex gap-2 pb-1" style={{ minWidth:"max-content" }}>
-            {DETAIL_SECTIONS.map((sec, i) => (
-              <button key={i} onClick={() => set("activeSection",i)}
-                className="h-9 px-3.5 rounded-full shrink-0"
-                style={{ ...f, fontSize:12.5, fontWeight:600, border:`1.5px solid ${s.activeSection===i?"#3B5BFE":"#E3E6EB"}`, background:s.activeSection===i?"#ECEFFE":"white", color:s.activeSection===i?"#3B5BFE":"#4B5262" }}>
-                {sec}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* 섹션 탭 — 카드 좌우 끝선까지 흐르는 가로 스크롤 (공용 컴포넌트) */}
+        <ScrollableChips
+          variant="outline"
+          centerActiveOnChange
+          edgeClassName="-mx-[18px] px-[18px]"
+          items={DETAIL_SECTIONS}
+          activeIndex={s.activeSection}
+          onChange={(i) => set("activeSection", i)}
+        />
         {/* 제목 */}
         <div className="flex flex-col gap-[10px]">
           <FcLabel label="제목" />
@@ -3306,10 +3298,13 @@ function WsResult({ category, templateName }: { category: WorkspaceCategory; tem
         </p>
       </div>
 
+      {/* PPT — 생성된 슬라이드 그리드(미리보기) */}
+      {category === "ppt" && <PptSlidesPanel templateName={templateName} />}
+
       {/* 결과물 카드 (카테고리별) */}
       <WsResultCard variant={r.variant} filename={filename} onOpen={() => setViewerOpen(true)} />
 
-      {/* 사용 크레딧 배지 — 결과 카드 아래 */}
+      {/* 사용 크레딧 배지 — 맨 아래 */}
       <div className="flex items-center gap-2 px-1">
         <span className="flex items-center gap-1.5 rounded-full pl-1.5 pr-3 py-1" style={{ background: "#eef2ff" }}>
           <span className="size-4 rounded-full bg-[#4f7bff] flex items-center justify-center shrink-0"><span style={{ ...f, fontWeight: 700, fontSize: 8, color: "white" }}>C</span></span>
@@ -3317,9 +3312,6 @@ function WsResult({ category, templateName }: { category: WorkspaceCategory; tem
         </span>
         <span style={{ ...f, fontWeight: 600, fontSize: 12.5, color: "#94a3b8" }}>{r.agent}</span>
       </div>
-
-      {/* PPT — 생성된 슬라이드 그리드 */}
-      {category === "ppt" && <PptSlidesPanel templateName={templateName} />}
 
       {/* 결과 확인하기 → 전체화면 뷰어 */}
       {viewerOpen && (
@@ -3336,7 +3328,7 @@ function ResultViewer({ variant, filename, templateName, onClose }: {
   return (
     <div className="fixed inset-0 z-[95] bg-white flex flex-col" style={{ animation: "wsFadeIn 200ms ease" }}>
       {/* 헤더 */}
-      <header className="h-14 flex items-center gap-1 px-3 shrink-0 border-b border-[#eef1f5] bg-white">
+      <header className="h-14 flex items-center gap-1 px-3 shrink-0 bg-white">
         <div className="flex-1 min-w-0 flex items-center gap-1">
           <span className="truncate" style={{ ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a", letterSpacing: "-0.3px" }}>{filename}</span>
           <ChevronDown size={15} color="#94a3b8" className="shrink-0" />
@@ -3345,6 +3337,11 @@ function ResultViewer({ variant, filename, templateName, onClose }: {
         <button onClick={onClose} className="size-9 rounded-[10px] flex items-center justify-center shrink-0"><XIcon size={19} color="#475569" /></button>
       </header>
 
+      {/* PC 에디터 안내 — 모바일에서만, 헤더 아래 full-bleed 스트립으로 고정 (모든 카테고리 공통) */}
+      <MobileEditorNotice />
+
+      {/* 콘텐츠 스크롤 영역 */}
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col" style={{ scrollbarWidth: "none" }}>
       {/* ── 영상 ── */}
       {variant === "mp4" && (
         <div className="flex-1 bg-black flex items-center justify-center">
@@ -3372,7 +3369,7 @@ function ResultViewer({ variant, filename, templateName, onClose }: {
 
       {/* ── 이미지 ── */}
       {variant === "png" && (
-        <div className="flex-1 overflow-y-auto bg-[#f1f5f9] flex items-center justify-center p-4" style={{ scrollbarWidth: "none" }}>
+        <div className="flex-1 bg-[#f1f5f9] flex items-center justify-center p-4">
           <div className="w-full rounded-[14px] overflow-hidden border border-[#e2e8f0]"
             style={{ aspectRatio: "4/5", background: "linear-gradient(135deg,#fde68a 0%,#fca5a5 50%,#c4b5fd 100%)", boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
             <div className="w-full h-full flex flex-col items-center justify-center gap-3 p-6 text-center">
@@ -3385,7 +3382,7 @@ function ResultViewer({ variant, filename, templateName, onClose }: {
 
       {/* ── 문서 (Word/HWP) ── */}
       {variant === "word" && (
-        <div className="flex-1 overflow-y-auto bg-[#e9ecf0] py-4 px-4" style={{ scrollbarWidth: "none" }}>
+        <div className="flex-1 bg-[#e9ecf0] py-4 px-4">
           <div className="mx-auto bg-white" style={{ maxWidth: 520, boxShadow: "0 2px 14px rgba(0,0,0,0.1)", padding: "34px 24px", minHeight: 660 }}>
             <p className="text-center" style={{ ...f, fontWeight: 700, fontSize: 18, color: "#111", letterSpacing: "-0.3px", marginBottom: 26, lineHeight: 1.4 }}>{templateName}</p>
             {["민원인 인적사항", "수용자 인적사항", "신청 사유"].map((h, i) => (
@@ -3415,7 +3412,7 @@ function ResultViewer({ variant, filename, templateName, onClose }: {
 
       {/* ── 슬라이드 ── */}
       {variant === "slides" && (
-        <div className="flex-1 overflow-y-auto bg-[#0f1216] flex flex-col items-center justify-center p-4 gap-5" style={{ scrollbarWidth: "none" }}>
+        <div className="flex-1 bg-[#0f1216] flex flex-col items-center justify-center p-4 gap-5">
           <div className="w-full rounded-[10px] overflow-hidden relative" style={{ aspectRatio: "16/9", background: "radial-gradient(120% 120% at 25% 20%, #24304c 0%, #0a0e18 70%)" }}>
             <div className="absolute inset-0 p-5 flex flex-col justify-end">
               <div className="h-2.5 rounded-full mb-3" style={{ width: "38%", background: "rgba(236,72,153,0.85)" }} />
@@ -3437,7 +3434,7 @@ function ResultViewer({ variant, filename, templateName, onClose }: {
 
       {/* ── 웹 페이지 (랜딩/상세) ── */}
       {variant === "html" && (
-        <div className="flex-1 overflow-y-auto bg-[#f1f5f9] p-4" style={{ scrollbarWidth: "none" }}>
+        <div className="flex-1 bg-[#f1f5f9] p-4">
           <div className="mx-auto bg-white rounded-[14px] overflow-hidden border border-[#e2e8f0]" style={{ maxWidth: 480, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
             <div className="relative" style={{ aspectRatio: "16/11", background: "linear-gradient(135deg,#1e293b 0%,#0f172a 100%)" }}>
               <div className="absolute inset-0 p-6 flex flex-col justify-center gap-2.5">
@@ -3459,6 +3456,7 @@ function ResultViewer({ variant, filename, templateName, onClose }: {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
