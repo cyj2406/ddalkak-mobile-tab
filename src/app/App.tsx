@@ -642,7 +642,7 @@ function TopBar({ onMenuOpen, onBack, showBack, onCreditClick, onBellClick }: {
           <div className="bg-[#4f7bff] rounded-full size-5 flex items-center justify-center">
             <span style={{ ...f, fontWeight: 700, fontSize: 10, color: "white" }}>C</span>
           </div>
-          <span style={{ ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a" }}>166,994</span>
+          <span style={{ ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a" }}>{CREDIT_BALANCE.toLocaleString()}</span>
         </button>
         <button onClick={onBellClick} className="relative size-9 flex items-center justify-center">
           <IconBell />
@@ -1286,7 +1286,7 @@ function CreditBottomSheet({ onClose, onHistoryClick }: { onClose: () => void; o
         <div className="px-5 pb-4">
           <p style={{ ...f, fontWeight: 500, fontSize: 12, color: "#90a1b9", marginBottom: 4 }}>현재 잔액</p>
           <p style={{ ...f, fontWeight: 700, fontSize: 22, color: "#0a0a0a", letterSpacing: "-0.8px" }}>
-            166,994 <span style={{ fontWeight: 500, fontSize: 14, color: "#737373" }}>크레딧</span>
+            {CREDIT_BALANCE.toLocaleString()} <span style={{ fontWeight: 500, fontSize: 14, color: "#737373" }}>크레딧</span>
           </p>
         </div>
         {/* 충전 패키지 */}
@@ -1356,7 +1356,7 @@ const notificationItems = [
   },
   {
     title: "크레딧 충전 완료",
-    body: "5,000 크레딧이 성공적으로 충전되었습니다. 현재 잔액: 166,994 크레딧",
+    body: "5,000 크레딧이 성공적으로 충전되었습니다. 현재 잔액: 11,974,710 크레딧",
     time: "어제",
     read: true,
   },
@@ -1556,27 +1556,48 @@ function NotificationsAllScreen() {
 
 // ─── 크레딧 사용 내역 화면 ───────────────────────────────────────────────────────
 
-const creditHistoryData = [
-  { title: "20평 가게 인테리어 도면 요청", type: "미디어",   date: "2026.07.23 14:20", credits: -120,   balance: 166994 },
-  { title: "포차 투자 제안서 작성",         type: "AI 모델", date: "2026.07.23 09:12", credits: -85,    balance: 167114 },
-  { title: "25초 드라마형 보험 광고 기획",  type: "미디어",  date: "2026.07.22 18:40", credits: -200,   balance: 167199 },
-  { title: "딸깍넷 B2B 제품 소개서 요청",  type: "AI 모델", date: "2026.07.22 11:05", credits: -60,    balance: 167399 },
-  { title: "시장 조사 자료 검색",           type: "웹 검색", date: "2026.07.21 16:33", credits: -15,    balance: 167459 },
-  { title: "크레딧 충전",                   type: "충전",    date: "2026.07.21 10:00", credits: 10000,  balance: 167474 },
-  { title: "여름철 학교 안전 PPT 제작",     type: "미디어",  date: "2026.07.21 09:14", credits: -2400,  balance: 157474 },
-  { title: "주택임대차 표준계약서 안내",    type: "AI 모델", date: "2026.07.20 17:42", credits: -35,    balance: 159874 },
-  { title: "Flowly 랜딩페이지 제작",        type: "미디어",  date: "2026.07.20 14:28", credits: -1760,  balance: 159909 },
-  { title: "이사 전 체크리스트 카드뉴스",   type: "미디어",  date: "2026.07.19 11:05", credits: -520,   balance: 161669 },
-  { title: "크레딧 충전",                   type: "충전",    date: "2026.07.18 09:00", credits: 50000,  balance: 162189 },
+// 데스크톱(CardnewsWorkspaceV2)의 크레딧 사용 내역과 동일한 정의 — 탭 2종 · 유형 9종 · 목데이터
+const USAGE_FILTER = "사용 내역";
+const BALANCE_FILTER = "환불·충전 내역";
+const CREDIT_FILTERS = [USAGE_FILTER, BALANCE_FILTER];
+
+// 사용 유형 7가지 + 충전/환불 유형
+const USAGE_TYPES = ["이미지", "랜딩페이지", "동영상", "프레젠테이션", "오디오", "문서", "서식"] as const;
+const BALANCE_TYPES = ["충전", "환불"] as const;
+type CreditType = (typeof USAGE_TYPES)[number] | (typeof BALANCE_TYPES)[number];
+
+const CREDIT_BALANCE = 11974710;
+const CREDIT_MONTHLY_USED = 2480;
+
+const creditHistoryData: {
+  date: string;
+  type: CreditType;
+  details: string;
+  change: number;
+  balance: number;
+}[] = [
+  { date: "2026. 06. 22. 오전 10:02:11", type: "환불",         details: "동영상 생성 실패 크레딧 환불",   change: 1780,   balance: 11974710 },
+  { date: "2026. 06. 22. 오전 9:49:06",  type: "이미지",       details: "월급 빼고 다 오르는 물가 카드뉴스", change: -69,   balance: 11972930 },
+  { date: "2026. 06. 15. 오후 5:13:59",  type: "프레젠테이션", details: "2026 금융 트렌드 PPT 생성",      change: -185,   balance: 11972999 },
+  { date: "2026. 06. 15. 오후 5:13:36",  type: "문서",         details: "졸업논문 템플릿 작성 안내",       change: -74,    balance: 11973184 },
+  { date: "2026. 06. 15. 오후 5:13:33",  type: "동영상",       details: "브랜드 홍보 숏폼 영상 생성",      change: -106,   balance: 11973258 },
+  { date: "2026. 06. 15. 오후 5:13:29",  type: "이미지",       details: "이미지 템플릿 편집 정보",         change: -224,   balance: 11973364 },
+  { date: "2026. 06. 15. 오후 5:12:58",  type: "랜딩페이지",   details: "딸깍넷 랜딩페이지 생성",          change: -122,   balance: 11973588 },
+  { date: "2026. 06. 15. 오후 5:12:47",  type: "서식",         details: "세금계산서 템플릿 작성 내용 문의", change: -98,   balance: 11973710 },
+  { date: "2026. 06. 15. 오후 5:12:40",  type: "오디오",       details: "브랜드 BGM 30s 생성",             change: -119,   balance: 11973808 },
+  { date: "2026. 06. 15. 오후 5:12:19",  type: "충전",         details: "크레딧 카드 충전 (VVIP 패키지)",  change: 100000, balance: 11973927 },
+  { date: "2026. 06. 15. 오후 5:12:14",  type: "서식",         details: "내용증명서 템플릿 작성 문의",     change: -67,    balance: 11973997 },
 ];
 
 
 
 function CreditHistoryScreen({ onCharge }: { onCharge: () => void }) {
-  const TABS = ["전체", "AI 모델", "미디어", "웹 검색", "충전"];
   const [activeTab, setActiveTab] = useState(0);
 
-  const filtered = activeTab === 0 ? creditHistoryData : creditHistoryData.filter(it => it.type === TABS[activeTab]);
+  // 데스크톱과 동일하게 크레딧 변동 부호로 사용/환불·충전을 가른다
+  const filtered = creditHistoryData.filter(it =>
+    CREDIT_FILTERS[activeTab] === BALANCE_FILTER ? it.change > 0 : it.change < 0
+  );
 
   return (
     <main className="flex-1 flex flex-col overflow-y-auto" style={{ scrollbarWidth: "none" }}>
@@ -1591,11 +1612,11 @@ function CreditHistoryScreen({ onCharge }: { onCharge: () => void }) {
         <p style={{ ...f, fontWeight: 500, fontSize: 12, color: "#9ca3af", marginBottom: 2 }}>사용 가능한 크레딧</p>
         <div className="flex items-center justify-between gap-3 mt-1">
           <div>
-            <p style={{ ...f, fontWeight: 700, fontSize: 32, color: "#0a0a0a", letterSpacing: "-1.2px", lineHeight: 1.1 }}>
-              166,994
+            <p style={{ ...f, fontWeight: 700, fontSize: 28, color: "#0a0a0a", letterSpacing: "-1.1px", lineHeight: 1.1 }}>
+              {CREDIT_BALANCE.toLocaleString()}
             </p>
             <p style={{ ...f, fontWeight: 400, fontSize: 12, color: "#9ca3af", marginTop: 5 }}>
-              이번 달 사용한 크레딧: <span style={{ fontWeight: 600 }}>331,461</span>
+              이번 달 사용한 크레딧: <span style={{ fontWeight: 600 }}>{CREDIT_MONTHLY_USED.toLocaleString()}</span>
             </p>
           </div>
           <button onClick={onCharge}
@@ -1606,41 +1627,47 @@ function CreditHistoryScreen({ onCharge }: { onCharge: () => void }) {
         </div>
       </div>
 
-      {/* 필터 탭 (한 줄 가로 스크롤 · 화면 좌우 끝까지 엣지 블리드) */}
-      <div className="px-4 pb-3">
-        <ScrollableChips items={TABS} activeIndex={activeTab} onChange={setActiveTab} />
+      {/* 필터 탭 + 총 건수 (데스크톱의 CATEGORY FILTERS 행) */}
+      <div className="mx-4 mb-3 pb-2 flex items-center justify-between gap-3 border-b border-[#e2e8f0]">
+        <ScrollableChips items={CREDIT_FILTERS} activeIndex={activeTab} onChange={setActiveTab} edgeClassName="" className="min-w-0" />
+        <span className="shrink-0" style={{ ...f, fontWeight: 700, fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}>
+          총 {filtered.length}건
+        </span>
       </div>
 
       {/* 내역 리스트 */}
       <div className="flex flex-col mx-4 mb-6 bg-white rounded-[20px] border border-[#e2e8f0] overflow-hidden"
         style={{ boxShadow: "0px 1px 4px rgba(0,0,0,0.04)" }}>
         {filtered.map((item, i) => {
-          const positive = item.credits > 0;
+          const positive = item.change > 0;
           return (
             <div key={i} className="px-4 py-4"
               style={{ borderBottom: i < filtered.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-              {/* 1행: 제목 + 크레딧 */}
-              <div className="flex items-start justify-between gap-2 mb-1.5">
-                <p className="flex-1" style={{ ...f, fontWeight: 600, fontSize: 14, color: "#4f7bff", letterSpacing: "-0.35px", lineHeight: 1.3 }}>{item.title}</p>
-                <span style={{ ...f, fontWeight: 700, fontSize: 15, color: positive ? "#4f7bff" : "#e7000b", letterSpacing: "-0.4px", whiteSpace: "nowrap" }}>
-                  {positive ? "+" : ""}{item.credits.toLocaleString()}
+              {/* 1행: 상세 내용 + 크레딧 변동 */}
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <p className="flex-1" style={{ ...f, fontWeight: 600, fontSize: 14, color: "#3b63f6", letterSpacing: "-0.35px", lineHeight: 1.3 }}>{item.details}</p>
+                <span style={{ ...f, fontWeight: 800, fontSize: 15, color: positive ? "#3b63f6" : "#ef4444", letterSpacing: "-0.4px", whiteSpace: "nowrap" }}>
+                  {positive ? "+" : ""}{item.change.toLocaleString()}
                 </span>
               </div>
-              {/* 2행: 유형 + 날짜 + 잔액 */}
+              {/* 2행: 유형 뱃지 + 일시 + 잔액 */}
               <div className="flex items-center gap-2">
-                <span style={{ ...f, fontWeight: 500, fontSize: 12, color: "#9ca3af" }}>{item.type}</span>
-                <span style={{ ...f, fontWeight: 400, fontSize: 12, color: "#9ca3af" }}>·</span>
-                <span style={{ ...f, fontWeight: 400, fontSize: 12, color: "#9ca3af" }}>{item.date}</span>
-                <span style={{ ...f, fontWeight: 500, fontSize: 12, color: "#374151", marginLeft: "auto" }}>
-                  잔액 {item.balance.toLocaleString()}
+                <span className="shrink-0 inline-flex items-center rounded px-1.5 py-0.5"
+                  style={{
+                    ...f, fontWeight: 800, fontSize: 10, letterSpacing: "0.3px",
+                    background: positive ? "#eff6ff" : "#f1f5f9",
+                    color: positive ? "#3b63f6" : "#475569",
+                  }}>
+                  {item.type}
+                </span>
+                <span className="truncate" style={{ ...f, fontWeight: 400, fontSize: 11.5, color: "#9ca3af" }}>{item.date}</span>
+                <span className="shrink-0" style={{ ...f, fontWeight: 700, fontSize: 12, color: "#0a0a0a", marginLeft: "auto" }}>
+                  {item.balance.toLocaleString()}
                 </span>
               </div>
             </div>
           );
         })}
-        <div className="flex justify-center py-4">
-          <button style={{ ...f, fontWeight: 500, fontSize: 13, color: "#9ca3af" }}>더 보기</button>
-        </div>
       </div>
     </main>
   );
