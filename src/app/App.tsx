@@ -528,9 +528,11 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
             { s: "favorites" as Screen, icon: <IconStar />, label: "즐겨찾기", activeIcon: <IconStarBlue /> },
           ].map(({ s, icon, label, activeIcon }) => (
             <button key={s} onClick={() => nav(s)}
-              className={`h-11 rounded-[14px] flex items-center gap-3 px-3 w-full ${active(s) ? "bg-[#f1f5f9]" : ""}`}>
+              aria-current={active(s) ? "page" : undefined}
+              className={`dk-nav-item h-11 rounded-[14px] flex items-center gap-3 px-3 w-full ${active(s) ? "is-active" : ""}`}>
               {active(s) ? activeIcon : icon}
-              <span style={{ ...f, fontWeight: active(s) ? 600 : 500, fontSize: 14, color: active(s) ? "#155dfc" : "#1e293b", letterSpacing: "-0.35px" }}>
+              {/* 색은 hover/:active 로 바뀌므로 CSS 가 담당한다(인라인 style 은 :hover 를 이긴다) */}
+              <span className="dk-nav-item__label" style={{ ...f, fontWeight: active(s) ? 600 : 500, fontSize: 14, letterSpacing: "-0.35px" }}>
                 {label}
               </span>
             </button>
@@ -623,6 +625,34 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
           </button>
         </div>
       </div>
+      <style>{`
+        /* 사이드바 메뉴 — 배경·이동·글자색만 전이시킨다(폰트/굵기/크기는 그대로). */
+        .dk-nav-item { background-color: transparent; transition: background-color 160ms ease, transform 160ms ease; }
+        .dk-nav-item .dk-nav-item__label { color: #1e293b; transition: color 160ms ease; }
+        /* 현재 페이지 — 브랜드 블루 텍스트/아이콘 + 블루 틴트 배경으로 hover 와 구분한다. */
+        .dk-nav-item.is-active { background-color: #eef3ff; }
+        .dk-nav-item.is-active .dk-nav-item__label { color: #4f7bff; }
+
+        /* hover 는 중성 회색(slate-100). 파란 틴트로 두면 흰 배경 위에서 거의 구분되지 않고,
+           활성 상태(#eef3ff)와도 같은 색 계열이라 둘을 헷갈리게 한다. 웹 버전과 동일한 값. */
+        /* 터치 기기에서 탭 후 hover 가 잔상으로 남지 않도록, hover 는 마우스 환경에서만 건다. */
+        @media (hover: hover) and (pointer: fine) {
+          .dk-nav-item:hover { background-color: #f1f5f9; transform: translateX(2px); }
+          .dk-nav-item:hover .dk-nav-item__label { color: #0f172a; }
+          .dk-nav-item.is-active:hover { background-color: #e3ebff; }
+          .dk-nav-item.is-active:hover .dk-nav-item__label { color: #4f7bff; }
+        }
+        /* 터치에서는 누르고 있는 동안 hover 와 동일한 피드백을 준다. */
+        .dk-nav-item:active { background-color: #f1f5f9; transform: translateX(2px); }
+        .dk-nav-item:active .dk-nav-item__label { color: #0f172a; }
+        .dk-nav-item.is-active:active { background-color: #e3ebff; }
+        .dk-nav-item.is-active:active .dk-nav-item__label { color: #4f7bff; }
+
+        @media (prefers-reduced-motion: reduce) {
+          .dk-nav-item { transition: none; }
+          .dk-nav-item:hover, .dk-nav-item:active { transform: none; }
+        }
+      `}</style>
     </>
   );
 }
