@@ -1,17 +1,13 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
-  Briefcase,
   ChevronLeft,
   ChevronRight,
   Coins,
   Download,
-  FileText,
-  Home,
   Minus,
   Plus,
   RotateCcw,
   Sparkles,
-  Star,
   Wand2,
   X,
 } from "lucide-react";
@@ -53,15 +49,17 @@ export interface FormFillDesktopProps {
   formTitle: string;
   /** 보유 크레딧 — 헤더 우측 표시용 */
   credits: number;
-  /** 좌측 사이드바 "최근 서식" 목록 */
-  recentForms?: string[];
+  /**
+   * 좌측 컬럼. 앱 공용 사이드바(SidebarDrawer variant="docked")를 그대로 받는다.
+   * 여기서 사이드바를 자체 구현하면 앱의 다른 화면과 구성·스타일이 갈라지므로,
+   * 마크업을 소유하지 않고 주입받는다.
+   */
+  sidebar?: ReactNode;
   /** 헤더 ← 서식 목록 */
   onBack: () => void;
-  /** 좌측 사이드바 네비게이션 */
-  onNavigate?: (target: "home" | "mywork" | "favorites") => void;
 }
 
-export default function FormFillDesktop({ formId, ...rest }: FormFillDesktopProps) {
+export default function FormFillDesktop({ formId, sidebar, ...rest }: FormFillDesktopProps) {
   // 서식이 바뀌면 스키마를 다시 조회한다.
   // key 로 Provider 를 새로 마운트해 이전 서식의 답변이 남지 않게 한다.
   const detail = getFormFields(formId);
@@ -78,6 +76,8 @@ export default function FormFillDesktop({ formId, ...rest }: FormFillDesktopProp
         overflow: "hidden",
       }}
     >
+      {/* 좌: 앱 공용 사이드바 — Provider 바깥. 서식 상태에 의존하지 않는다. */}
+      {sidebar}
       <FormFillProvider key={formId} fields={detail.fields}>
         <FormFillDesktopBody totalPages={detail.totalPages} {...rest} />
       </FormFillProvider>
@@ -88,11 +88,9 @@ export default function FormFillDesktop({ formId, ...rest }: FormFillDesktopProp
 function FormFillDesktopBody({
   formTitle,
   credits,
-  recentForms = [],
   totalPages,
   onBack,
-  onNavigate,
-}: Omit<FormFillDesktopProps, "formId"> & { totalPages: number }) {
+}: Omit<FormFillDesktopProps, "formId" | "sidebar"> & { totalPages: number }) {
   const ff = useFormFill();
   const [zoomIdx, setZoomIdx] = useState(ZOOM_DEFAULT);
   const [page, setPage] = useState(1);
@@ -118,100 +116,6 @@ function FormFillDesktopBody({
 
   return (
     <>
-      {/* ── 좌: 앱 사이드바 236px ─────────────────────────────────────────── */}
-      <aside
-        style={{
-          width: 236,
-          flexShrink: 0,
-          display: "flex",
-          flexDirection: "column",
-          background: "var(--ff-panel)",
-          borderRight: "1px solid var(--ff-border)",
-        }}
-      >
-        <div style={{ height: 60, display: "flex", alignItems: "center", padding: "0 18px", flexShrink: 0 }}>
-          <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: "-0.4px", color: "var(--ff-text)" }}>
-            딸깍<span style={{ color: "var(--ff-brand)" }}>.net</span>
-          </span>
-        </div>
-
-        <nav style={{ display: "flex", flexDirection: "column", gap: 2, padding: "0 10px", flexShrink: 0 }}>
-          {([
-            { key: "home", label: "홈", icon: <Home size={17} strokeWidth={1.8} /> },
-            { key: "mywork", label: "내 작업", icon: <Briefcase size={17} strokeWidth={1.8} /> },
-            { key: "favorites", label: "즐겨찾기", icon: <Star size={17} strokeWidth={1.8} /> },
-          ] as const).map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => onNavigate?.(item.key)}
-              style={{
-                height: 40,
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "0 12px",
-                borderRadius: "var(--ff-radius-ctl)",
-                border: "none",
-                background: "transparent",
-                color: "var(--ff-text-2)",
-                fontFamily: "inherit",
-                fontSize: 13.5,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              {item.icon}
-              {item.label}
-            </button>
-          ))}
-        </nav>
-
-        {/* 현재 작업 중인 서식 — 목록으로 나가지 않아도 어디에 있는지 보이게 한다 */}
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "14px 10px 0" }}>
-          <SidebarLabel>최근 서식</SidebarLabel>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              height: 34,
-              padding: "0 10px",
-              borderRadius: "var(--ff-radius-sm)",
-              background: "var(--ff-sub)",
-              color: "var(--ff-brand)",
-              fontSize: 12.5,
-              fontWeight: 700,
-            }}
-          >
-            <FileText size={15} strokeWidth={1.8} style={{ flexShrink: 0 }} />
-            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {formTitle}
-            </span>
-          </div>
-          {recentForms.map((t) => (
-            <div
-              key={t}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                height: 32,
-                padding: "0 10px",
-                color: "var(--ff-text-2)",
-                fontSize: 12.5,
-                fontWeight: 500,
-              }}
-            >
-              <FileText size={15} strokeWidth={1.8} style={{ flexShrink: 0, color: "var(--ff-text-4)" }} />
-              <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {t}
-              </span>
-            </div>
-          ))}
-        </div>
-      </aside>
-
       {/* ── 중앙: 헤더 60 + 툴바 48 + A4 ──────────────────────────────────── */}
       <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         {/* 헤더 60px */}
@@ -576,16 +480,6 @@ function FormFillDesktopBody({
         </button>
       )}
     </>
-  );
-}
-
-function SidebarLabel({ children }: { children: ReactNode }) {
-  return (
-    <div style={{ padding: "0 10px", height: 26, display: "flex", alignItems: "center" }}>
-      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.3px", color: "var(--ff-text-4)" }}>
-        {children}
-      </span>
-    </div>
   );
 }
 

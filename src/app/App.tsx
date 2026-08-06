@@ -57,6 +57,9 @@ function IconStarBlue() {
 function IconFileDoc() {
   return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.p232b1d80} stroke="#90A1B9" strokeWidth="1.66667" /><P d={svgPaths.p3abdf300} stroke="#90A1B9" strokeWidth="1.66667" /><P d="M8.33333 7.5H6.66667" stroke="#90A1B9" strokeWidth="1.66667" /><P d="M13.3333 10.8333H6.66667" stroke="#90A1B9" strokeWidth="1.66667" /><P d="M13.3333 14.1667H6.66667" stroke="#90A1B9" strokeWidth="1.66667" /></svg>;
 }
+function IconFileDocBlue() {
+  return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.p232b1d80} stroke="#4F7BFF" strokeWidth="1.66667" /><P d={svgPaths.p3abdf300} stroke="#4F7BFF" strokeWidth="1.66667" /><P d="M8.33333 7.5H6.66667" stroke="#4F7BFF" strokeWidth="1.66667" /><P d="M13.3333 10.8333H6.66667" stroke="#4F7BFF" strokeWidth="1.66667" /><P d="M13.3333 14.1667H6.66667" stroke="#4F7BFF" strokeWidth="1.66667" /></svg>;
+}
 function IconSettings() {
   return <svg width="16" height="16" fill="none" viewBox="0 0 16 16"><P d={svgPaths.p36e45a00} stroke="#737373" strokeWidth="1.33333" /><P d={svgPaths.p150f5b00} stroke="#737373" strokeWidth="1.33333" /><P d={svgPaths.p2d6e5280} stroke="#737373" strokeWidth="1.33333" /></svg>;
 }
@@ -498,27 +501,49 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
 
 // ─── SidebarDrawer ────────────────────────────────────────────────────────────
 
-function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpen }: {
+/**
+ * 좌측 사이드바. 두 가지 배치를 한 컴포넌트로 처리한다.
+ *
+ * - variant="drawer" (기본): 지금까지의 오버레이 드로어. 백드롭 + translateX 슬라이드.
+ * - variant="docked": 서식 채우기처럼 상시 노출되는 레이아웃용. 백드롭·슬라이드 없이
+ *   in-flow 컬럼으로 자리를 차지한다. 닫을 오버레이가 없으므로 X 버튼도 숨긴다.
+ *
+ * recentForms 를 넘기면 "최근 서식"이 클릭 가능한 목록으로 바뀌고 currentFormId 가
+ * 활성 표시된다. 안 넘기면 기존처럼 recentTemplates 를 정적으로 렌더한다
+ * — 기존 화면들은 prop 을 주지 않으므로 동작·모양이 그대로다.
+ */
+function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpen, variant = "drawer", recentForms, currentFormId, onSelectForm }: {
   open: boolean; onClose: () => void;
   currentScreen: Screen; onNavigate: (s: Screen) => void;
   onSettingsOpen: () => void;
+  variant?: "drawer" | "docked";
+  recentForms?: { id: string; title: string }[];
+  currentFormId?: string;
+  onSelectForm?: (id: string, title: string) => void;
 }) {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const nav = (s: Screen) => { onNavigate(s); onClose(); };
   const openSettings = () => { setProfileMenuOpen(false); onClose(); onSettingsOpen(); };
   const isHomeVariant = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai"].includes(currentScreen);
   const active = (s: Screen) => s === currentScreen || (isHomeVariant && s === "home");
+  const docked = variant === "docked";
 
   return (
     <>
-      <div onClick={onClose} className="fixed inset-0 z-40 bg-black/30 transition-opacity duration-300"
-        style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }} />
-      <div className="fixed top-0 left-0 h-full z-50 w-[280px] bg-white border-r border-[#dfe6ed] flex flex-col transition-transform duration-300"
-        style={{ transform: open ? "translateX(0)" : "translateX(-100%)" }}>
+      {!docked && (
+        <div onClick={onClose} className="fixed inset-0 z-40 bg-black/30 transition-opacity duration-300"
+          style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }} />
+      )}
+      <div className={docked
+        ? "h-full w-[280px] shrink-0 bg-white border-r border-[#dfe6ed] flex flex-col"
+        : "fixed top-0 left-0 h-full z-50 w-[280px] bg-white border-r border-[#dfe6ed] flex flex-col transition-transform duration-300"}
+        style={docked ? undefined : { transform: open ? "translateX(0)" : "translateX(-100%)" }}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 h-[60px] shrink-0">
           <img alt="딸깍.net" className="h-6 w-auto object-contain" src={imgImageNet} />
-          <button onClick={onClose} className="flex items-center justify-center size-9 rounded-[10px]"><IconClose /></button>
+          {!docked && (
+            <button onClick={onClose} className="flex items-center justify-center size-9 rounded-[10px]"><IconClose /></button>
+          )}
         </div>
         {/* Nav */}
         <div className="flex flex-col gap-1 px-2 shrink-0">
@@ -544,12 +569,26 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
             <div className="h-8 flex items-center px-2">
               <span style={{ ...f, fontWeight: 500, fontSize: 12, color: "#90a1b9" }}>최근 서식</span>
             </div>
-            {recentTemplates.map((t) => (
-              <div key={t} className="h-8 rounded-[14px] flex items-center gap-3 px-3">
-                <div className="shrink-0"><IconFileDoc /></div>
-                <span className="truncate" style={{ ...f, fontWeight: 500, fontSize: 13, color: "#45556c", letterSpacing: "-0.35px" }}>{t}</span>
-              </div>
-            ))}
+            {/* recentForms 가 오면 클릭 가능한 목록, 없으면 지금까지의 정적 목록 그대로. */}
+            {recentForms
+              ? recentForms.map((form) => {
+                  const isCurrent = form.id === currentFormId;
+                  return (
+                    <button key={form.id} type="button"
+                      onClick={() => onSelectForm?.(form.id, form.title)}
+                      aria-current={isCurrent ? "page" : undefined}
+                      className={`dk-nav-item dk-nav-item--sub h-8 rounded-[14px] flex items-center gap-3 px-3 w-full ${isCurrent ? "is-active" : ""}`}>
+                      <div className="shrink-0">{isCurrent ? <IconFileDocBlue /> : <IconFileDoc />}</div>
+                      <span className="dk-nav-item__label truncate" style={{ ...f, fontWeight: isCurrent ? 600 : 500, fontSize: 13, letterSpacing: "-0.35px" }}>{form.title}</span>
+                    </button>
+                  );
+                })
+              : recentTemplates.map((t) => (
+                  <div key={t} className="h-8 rounded-[14px] flex items-center gap-3 px-3">
+                    <div className="shrink-0"><IconFileDoc /></div>
+                    <span className="truncate" style={{ ...f, fontWeight: 500, fontSize: 13, color: "#45556c", letterSpacing: "-0.35px" }}>{t}</span>
+                  </div>
+                ))}
           </div>
           <div className="px-2 mt-2">
             <div className="h-8 flex items-center px-2">
@@ -629,6 +668,8 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
         /* 사이드바 메뉴 — 배경·이동·글자색만 전이시킨다(폰트/굵기/크기는 그대로). */
         .dk-nav-item { background-color: transparent; transition: background-color 160ms ease, transform 160ms ease; }
         .dk-nav-item .dk-nav-item__label { color: #1e293b; transition: color 160ms ease; }
+        /* 하위 목록(최근 서식) — 기본 글자색만 기존 목록과 맞추고 hover/활성은 메뉴와 동일하게 쓴다. */
+        .dk-nav-item--sub .dk-nav-item__label { color: #45556c; }
         /* 현재 페이지 — 브랜드 블루 텍스트/아이콘 + 블루 틴트 배경으로 hover 와 구분한다. */
         .dk-nav-item.is-active { background-color: #eef3ff; }
         .dk-nav-item.is-active .dk-nav-item__label { color: #4f7bff; }
@@ -3808,15 +3849,27 @@ export default function App() {
       {notifOpen && <NotificationsPanel onClose={() => setNotifOpen(false)} onViewAll={() => { setNotifOpen(false); setScreen("notifications-all"); }} />}
       {creditOpen && <CreditBottomSheet onClose={() => setCreditOpen(false)} onHistoryClick={() => setScreen("credit-history")} />}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
-      {/* 서식 채우기 — 데스크톱 3단. TopBar·사이드바까지 덮는 전체 화면이라 최상단에 얹는다. */}
+      {/* 서식 채우기 — 데스크톱 3단. TopBar·사이드바까지 덮는 전체 화면이라 최상단에 얹는다.
+          좌측 컬럼은 앱 공용 SidebarDrawer 를 docked 로 주입한다(서식 화면 전용 사이드바 없음). */}
       {screen === "forms-fill" && fillTarget && (
         <FormFillDesktop
           formId={fillTarget.id}
           formTitle={fillTarget.title}
           credits={CREDIT_BALANCE}
-          recentForms={recentTemplates}
           onBack={() => setScreen("forms-ai")}
-          onNavigate={(t) => setScreen(t)}
+          sidebar={
+            <SidebarDrawer
+              variant="docked"
+              open
+              onClose={() => {}}
+              currentScreen={screen}
+              onNavigate={setScreen}
+              onSettingsOpen={() => setSettingsOpen(true)}
+              recentForms={formsCards.slice(0, 4).map((c) => ({ id: c.id, title: c.title }))}
+              currentFormId={fillTarget.id}
+              onSelectForm={(id, title) => setFillTarget({ id, title })}
+            />
+          }
         />
       )}
       {workspace && (
