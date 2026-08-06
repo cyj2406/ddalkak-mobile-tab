@@ -6,10 +6,12 @@ export { default as ActionButtons } from "./ActionButtons";
 export { default as LanguageSelect, DEFAULT_LANGUAGES } from "./LanguageSelect";
 export { default as CompletionPanel } from "./CompletionPanel";
 export { default as DocumentViewer } from "./DocumentViewer";
+export { default as FormFillDesktop } from "./FormFillDesktop";
 
 export { FormFillProvider, useFormFill } from "./FormFillContext";
 export { useFormFillState } from "./useFormFillState";
 export { F4_FIELDS, F4_FORM } from "./mockFields";
+export { getFormFields } from "./getFormFields";
 
 export type { ProgressBarProps } from "./ProgressBar";
 export type { QuestionCardProps } from "./QuestionCard";

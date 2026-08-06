@@ -1,1 +1,3 @@
 @import url('https://fonts.googleapis.com/css2?family=Pretendard+Variable:wght@400;500;600;700&display=swap');
+/* formfill(--ff-font)이 쓰는 Pretendard Variable 원본. @import 는 반드시 최상단이어야 해서 여기 둔다. */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');

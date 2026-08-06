@@ -9,7 +9,9 @@
    - A4 문서 내부 색(--ff-doc-*)은 두 테마에서 동일한 값을 쓴다.
      다크모드에서도 문서는 흰 종이 그대로여야 하기 때문. */
 
-@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
+/* 폰트 @import 는 fonts.css 에 있다.
+   index.css 가 formfill.css 를 마지막에 붙이는데, @import 는 다른 규칙보다 앞서야만
+   유효해서 여기 두면 PostCSS 가 통째로 버린다(빌드 경고 + 폰트 미적용). */
 
 .ff-root {
   /* 타이포 */
@@ -21,6 +23,8 @@
   --ff-brand-hover: #245ae8;
   --ff-brand-soft: #a9bcff;
   --ff-focus-ring: rgba(47, 107, 255, 0.15);
+  /* 브랜드/상태색 위에 얹는 글자색. 두 테마에서 동일하다. */
+  --ff-on-brand: #ffffff;
 
   /* 상태색 — 테마 무관 */
   --ff-success: #16a34a;

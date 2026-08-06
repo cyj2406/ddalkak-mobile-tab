@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { HelpCircle, Settings as SettingsIcon, Users, Mail, LogOut, Palette, Bell, Brain, Coins, Monitor, Sun, Moon, RefreshCw, FileText, FileVideo, Compass, Image as ImageIcon, Download, X as XIcon, ChevronDown, Play, Volume2, Maximize2, BookOpen } from "lucide-react";
 
 // ── 공통 에셋 ──────────────────────────────────────────────────────────────────
@@ -10,12 +10,13 @@ import imgUserAvatar from "@/imports/새대화딸깍/ec4bf4c83826b512a10ccb46952
 
 import { MobileEditorNotice } from "@/app/components/viewer/MobileEditorNotice";
 import { ScrollableChips } from "@/app/components/common/ScrollableChips";
-// [formfill 임시] ?formfill=1 확인용. 2단계에서 실제 레이아웃을 붙이면 이 import 와 아래 분기 3줄을 지운다.
+import FormFillDesktop from "@/app/components/formfill/FormFillDesktop";
+// [formfill 임시] ?formfill=1 확인용. 컴포넌트 단품 확인 화면이라 3단 레이아웃과 별개로 남겨둔다.
 import FormFillPlayground from "@/app/components/formfill/__dev__/FormFillPlayground";
 
 
 // ─── 타입 ──────────────────────────────────────────────────────────────────────
-type Screen = "home" | "image-ai" | "landing-ai" | "forms-ai" | "docs-ai" | "audio-ai" | "ppt-ai" | "video-ai" | "favorites" | "mywork" | "credit-history" | "notifications-all";
+type Screen = "home" | "image-ai" | "landing-ai" | "forms-ai" | "forms-fill" | "docs-ai" | "audio-ai" | "ppt-ai" | "video-ai" | "favorites" | "mywork" | "credit-history" | "notifications-all";
 type WorkspaceCategory = "docs" | "ppt" | "video" | "landing" | "image" | "detail";
 const WS_LABEL: Record<WorkspaceCategory, string> = { docs: "문서", ppt: "PPT", video: "영상", landing: "랜딩페이지", image: "이미지", detail: "상세페이지" };
 const WS_COLOR: Record<WorkspaceCategory, string> = { docs: "#3B82F6", ppt: "#8B5CF6", video: "#EF4444", landing: "#22C55E", image: "#F59E0B", detail: "#EC4899" };
@@ -131,15 +132,17 @@ const favoritesCards = [
   { title: "커뮤니티 게시글 스타일", isVideo: false },
 ];
 
+// count 는 목록 카드에 보여주는 요약값일 뿐이다.
+// 실제 빈칸 스키마는 서식 채우기 화면이 id 로 getFormFields(id) 를 조회해서 가져간다.
 const formsCards = [
-  { title: "강제퇴거명령에대한이의신청서", category: "외국인 비자 서식", count: 20, date: "2026. 2. 12." },
-  { title: "거소신고(신청)서", category: "외국인 비자 서식", count: 54, date: "2026. 2. 12." },
-  { title: "거주소재공사실확인서(명문병기)", category: "외국인 비자 서식", count: 35, date: "2026. 1. 23." },
-  { title: "거주소재공사실확인서(중문병기)", category: "외국인 비자 서식", count: 35, date: "2026. 1. 23." },
-  { title: "건강확인서", category: "외국인 비자 서식", count: 40, date: "2026. 1. 23." },
-  { title: "결혼이민자 부모 등 가족 초청장(F-1-5)", category: "외국인 비자 서식", count: 157, date: "2026. 1. 23." },
-  { title: "강점퇴거명령서", category: "외국인 비자 서식", count: 12, date: "2026. 1. 15." },
-  { title: "거소신고 사실증명 신청서", category: "외국인 비자 서식", count: 28, date: "2026. 1. 10." },
+  { id: "deport-objection", title: "강제퇴거명령에대한이의신청서", category: "외국인 비자 서식", count: 20, date: "2026. 2. 12." },
+  { id: "residence-report", title: "거소신고(신청)서", category: "외국인 비자 서식", count: 54, date: "2026. 2. 12." },
+  { id: "residence-confirm-ko", title: "거주소재공사실확인서(명문병기)", category: "외국인 비자 서식", count: 35, date: "2026. 1. 23." },
+  { id: "residence-confirm-cn", title: "거주소재공사실확인서(중문병기)", category: "외국인 비자 서식", count: 35, date: "2026. 1. 23." },
+  { id: "health-confirm", title: "건강확인서", category: "외국인 비자 서식", count: 40, date: "2026. 1. 23." },
+  { id: "family-invite-f15", title: "결혼이민자 부모 등 가족 초청장(F-1-5)", category: "외국인 비자 서식", count: 157, date: "2026. 1. 23." },
+  { id: "deport-order", title: "강점퇴거명령서", category: "외국인 비자 서식", count: 12, date: "2026. 1. 15." },
+  { id: "residence-proof", title: "거소신고 사실증명 신청서", category: "외국인 비자 서식", count: 28, date: "2026. 1. 10." },
 ];
 
 const docsCards = [
@@ -795,10 +798,11 @@ function SearchFilterBar({ placeholder = "검색어를 입력해 주세요" }: {
   );
 }
 
-function FormsCard({ title, category, count, date }: { title: string; category: string; count: number; date: string }) {
+function FormsCard({ title, category, count, date, onClick }: { title: string; category: string; count: number; date: string; onClick?: () => void }) {
   return (
-    <div className="bg-white rounded-[18px] px-4 pt-4 pb-[18px] border border-[#ebebf0]"
-      style={{ boxShadow: "0px 1px 4px rgba(0,0,0,0.05)" }}>
+    <button type="button" onClick={onClick}
+      className="w-full text-left bg-white rounded-[18px] px-4 pt-4 pb-[18px] border border-[#ebebf0]"
+      style={{ boxShadow: "0px 1px 4px rgba(0,0,0,0.05)", cursor: onClick ? "pointer" : "default" }}>
       {/* 상단: 아이콘 + 빈칸 배지 */}
       <div className="flex items-start justify-between mb-3">
         <div className="size-[52px] rounded-[14px] bg-[#fff7ed] flex items-center justify-center">
@@ -824,16 +828,29 @@ function FormsCard({ title, category, count, date }: { title: string; category: 
       </div>
       {/* 날짜 */}
       <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#b0bec5" }}>{date}</p>
-    </div>
+    </button>
   );
 }
 
-function FormsAIScreen() {
-  const [activeTab, setActiveTab] = useState(0);
-  const [sortOption, setSortOption] = useState<SortOption>("인기순");
+/**
+ * 서식 목록.
+ *
+ * 필터칩·정렬·스크롤 위치는 App 이 들고 있다. 서식 채우기 화면으로 넘어가면
+ * 이 컴포넌트는 언마운트되므로, 내부 state 로 두면 목록 복귀 시 전부 초기화된다.
+ */
+function FormsAIScreen({ activeTab, onTabChange, sortOption, onSortChange, scrollTopRef, onOpenForm }: {
+  activeTab: number;
+  onTabChange: (i: number) => void;
+  sortOption: SortOption;
+  onSortChange: (s: SortOption) => void;
+  /** 스크롤 위치 보관함. 언마운트되어도 App 의 ref 에 남는다. */
+  scrollTopRef: { current: number };
+  onOpenForm: (formId: string, title: string) => void;
+}) {
   const [sortSheetOpen, setSortSheetOpen] = useState(false);
   const [stuck, setStuck] = useState(false);
   const sentinelRef = React.useRef<HTMLDivElement>(null);
+  const mainRef = React.useRef<HTMLElement>(null);
   const sortActive = sortOption !== "인기순";
   const filterTabs = ["전체", "외국인 비자 서식", "법무 서식", "관공서 양식"];
 
@@ -845,9 +862,15 @@ function FormsAIScreen() {
     return () => obs.disconnect();
   }, []);
 
+  // 페인트 전에 복원해야 목록이 맨 위에서 튀지 않는다.
+  useLayoutEffect(() => {
+    if (mainRef.current) mainRef.current.scrollTop = scrollTopRef.current;
+  }, [scrollTopRef]);
+
   return (
     <>
-    <main className="flex-1 flex flex-col overflow-y-auto" style={{ scrollbarWidth: "none" }}>
+    <main ref={mainRef} onScroll={(e) => { scrollTopRef.current = e.currentTarget.scrollTop; }}
+      className="flex-1 flex flex-col overflow-y-auto" style={{ scrollbarWidth: "none" }}>
       <div style={{ paddingTop: "var(--gap-hero-top)", paddingLeft: "var(--gap-screen-x)", paddingRight: "var(--gap-screen-x)" }}>
         <p className="text-center leading-[1.3]" style={{ ...f, fontWeight: 700, fontSize: 22, letterSpacing: "-1.1px", wordBreak: "keep-all", marginBottom: "var(--gap-title-sub)" }}>
           <span style={{ color: "#4f7bff" }}>서식</span>
@@ -866,7 +889,7 @@ function FormsAIScreen() {
         <div className="flex-1 overflow-x-auto flex items-center" style={{ scrollbarWidth: "none", height: "100%" }}>
           <div className="flex items-center shrink-0" style={{ gap: 8, paddingLeft: "var(--gap-screen-x)", paddingRight: 4 }}>
             {filterTabs.map((tab, i) => (
-              <button key={tab} onClick={() => setActiveTab(i)} className="shrink-0 h-9 rounded-full px-4 flex items-center"
+              <button key={tab} onClick={() => onTabChange(i)} className="shrink-0 h-9 rounded-full px-4 flex items-center"
                 style={{ background: i === activeTab ? "#0a0a0a" : "white", border: i === activeTab ? "none" : "1px solid #e2e8f0" }}>
                 <span style={{ ...f, fontWeight: 600, fontSize: 13, color: i === activeTab ? "white" : "#334155", whiteSpace: "nowrap" }}>{tab}</span>
               </button>
@@ -892,14 +915,14 @@ function FormsAIScreen() {
 
       {/* 서식 카드 목록 */}
       <div className="flex flex-col" style={{ gap: 14, padding: `0 var(--gap-screen-x) var(--gap-grid-bottom)` }}>
-        {formsCards.map((card, i) => (
-          <FormsCard key={i} {...card} />
+        {formsCards.map((card) => (
+          <FormsCard key={card.id} {...card} onClick={() => onOpenForm(card.id, card.title)} />
         ))}
       </div>
     </main>
 
     {sortSheetOpen && (
-      <SortBottomSheet selected={sortOption} onSelect={setSortOption} onClose={() => setSortSheetOpen(false)} />
+      <SortBottomSheet selected={sortOption} onSelect={onSortChange} onClose={() => setSortSheetOpen(false)} />
     )}
     </>
   );
@@ -3654,6 +3677,13 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [workspace, setWorkspace] = useState<{ category: WorkspaceCategory; templateName: string } | null>(null);
 
+  // 서식 채우기 — screen 문자열만으로는 "어떤 서식인지"를 담을 수 없어 대상만 따로 든다.
+  const [fillTarget, setFillTarget] = useState<{ id: string; title: string } | null>(null);
+  // 서식 목록의 필터칩·정렬·스크롤. 목록이 언마운트돼도 유지되도록 App 이 보관한다.
+  const [formsTab, setFormsTab] = useState(0);
+  const [formsSort, setFormsSort] = useState<SortOption>("인기순");
+  const formsScrollTop = useRef(0);
+
   const isSubScreen = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai", "credit-history", "notifications-all"].includes(screen);
 
   return (
@@ -3687,7 +3717,16 @@ export default function App() {
           onWorkspace={(t) => setWorkspace({ category: "landing", templateName: t })}
         />
       )}
-      {screen === "forms-ai" && <FormsAIScreen />}
+      {screen === "forms-ai" && (
+        <FormsAIScreen
+          activeTab={formsTab}
+          onTabChange={setFormsTab}
+          sortOption={formsSort}
+          onSortChange={setFormsSort}
+          scrollTopRef={formsScrollTop}
+          onOpenForm={(id, title) => { setFillTarget({ id, title }); setScreen("forms-fill"); }}
+        />
+      )}
       {screen === "docs-ai" && (
         <AIAgentScreen
           category="문서"
@@ -3739,6 +3778,17 @@ export default function App() {
       {notifOpen && <NotificationsPanel onClose={() => setNotifOpen(false)} onViewAll={() => { setNotifOpen(false); setScreen("notifications-all"); }} />}
       {creditOpen && <CreditBottomSheet onClose={() => setCreditOpen(false)} onHistoryClick={() => setScreen("credit-history")} />}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {/* 서식 채우기 — 데스크톱 3단. TopBar·사이드바까지 덮는 전체 화면이라 최상단에 얹는다. */}
+      {screen === "forms-fill" && fillTarget && (
+        <FormFillDesktop
+          formId={fillTarget.id}
+          formTitle={fillTarget.title}
+          credits={CREDIT_BALANCE}
+          recentForms={recentTemplates}
+          onBack={() => setScreen("forms-ai")}
+          onNavigate={(t) => setScreen(t)}
+        />
+      )}
       {workspace && (
         <WorkspaceScreen
           category={workspace.category}
