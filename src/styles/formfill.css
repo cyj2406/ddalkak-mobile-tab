@@ -26,6 +26,15 @@
   /* 브랜드/상태색 위에 얹는 글자색. 두 테마에서 동일하다. */
   --ff-on-brand: #ffffff;
 
+  /* 저장 버튼 상태 배경 — 테마 무관 */
+  --ff-ctl-border: #e2e8f0;
+  --ff-icon: #475569;
+  --ff-scrim: rgba(15, 23, 42, 0.78);
+  --ff-ok-bg: #f0fdf4;
+  --ff-err: #dc2626;
+  --ff-err-bg: #fef2f2;
+  --ff-err-border: #fecaca;
+
   /* 상태색 — 테마 무관 */
   --ff-success: #16a34a;
   --ff-success-strong: #22c55e;

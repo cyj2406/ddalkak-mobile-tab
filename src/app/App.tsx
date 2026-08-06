@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
-import { HelpCircle, Settings as SettingsIcon, Users, Mail, LogOut, Palette, Bell, Brain, Coins, Monitor, Sun, Moon, RefreshCw, FileText, FileVideo, Compass, Image as ImageIcon, Download, X as XIcon, ChevronDown, Play, Volume2, Maximize2, BookOpen } from "lucide-react";
+import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, type ReactNode } from "react";
+import { HelpCircle, Settings as SettingsIcon, Users, Mail, LogOut, Palette, Bell, Brain, Coins, Monitor, Sun, Moon, RefreshCw, FileText, FileVideo, Compass, Image as ImageIcon, Download, X as XIcon, ChevronDown, Play, Volume2, Maximize2, Minimize2, BookOpen, Search, Plus, Upload, Check } from "lucide-react";
 
 // ── 공통 에셋 ──────────────────────────────────────────────────────────────────
 import svgPaths from "@/imports/새대화딸깍/svg-yz49hawimu";
@@ -8,8 +8,16 @@ import svgCard from "@/imports/Container/svg-n3rzud15nf";
 import imgImageNet from "@/imports/새대화딸깍/70598a9173139973c519fbc9c881094e41ef9297.png";
 import imgUserAvatar from "@/imports/새대화딸깍/ec4bf4c83826b512a10ccb46952ef28cdb24b8d8.png";
 
+import TabletEditorShell from "@/app/components/viewer/TabletEditorShell";
+import TabletVideoResultViewer from "@/app/components/viewer/TabletVideoResultViewer";
+import TabletDocEditorViewer from "@/app/components/viewer/TabletDocEditorViewer";
+import TabletMiniEditor from "@/app/components/viewer/TabletMiniEditor";
+import TutorialTour, { type TutorialStepConfig } from "@/app/components/common/TutorialTour";
 import { MobileEditorNotice } from "@/app/components/viewer/MobileEditorNotice";
 import { ScrollableChips } from "@/app/components/common/ScrollableChips";
+import ClampedText from "@/app/components/common/ClampedText";
+import CreditBadge from "@/app/components/common/CreditBadge";
+import { COMPOSER_PLACEHOLDER } from "@/app/copy";
 import FormFillDesktop from "@/app/components/formfill/FormFillDesktop";
 // [formfill 임시] ?formfill=1 확인용. 컴포넌트 단품 확인 화면이라 3단 레이아웃과 별개로 남겨둔다.
 import FormFillPlayground from "@/app/components/formfill/__dev__/FormFillPlayground";
@@ -36,20 +44,22 @@ function IconChevronLeft() {
 function IconBell() {
   return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.p1c3efea0} stroke="#737373" strokeWidth="1.5" /><P d={svgPaths.p25877f40} stroke="#737373" strokeWidth="1.5" /></svg>;
 }
+// 사이드바 메뉴 아이콘은 상태(비활성/호버/활성)에 따라 색이 바뀌므로 currentColor 를 쓴다.
+// 다른 곳에서 쓸 때는 감싸는 요소에 color 를 지정하면 된다.
 function IconHome() {
-  return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.p275d2400} stroke="#1E293B" strokeWidth="1.66667" /><P d={svgPaths.p1db6d780} stroke="#1E293B" strokeWidth="1.66667" /></svg>;
+  return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.p275d2400} stroke="currentColor" strokeWidth="1.66667" /><P d={svgPaths.p1db6d780} stroke="currentColor" strokeWidth="1.66667" /></svg>;
 }
 function IconHomeBlue() {
-  return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.p275d2400} stroke="#155DFC" strokeWidth="1.66667" /><P d={svgPaths.p1db6d780} stroke="#155DFC" strokeWidth="1.66667" /></svg>;
+  return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.p275d2400} stroke="#4F7BFF" strokeWidth="1.66667" /><P d={svgPaths.p1db6d780} stroke="#4F7BFF" strokeWidth="1.66667" /></svg>;
 }
 function IconWork() {
-  return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.p178dcc00} stroke="#1E293B" strokeWidth="1.66667" /></svg>;
+  return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.p178dcc00} stroke="currentColor" strokeWidth="1.66667" /></svg>;
 }
 function IconWorkBlue() {
   return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.p178dcc00} stroke="#4F7BFF" strokeWidth="1.66667" /></svg>;
 }
 function IconStar() {
-  return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.pa6d0980} stroke="#1E293B" strokeWidth="1.66667" /></svg>;
+  return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.pa6d0980} stroke="currentColor" strokeWidth="1.66667" /></svg>;
 }
 function IconStarBlue() {
   return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.pa6d0980} stroke="#4F7BFF" strokeWidth="1.66667" /></svg>;
@@ -226,6 +236,24 @@ const homeCategories = [
   { label: "PPT 검수", screen: "home" as Screen, icon: <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><P d={svgPaths.pace200} stroke="#F59E0B" strokeWidth="1.8" /><P d="M9 12L11 14L15 10" stroke="#F59E0B" strokeWidth="1.8" /></svg> },
 ];
 
+// 서비스 화면 히어로의 부제 문구. 화면 컴포넌트가 아니라 여기서만 고친다.
+// (다른 목 데이터와 같은 방식 — API 가 붙으면 이 상수만 응답으로 교체한다)
+const SERVICE_COPY = {
+  image: "썸네일·포스터·카드뉴스·상세페이지까지, SNS 홍보 이미지를 한 곳에서.",
+  landing: "코딩 없이, 배포 링크까지 자동으로 만들어지는 웹페이지.",
+  video: "릴스·숏츠·유튜브 영상을 템플릿으로 빠르게 제작해 보세요.",
+  ppt: "가로·세로 PPT를 AI로 생성하고 자유롭게 편집하세요.",
+  audio: "프롬프트로 만드는 나만의 배경음악, 제작물에 바로 삽입하세요.",
+  docs: "워드·한글(HWP)·엑셀 문서를 별도 툴 없이 한 번에 작성하세요.",
+  forms: "외국인도 쉽게 쓰는 공공서식, 다국어 번역과 가이드까지.",
+  // PPT 검수는 아직 전용 화면이 없어(홈 카테고리가 home 으로 연결됨) 쓰이지 않는다.
+  // 화면이 생기면 그대로 desc 로 넘기면 된다.
+  pptCheck: "완성된 PPT를 넣으면 오타·띄어쓰기부터 번역까지 자동 정리.",
+} as const;
+
+// 헤드라인 아래 부제의 공통 글자색.
+const SUBTITLE_COLOR = "#64748b";
+
 // ─── 공통 컴포넌트 ────────────────────────────────────────────────────────────
 
 const f = { fontFamily: "'Pretendard Variable', sans-serif" };
@@ -237,16 +265,130 @@ const HAS_HOVER =
   typeof window.matchMedia === "function" &&
   window.matchMedia("(hover: hover)").matches;
 
+// ─── 설정 · 메모리 데이터 ─────────────────────────────────────────────────────
+// 이 프로젝트에는 아직 API 계층이 없어 화면 데이터는 모두 모듈 상수(목 데이터)로 들어온다.
+// (recentChats·imageAICards·creditHistoryData 등과 같은 방식)
+// 실제 서버가 붙으면 아래 두 상수를 응답으로 교체하면 UI는 그대로 동작한다.
+
+type MemoryFact = { id: string; text: string; updatedAt: string };
+type MemorySummarySection = { id: string; title: string; paragraphs: string[]; updatedAt: string };
+
+const memoryLastUpdated = "15일 전";
+
+const memoryFacts: MemoryFact[] = [
+  { id: "f1", text: "주로 한국어로 소통합니다.", updatedAt: "7일 전" },
+  { id: "f2", text: "출력 파일 포맷은 고해상도 PNG를 기본으로 선호합니다.", updatedAt: "12일 전" },
+  { id: "f3", text: "이전 작업 시안에는 블루·웜톤 계열 색상이 사용되었습니다.", updatedAt: "18일 전" },
+  { id: "f4", text: "카드뉴스 제작 시 여백과 정렬 규칙을 먼저 확인합니다.", updatedAt: "23일 전" },
+  { id: "f5", text: "발표자료는 16:9 비율과 12장 내외 구성을 자주 사용합니다.", updatedAt: "약 1개월 전" },
+];
+
+const memorySummary: MemorySummarySection[] = [
+  {
+    id: "s1",
+    title: "사용자 컨텍스트",
+    paragraphs: [
+      "대화와 결과물 요청은 한국어로 진행하며, 영문 프롬프트가 필요한 경우에만 영어를 함께 사용합니다.",
+      "요청을 한 번에 길게 설명하기보다 템플릿을 먼저 고른 뒤 세부 조건을 덧붙이는 방식을 선호합니다.",
+      "디자인은 블루·웜톤 계열의 차분한 팔레트와 여백이 넉넉한 레이아웃을 반복적으로 선택했고, 결과물은 고해상도 PNG로 내려받습니다.",
+    ],
+    updatedAt: "15일 전",
+  },
+  {
+    id: "s2",
+    title: "업무",
+    paragraphs: [
+      "서비스 기획 담당자로서 문서 자동화 템플릿과 랜딩페이지, 업무용 스프레드시트, 사내 발표자료를 함께 관리합니다.",
+      "카드뉴스·상세페이지 이미지 제작과 문서 서식 정리가 가장 자주 수행하는 작업이며, 생성 결과를 검수한 뒤 팀에 공유합니다.",
+    ],
+    updatedAt: "약 1개월 전",
+  },
+  {
+    id: "s3",
+    title: "최근 관심사",
+    paragraphs: [
+      "문서 생성 서비스의 베타 테스트 준비에 집중하고 있습니다. 문서 분석 품질 개선과 스프레드시트 지원 범위 정리, 에디터에서 사용자가 수정한 내용이 유지되도록 하는 이슈를 주로 확인합니다.",
+      "랜딩페이지 A/B 테스트 결과를 추적하며 개발·디자인·QA 담당자와 일정 조율을 이어가고 있습니다.",
+    ],
+    updatedAt: "29일 전",
+  },
+  {
+    id: "s4",
+    title: "히스토리",
+    paragraphs: [
+      "최근 두 달간 제품 기획과 사내 문서 생성 작업을 병행했습니다. 초반에는 계약서·양식류 등 정형 문서를 정리했고, 이후 문서 생성 서비스의 베타 준비로 초점을 옮겼습니다.",
+      "서비스 개선 회의를 통해 정리된 항목들을 우선순위대로 반영했으며, 12장 분량의 안전 관리 발표자료처럼 실제 사용 사례를 만들어 템플릿 품질을 검증했습니다.",
+    ],
+    updatedAt: "약 1개월 전",
+  },
+];
+
 // ─── 설정 모달 ────────────────────────────────────────────────────────────────
 
 type SettingsTab = "외관" | "알림" | "메모리" | "크레딧";
+type MemoryFilter = "전체" | "사실" | "요약";
 
-function SettingsModal({ onClose }: { onClose: () => void }) {
+// 설정 콘텐츠의 공통 섹션 헤더(제목 → 설명 → 컨트롤 순서를 모든 탭에서 동일하게 유지).
+// 모듈 스코프에 두어야 리렌더 때 입력 포커스가 끊기지 않는다.
+function SettingsSectionHead({ title, desc }: { title: string; desc?: string }) {
+  return (
+    <div>
+      <p style={{ ...f, fontWeight: 700, fontSize: 16, color: "#0a0a0a", letterSpacing: "-0.4px" }}>{title}</p>
+      {desc && (
+        <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", letterSpacing: "-0.2px", lineHeight: 1.6, marginTop: 6 }}>{desc}</p>
+      )}
+    </div>
+  );
+}
+
+// 업데이트 시점 칩 (기존 태그 칩과 동일한 톤)
+function MemoryTimeChip({ value }: { value: string }) {
+  return (
+    <span className="inline-flex items-center rounded-full px-2 py-0.5" style={{ background: "#f1f5f9" }}>
+      <span style={{ ...f, fontWeight: 500, fontSize: 11.5, color: "#64748b" }}>{value}</span>
+    </span>
+  );
+}
+
+function SettingsModal({ onClose, onCreditHistory }: { onClose: () => void; onCreditHistory: () => void }) {
   const [tab, setTab] = useState<SettingsTab>("외관");
   const [theme, setTheme] = useState<"시스템" | "라이트" | "다크">("시스템");
   const [notifEnabled, setNotifEnabled] = useState(false);
+  const contentRef = React.useRef<HTMLDivElement>(null);
+
+  // 메모리 탭 — 검색어 / 필터 / 사실 목록(개별·전체 삭제, 추가)
+  const [memQuery, setMemQuery] = useState("");
+  const [memFilter, setMemFilter] = useState<MemoryFilter>("전체");
+  const [facts, setFacts] = useState<MemoryFact[]>(memoryFacts);
+  const [factDraft, setFactDraft] = useState("");
+  const [addingFact, setAddingFact] = useState(false);
 
   const tabs: SettingsTab[] = ["외관", "알림", "메모리", "크레딧"];
+
+  const memq = memQuery.trim();
+  const visibleFacts = memFilter === "요약" ? [] : facts.filter((it) => !memq || it.text.includes(memq));
+  const visibleSummary = memFilter === "사실" ? [] : memorySummary.filter(
+    (s) => !memq || s.title.includes(memq) || s.paragraphs.some((p) => p.includes(memq))
+  );
+  const memoryEmpty = visibleFacts.length === 0 && visibleSummary.length === 0;
+
+  const addFact = () => {
+    const text = factDraft.trim();
+    if (!text) return;
+    setFacts((prev) => [{ id: `f-${Date.now()}`, text, updatedAt: "방금 전" }, ...prev]);
+    setFactDraft("");
+    setAddingFact(false);
+  };
+
+  // 모달이 열려 있는 동안 바깥 페이지 스크롤을 잠근다.
+  React.useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  // 탭 전환 시 콘텐츠 스크롤을 처음으로 되돌려 위치가 튀지 않게 한다.
+  React.useEffect(() => { contentRef.current?.scrollTo({ top: 0 }); }, [tab]);
 
   const tabIcons: Record<SettingsTab, React.ReactNode> = {
     "외관": <Palette size={17} strokeWidth={1.7} />,
@@ -283,27 +425,46 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           from { transform: translateY(100%); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
         }
+        @keyframes settingsFadeIn {
+          from { transform: scale(0.98); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+        /* 모바일·태블릿은 바텀시트로 올라오고, 데스크톱(중앙 정렬)에서는 페이드로 나타난다. */
+        .settings-shell { animation: settingsSlideUp 280ms cubic-bezier(0.32,0.72,0,1); }
+        @media (min-width: 1200px) {
+          .settings-shell { animation: settingsFadeIn 180ms ease-out; }
+        }
       `}</style>
       {/* backdrop */}
       <div onClick={onClose} className="fixed inset-0 z-[70] bg-black/40" />
 
-      {/* modal panel */}
+      {/* 위치 래퍼 — 767px 이하·태블릿은 화면 하단에 붙는 바텀시트, 1200px 이상은 화면 중앙 다이얼로그.
+          pointer-events-none 이라 셸 바깥을 누르면 backdrop이 그대로 닫기를 받는다. */}
+      <div className="fixed inset-0 z-[71] flex flex-col justify-end pointer-events-none wide:items-center wide:justify-center wide:p-8">
+
+      {/* modal shell — 네 탭이 공유하는 단일 셸.
+          높이를 뷰포트 기준(dvh)으로 고정해 탭 콘텐츠 양과 무관하게 상·하단 위치가 항상 같다.
+          dvh를 쓰므로 모바일 주소창이 접히고 펼쳐져도 함께 대응된다.
+          폭 구간별 높이 — 모바일 min(82dvh,760px) / 태블릿 min(86dvh,880px) / 데스크톱 min(78dvh,760px),
+          각 구간의 max-height로 화면 위아래에 항상 여백이 남게 한다. */}
       <div
-        className="fixed left-0 right-0 bottom-0 z-[71] bg-white flex flex-col"
-        style={{
-          borderRadius: "24px 24px 0 0",
-          maxHeight: "92vh",
-          animation: "settingsSlideUp 280ms cubic-bezier(0.32,0.72,0,1)",
-          boxShadow: "0px -8px 40px rgba(0,0,0,0.18)",
-        }}
+        className={
+          "settings-shell pointer-events-auto w-full bg-white flex flex-col overflow-hidden " +
+          "rounded-t-[24px] wide:rounded-[24px] wide:max-w-[1040px] " +
+          // md와 wide의 출력 순서에 기대지 않도록 태블릿 높이는 768~1199 범위로 못박는다
+          "h-[min(82dvh,760px)] max-h-[calc(100dvh-64px)] " +
+          "md:max-wide:h-[min(86dvh,880px)] md:max-wide:max-h-[calc(100dvh-48px)] " +
+          "wide:h-[min(78dvh,760px)] wide:max-h-[calc(100dvh-80px)]"
+        }
+        style={{ boxShadow: "0px -8px 40px rgba(0,0,0,0.18)" }}
       >
-        {/* drag handle */}
-        <div className="flex justify-center pt-3 pb-1 shrink-0">
+        {/* drag handle — 바텀시트일 때만 노출(데스크톱 중앙 다이얼로그에는 끌 손잡이가 없다) */}
+        <div className="flex justify-center pt-4 pb-1 shrink-0 wide:hidden">
           <div className="w-9 h-1 rounded-full bg-[#d1d5db]" />
         </div>
 
-        {/* header */}
-        <div className="flex items-start justify-between px-5 pt-2 pb-4 shrink-0">
+        {/* header — 제목/설명/닫기. 모든 폭에서 고정 */}
+        <div className="flex items-start justify-between px-5 pt-4 pb-4 shrink-0 wide:px-7 wide:pt-6 wide:pb-5 wide:border-b wide:border-[#f1f5f9]">
           <div>
             <p style={{ ...f, fontWeight: 700, fontSize: 20, color: "#0a0a0a", letterSpacing: "-0.6px" }}>설정</p>
             <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", marginTop: 3, letterSpacing: "-0.2px" }}>딸깍의 외관과 동작을 설정합니다.</p>
@@ -316,42 +477,54 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        {/* tab bar */}
-        <div className="shrink-0 px-4 pb-3">
-          <div className="flex bg-[#f1f5f9] rounded-[16px] p-1 gap-0.5">
-            {tabs.map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-[12px] transition-all duration-150"
-                style={{
-                  background: tab === t ? "white" : "transparent",
-                  boxShadow: tab === t ? "0px 1px 4px rgba(0,0,0,0.1)" : "none",
-                  color: tab === t ? "#0a0a0a" : "#9ca3af",
-                }}
-              >
-                {tabIcons[t]}
-                <span style={{ ...f, fontWeight: tab === t ? 600 : 500, fontSize: 11 }}>{t}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* body — 767px 이하·태블릿: 가로 탭 + 아래 콘텐츠 / 1200px 이상: 좌측 사이드 메뉴 + 우측 콘텐츠 */}
+        <div className="flex-1 min-h-0 flex flex-col wide:flex-row">
 
-        {/* content */}
-        <div className="flex-1 overflow-y-auto px-4 pb-8" style={{ scrollbarWidth: "none" }}>
+          {/* 탭 메뉴 (같은 버튼을 방향만 바꿔 사용 — 색·그림자·아이콘은 동일) */}
+          <div className="shrink-0 px-4 pb-3 wide:w-[212px] wide:px-4 wide:py-5">
+            <div className="flex wide:flex-col bg-[#f1f5f9] rounded-[16px] p-1 gap-0.5 wide:gap-1">
+              {tabs.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  className="flex-1 wide:flex-none flex flex-col wide:flex-row items-center wide:justify-start gap-1 wide:gap-2.5 py-2.5 wide:px-3 rounded-[12px] transition-all duration-150"
+                  style={{
+                    background: tab === t ? "white" : "transparent",
+                    boxShadow: tab === t ? "0px 1px 4px rgba(0,0,0,0.1)" : "none",
+                    color: tab === t ? "#0a0a0a" : "#9ca3af",
+                  }}
+                >
+                  {tabIcons[t]}
+                  <span className="wide:text-[13px]" style={{ ...f, fontWeight: tab === t ? 600 : 500, fontSize: 11 }}>{t}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* content — 헤더/탭바/푸터를 뺀 남은 높이를 차지하고, 넘칠 때 이 영역만 스크롤한다.
+              minHeight:0 이 없으면 flex 자식이 콘텐츠 높이만큼 밀려 셸이 늘어난다. */}
+          <div
+            ref={contentRef}
+            className="flex-1 overflow-y-auto px-4 pb-8 wide:px-8 wide:border-l wide:border-[#f1f5f9]"
+            style={{ scrollbarWidth: "none", minHeight: 0, overscrollBehavior: "contain" }}
+          >
+          {/* 본문은 읽기 좋은 너비로 제한하고 좌측 시작선을 통일한다.
+              상단 여백은 스크롤 컨테이너가 아니라 이 래퍼가 갖는다 —
+              스크롤 컨테이너에 padding-top이 있으면 sticky 요소가 그만큼 아래에 붙어 콘텐츠가 비친다. */}
+          <div className="w-full wide:max-w-[720px] wide:pt-4">
 
           {/* ── 외관 ── */}
           {tab === "외관" && (
-            <div className="flex flex-col gap-6">
-              <div>
-                <p style={{ ...f, fontWeight: 700, fontSize: 16, color: "#0a0a0a", letterSpacing: "-0.4px", marginBottom: 6 }}>테마</p>
-                <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", letterSpacing: "-0.2px", marginBottom: 14 }}>인터페이스가 기기를 따르도록 하거나 고정된 테마를 선택합니다.</p>
-                <div className="flex gap-2.5">
+            <div className="flex flex-col gap-7">
+              <section className="flex flex-col gap-3.5">
+                <SettingsSectionHead title="테마" desc="인터페이스가 기기를 따르도록 하거나 고정된 테마를 선택합니다." />
+                {/* 3열 균등 배치 — grid라 카드 폭이 같고, stretch로 높이도 같아진다 */}
+                <div className="grid grid-cols-3 gap-2.5 items-stretch">
                   {themeCards.map((tc) => (
                     <button
                       key={tc.id}
                       onClick={() => setTheme(tc.id)}
-                      className="flex-1 flex flex-col rounded-[16px] overflow-hidden border-2 transition-all duration-150"
+                      className="h-full flex flex-col rounded-[16px] overflow-hidden border-2 transition-all duration-150"
                       style={{
                         borderColor: theme === tc.id ? "#0a0a0a" : "#e2e8f0",
                         background: theme === tc.id ? "#fafafa" : "white",
@@ -386,12 +559,12 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
                     </button>
                   ))}
                 </div>
-              </div>
+              </section>
 
-              <div>
-                <p style={{ ...f, fontWeight: 700, fontSize: 16, color: "#0a0a0a", letterSpacing: "-0.4px", marginBottom: 6 }}>언어</p>
-                <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", letterSpacing: "-0.2px", marginBottom: 12 }}>언어를 전환합니다.</p>
-                <div className="relative">
+              {/* 언어 — 테마와 분리된 별도 섹션 */}
+              <section className="flex flex-col gap-3.5">
+                <SettingsSectionHead title="언어" desc="언어를 전환합니다." />
+                <div className="relative wide:max-w-[360px]">
                   <select
                     className="w-full h-11 bg-white border border-[#e2e8f0] rounded-[14px] px-4 pr-10 appearance-none outline-none"
                     style={{ ...f, fontWeight: 500, fontSize: 14, color: "#0a0a0a" }}
@@ -408,17 +581,26 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
                     </svg>
                   </div>
                 </div>
-              </div>
+              </section>
             </div>
           )}
 
           {/* ── 알림 ── */}
           {tab === "알림" && (
-            <div className="flex flex-col gap-5">
-              <div className="flex items-start justify-between gap-3">
-                <p style={{ ...f, fontWeight: 400, fontSize: 13.5, color: "#374151", letterSpacing: "-0.2px", lineHeight: 1.6, flex: 1 }}>
-                  딸깍는 창이 활성 상태가 아닐 때만 완료 알림을 보냅니다. 장시간 작업에 특히 유용하여 다른 작업을 하다가 완료 알림을 받을 수 있습니다.
-                </p>
+            <div className="flex flex-col gap-4">
+              <SettingsSectionHead
+                title="실시간 알림 제어"
+                desc="딸깍는 창이 활성 상태가 아닐 때만 완료 알림을 보냅니다. 장시간 작업에 특히 유용하여 다른 작업을 하다가 완료 알림을 받을 수 있습니다."
+              />
+              {/* 설정 항목 카드 — 왼쪽 설정명·보조 설명 / 오른쪽 토글 */}
+              <div className="bg-white border border-[#e2e8f0] rounded-[16px] px-4 py-4 flex items-start justify-between gap-4"
+                style={{ boxShadow: "0px 1px 3px rgba(0,0,0,0.05)" }}>
+                <div className="min-w-0">
+                  <p style={{ ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a", letterSpacing: "-0.3px" }}>작업 완료 알림</p>
+                  <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", letterSpacing: "-0.2px", lineHeight: 1.6, marginTop: 4 }}>
+                    이미지·문서·랜딩페이지 등 생성 작업이 끝나면 알려드립니다.
+                  </p>
+                </div>
                 {/* toggle */}
                 <button
                   onClick={() => setNotifEnabled((v) => !v)}
@@ -431,8 +613,9 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
                   />
                 </button>
               </div>
+              {/* 권한 요청 — 데스크톱에서는 내용 폭을 전부 차지하지 않는다 */}
               <button
-                className="w-full h-12 rounded-[14px] flex items-center justify-center gap-2"
+                className="w-full wide:w-auto wide:self-start wide:px-6 h-12 rounded-[14px] flex items-center justify-center gap-2"
                 style={{ background: "#0a0a0a" }}
               >
                 <Bell size={16} strokeWidth={1.8} color="white" />
@@ -443,20 +626,177 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
 
           {/* ── 메모리 ── */}
           {tab === "메모리" && (
-            <div className="flex flex-col gap-4">
-              <p style={{ ...f, fontWeight: 400, fontSize: 13.5, color: "#374151", letterSpacing: "-0.2px", lineHeight: 1.65 }}>
-                딸깍는 백그라운드에서 대화를 자동으로 학습합니다. 이러한 기억은 딸깍가 사용자를 더 잘 이해하고 개인화된 경험을 제공하는 데 도움이 됩니다.
-              </p>
-              <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", letterSpacing: "-0.2px" }}>로딩 중...</p>
+            <div className="flex flex-col">
+              <SettingsSectionHead
+                title="메모리"
+                desc="딸깍는 백그라운드에서 대화를 자동으로 학습합니다. 이러한 기억은 딸깍가 사용자를 더 잘 이해하고 개인화된 경험을 제공하는 데 도움이 됩니다."
+              />
+              {/* 검색·필터·액션만 상단 고정 — 목록을 스크롤해도 바로 접근할 수 있게 한다 */}
+              <div className="sticky top-0 z-10 bg-white pt-3.5 pb-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* 검색 */}
+                  <div className="relative flex-1 min-w-[150px]">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                      <Search size={15} strokeWidth={1.8} color="#9ca3af" />
+                    </div>
+                    <input
+                      value={memQuery}
+                      onChange={(e) => setMemQuery(e.target.value)}
+                      placeholder="메모리 검색"
+                      className="w-full h-10 bg-white border border-[#e2e8f0] rounded-[14px] pl-9 pr-3 outline-none"
+                      style={{ ...f, fontWeight: 400, fontSize: 13, color: "#0a0a0a" }}
+                    />
+                  </div>
+                  {/* 필터 */}
+                  <div className="flex bg-[#f1f5f9] rounded-[14px] p-1 gap-0.5 shrink-0">
+                    {(["전체", "사실", "요약"] as MemoryFilter[]).map((k) => (
+                      <button key={k} onClick={() => setMemFilter(k)}
+                        className="h-8 px-3 rounded-[10px] transition-all duration-150"
+                        style={{
+                          background: memFilter === k ? "white" : "transparent",
+                          boxShadow: memFilter === k ? "0px 1px 4px rgba(0,0,0,0.1)" : "none",
+                        }}>
+                        <span style={{ ...f, fontWeight: memFilter === k ? 600 : 500, fontSize: 12.5, color: memFilter === k ? "#0a0a0a" : "#9ca3af" }}>{k}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {/* 액션 */}
+                  <button onClick={() => setAddingFact((v) => !v)}
+                    className="h-10 px-3.5 rounded-[14px] border border-[#e2e8f0] bg-white flex items-center gap-1.5 shrink-0"
+                    style={{ boxShadow: "0px 1px 2px rgba(0,0,0,0.06)" }}>
+                    <Plus size={14} strokeWidth={1.8} color="#6b7280" />
+                    <span style={{ ...f, fontWeight: 500, fontSize: 13, color: "#6b7280" }}>사실 추가</span>
+                  </button>
+                  <button onClick={() => setFacts([])} disabled={facts.length === 0}
+                    className="h-10 px-3.5 rounded-[14px] border border-[#e2e8f0] bg-white flex items-center shrink-0"
+                    style={{ boxShadow: "0px 1px 2px rgba(0,0,0,0.06)", opacity: facts.length === 0 ? 0.45 : 1 }}>
+                    <span style={{ ...f, fontWeight: 600, fontSize: 13, color: "#e7000b" }}>메모리 전체 삭제</span>
+                  </button>
+                </div>
+                {/* 사실 추가 입력 */}
+                {addingFact && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <input
+                      value={factDraft}
+                      onChange={(e) => setFactDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") addFact(); }}
+                      placeholder="기억할 내용을 입력해 주세요"
+                      autoFocus
+                      className="flex-1 h-10 bg-white border border-[#e2e8f0] rounded-[14px] px-3.5 outline-none"
+                      style={{ ...f, fontWeight: 400, fontSize: 13, color: "#0a0a0a" }}
+                    />
+                    <button onClick={addFact} className="h-10 px-4 rounded-[14px] shrink-0" style={{ background: "#0a0a0a" }}>
+                      <span style={{ ...f, fontWeight: 600, fontSize: 13, color: "white" }}>추가</span>
+                    </button>
+                    <button onClick={() => { setAddingFact(false); setFactDraft(""); }} className="h-10 px-2 shrink-0">
+                      <span style={{ ...f, fontWeight: 500, fontSize: 13, color: "#9ca3af" }}>취소</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* 메모리 본문 */}
+              <div className="flex flex-col gap-5 pt-1">
+                {/* 개요 — 검색 중에는 결과에 집중할 수 있도록 감춘다 */}
+                {!memq && memFilter === "전체" && (
+                  <div className="bg-white border border-[#e2e8f0] rounded-[16px] px-4 py-4"
+                    style={{ boxShadow: "0px 1px 3px rgba(0,0,0,0.05)" }}>
+                    <p style={{ ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a", letterSpacing: "-0.3px" }}>개요</p>
+                    <div className="flex items-center gap-2 mt-2.5">
+                      <span style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af" }}>최종 업데이트</span>
+                      <MemoryTimeChip value={memoryLastUpdated} />
+                    </div>
+                    <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", lineHeight: 1.6, marginTop: 8 }}>
+                      사실 {facts.length}개와 요약 {memorySummary.length}개 섹션이 저장되어 있습니다.
+                    </p>
+                  </div>
+                )}
+
+                {/* 사실 — 개별 삭제 가능 */}
+                {visibleFacts.length > 0 && (
+                  <section className="flex flex-col gap-2.5">
+                    <p style={{ ...f, fontWeight: 600, fontSize: 12.5, color: "#9ca3af", letterSpacing: "-0.2px" }}>사실</p>
+                    {visibleFacts.map((fact) => (
+                      <div key={fact.id}
+                        className="bg-white border border-[#e2e8f0] rounded-[14px] px-4 py-3 flex items-start justify-between gap-3"
+                        style={{ boxShadow: "0px 1px 3px rgba(0,0,0,0.05)" }}>
+                        <div className="min-w-0">
+                          <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: "#0a0a0a", letterSpacing: "-0.2px", lineHeight: 1.6 }}>{fact.text}</p>
+                          <div className="flex items-center gap-1.5 mt-1.5">
+                            <span style={{ ...f, fontWeight: 400, fontSize: 12, color: "#9ca3af" }}>업데이트</span>
+                            <MemoryTimeChip value={fact.updatedAt} />
+                          </div>
+                        </div>
+                        <button onClick={() => setFacts((prev) => prev.filter((x) => x.id !== fact.id))}
+                          className="shrink-0 h-7 px-2 flex items-center">
+                          <span style={{ ...f, fontWeight: 600, fontSize: 12.5, color: "#e7000b" }}>삭제</span>
+                        </button>
+                      </div>
+                    ))}
+                  </section>
+                )}
+
+                {/* 요약 — 섹션 제목 / 본문 문단 / 업데이트 시점을 구분하고 사이에 구분선 */}
+                {visibleSummary.map((s, i) => (
+                  <React.Fragment key={s.id}>
+                    {(i > 0 || visibleFacts.length > 0) && <div className="h-px bg-[#f1f5f9]" />}
+                    <section className="flex flex-col gap-2">
+                      <p style={{ ...f, fontWeight: 700, fontSize: 15, color: "#0a0a0a", letterSpacing: "-0.35px" }}>{s.title}</p>
+                      {s.paragraphs.map((p, idx) => (
+                        <p key={idx} style={{ ...f, fontWeight: 400, fontSize: 13.5, color: "#374151", letterSpacing: "-0.2px", lineHeight: 1.7 }}>{p}</p>
+                      ))}
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span style={{ ...f, fontWeight: 400, fontSize: 12, color: "#9ca3af" }}>업데이트 시간</span>
+                        <MemoryTimeChip value={s.updatedAt} />
+                      </div>
+                    </section>
+                  </React.Fragment>
+                ))}
+
+                {/* 빈 상태 — 검색 결과 없음 / 저장된 메모리 없음 */}
+                {memoryEmpty && (
+                  <div className="flex flex-col items-center justify-center text-center gap-2 py-14">
+                    <Brain size={28} strokeWidth={1.5} color="#cbd5e1" />
+                    <p style={{ ...f, fontWeight: 600, fontSize: 14, color: "#374151", letterSpacing: "-0.3px" }}>
+                      {memq ? "검색 결과가 없습니다" : "저장된 메모리가 없습니다"}
+                    </p>
+                    <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>
+                      {memq ? "다른 검색어로 찾아보세요." : "대화를 나누면 딸깍가 자동으로 기억을 만들어요."}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
           {/* ── 크레딧 ── */}
           {tab === "크레딧" && (
-            <div className="flex flex-col gap-5">
-              <div>
-                <p style={{ ...f, fontWeight: 700, fontSize: 16, color: "#0a0a0a", letterSpacing: "-0.4px", marginBottom: 4 }}>크레딧 사용량</p>
-                <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", letterSpacing: "-0.2px", marginBottom: 16 }}>API 사용 비용을 추적합니다.</p>
+            <div className="flex flex-col gap-4">
+              <SettingsSectionHead
+                title="크레딧 계정 상태 요약"
+                desc="보유한 크레딧 잔액과 이번 달 사용량입니다. 상세 내역과 충전은 크레딧 사용 내역 페이지에서 확인할 수 있습니다."
+              />
+
+              {/* 요약 카드 — 잔액을 가장 크게, 이번 달 사용량은 구분선 아래 */}
+              <div className="bg-white border border-[#e2e8f0] rounded-[16px] px-5 py-5"
+                style={{ boxShadow: "0px 1px 3px rgba(0,0,0,0.05)" }}>
+                <p style={{ ...f, fontWeight: 500, fontSize: 12, color: "#9ca3af", letterSpacing: "-0.2px" }}>남은 크레딧 잔액</p>
+                <p style={{ ...f, fontWeight: 700, fontSize: 28, color: "#0a0a0a", letterSpacing: "-1.1px", lineHeight: 1.2, marginTop: 4 }}>
+                  {CREDIT_BALANCE.toLocaleString()}
+                  <span style={{ fontWeight: 500, fontSize: 14, color: "#737373", letterSpacing: "-0.2px" }}> 크레딧</span>
+                </p>
+                <div className="h-px bg-[#f1f5f9] my-4" />
+                <div className="flex items-center justify-between gap-3">
+                  <span style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af" }}>이번 달 사용 요약</span>
+                  <span style={{ ...f, fontWeight: 600, fontSize: 13, color: "#0a0a0a" }}>
+                    {CREDIT_MONTHLY_USED.toLocaleString()} 크레딧 차감
+                  </span>
+                </div>
+              </div>
+
+              {/* 사용량 상세 */}
+              <div className="flex flex-col gap-3">
+                <SettingsSectionHead title="크레딧 사용량" desc="API 사용 비용을 추적합니다." />
                 <div className="grid grid-cols-2 gap-2.5">
                   {[
                     { label: "총 작업 수", value: "···" },
@@ -473,20 +813,30 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
                   ))}
                 </div>
               </div>
-              <div className="flex justify-end">
+
+              {/* 하단 액션 — 새로고침(보조) / 상세 내역·충전 이동(주요) */}
+              <div className="flex flex-col-reverse gap-2.5 wide:flex-row wide:items-center wide:justify-between">
                 <button
-                  className="flex items-center gap-1.5 h-9 px-4 rounded-[12px] border border-[#e2e8f0] bg-white"
+                  className="flex items-center justify-center gap-1.5 h-11 px-4 rounded-[12px] border border-[#e2e8f0] bg-white wide:h-9"
                   style={{ boxShadow: "0px 1px 2px rgba(0,0,0,0.06)" }}>
                   <RefreshCw size={14} strokeWidth={1.7} color="#6b7280" />
                   <span style={{ ...f, fontWeight: 500, fontSize: 13, color: "#6b7280" }}>새로고침</span>
                 </button>
+                <button onClick={onCreditHistory}
+                  className="h-11 px-5 rounded-[14px] flex items-center justify-center gap-2"
+                  style={{ background: "#0a0a0a" }}>
+                  <Coins size={15} strokeWidth={1.8} color="white" />
+                  <span style={{ ...f, fontWeight: 600, fontSize: 13.5, color: "white", letterSpacing: "-0.3px" }}>크레딧 상세 내역 및 충전</span>
+                </button>
               </div>
             </div>
           )}
+          </div>
+          </div>
         </div>
 
-        {/* footer */}
-        <div className="shrink-0 border-t border-[#f1f5f9] px-5 py-3 flex items-center justify-between">
+        {/* footer — 모든 탭에서 같은 하단 위치에 고정 */}
+        <div className="shrink-0 border-t border-[#f1f5f9] px-5 py-3 wide:px-7 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <img alt="딸깍.net" className="h-4 w-auto object-contain" src={imgImageNet} />
             <span style={{ ...f, fontWeight: 500, fontSize: 11, color: "#9ca3af" }}>v1.0.242</span>
@@ -494,6 +844,7 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
           </div>
           <span style={{ ...f, fontWeight: 400, fontSize: 10, color: "#d1d5db" }}>Build: 2026. 07. 23. 오전 10:26</span>
         </div>
+      </div>
       </div>
     </>
   );
@@ -512,10 +863,11 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
  * 활성 표시된다. 안 넘기면 기존처럼 recentTemplates 를 정적으로 렌더한다
  * — 기존 화면들은 prop 을 주지 않으므로 동작·모양이 그대로다.
  */
-function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpen, variant = "drawer", recentForms, currentFormId, onSelectForm }: {
+function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpen, onStartTutorial, variant = "drawer", recentForms, currentFormId, onSelectForm }: {
   open: boolean; onClose: () => void;
   currentScreen: Screen; onNavigate: (s: Screen) => void;
   onSettingsOpen: () => void;
+  onStartTutorial: () => void;
   variant?: "drawer" | "docked";
   recentForms?: { id: string; title: string }[];
   currentFormId?: string;
@@ -548,15 +900,16 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
         {/* Nav */}
         <div className="flex flex-col gap-1 px-2 shrink-0">
           {[
-            { s: "home" as Screen, icon: <IconHome />, label: "홈", activeIcon: <IconHomeBlue /> },
-            { s: "mywork" as Screen, icon: <IconWork />, label: "내 작업", activeIcon: <IconWorkBlue /> },
-            { s: "favorites" as Screen, icon: <IconStar />, label: "즐겨찾기", activeIcon: <IconStarBlue /> },
-          ].map(({ s, icon, label, activeIcon }) => (
+            { s: "home" as Screen, icon: <IconHome />, label: "홈" },
+            { s: "mywork" as Screen, icon: <IconWork />, label: "내 작업" },
+            { s: "favorites" as Screen, icon: <IconStar />, label: "즐겨찾기" },
+          ].map(({ s, icon, label }) => (
             <button key={s} onClick={() => nav(s)}
               aria-current={active(s) ? "page" : undefined}
               className={`dk-nav-item h-11 rounded-[14px] flex items-center gap-3 px-3 w-full ${active(s) ? "is-active" : ""}`}>
-              {active(s) ? activeIcon : icon}
-              {/* 색은 hover/:active 로 바뀌므로 CSS 가 담당한다(인라인 style 은 :hover 를 이긴다) */}
+              {/* 아이콘·라벨 색 모두 CSS 가 담당한다(인라인 style 은 :hover 를 이긴다).
+                  아이콘은 currentColor 라 버튼의 color 를 따라간다. */}
+              {icon}
               <span className="dk-nav-item__label" style={{ ...f, fontWeight: active(s) ? 600 : 500, fontSize: 14, letterSpacing: "-0.35px" }}>
                 {label}
               </span>
@@ -620,7 +973,7 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
                 <div className="h-px bg-[#f1f5f9] mx-0" />
                 {/* 메뉴 그룹 1 */}
                 {[
-                  { icon: <HelpCircle size={20} strokeWidth={1.6} color="#9ca3af" />, label: "튜토리얼 다시 보기", onClick: undefined as (() => void) | undefined },
+                  { icon: <HelpCircle size={20} strokeWidth={1.6} color="#9ca3af" />, label: "튜토리얼 다시 보기", onClick: (() => { setProfileMenuOpen(false); onClose(); onStartTutorial(); }) as (() => void) | undefined },
                   { icon: <SettingsIcon size={20} strokeWidth={1.6} color="#9ca3af" />, label: "설정", onClick: openSettings },
                 ].map(({ icon, label, onClick }) => (
                   <button key={label} onClick={onClick} className="w-full flex items-center gap-3.5 px-5 py-3.5">
@@ -665,29 +1018,40 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
         </div>
       </div>
       <style>{`
-        /* 사이드바 메뉴 — 배경·이동·글자색만 전이시킨다(폰트/굵기/크기는 그대로). */
-        .dk-nav-item { background-color: transparent; transition: background-color 160ms ease, transform 160ms ease; }
+        /* 사이드바 메뉴 — 배경·이동·색만 전이시킨다(폰트/굵기/크기는 그대로).
+           아이콘은 currentColor 라 버튼의 color 를 따라간다. */
+        .dk-nav-item {
+          background-color: transparent;
+          color: #64748b;
+          transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+        }
         .dk-nav-item .dk-nav-item__label { color: #1e293b; transition: color 160ms ease; }
         /* 하위 목록(최근 서식) — 기본 글자색만 기존 목록과 맞추고 hover/활성은 메뉴와 동일하게 쓴다. */
         .dk-nav-item--sub .dk-nav-item__label { color: #45556c; }
-        /* 현재 페이지 — 브랜드 블루 텍스트/아이콘 + 블루 틴트 배경으로 hover 와 구분한다. */
-        .dk-nav-item.is-active { background-color: #eef3ff; }
+        /* 현재 페이지 — 브랜드 블루 텍스트/아이콘 + 블루 틴트 배경. 이동은 주지 않는다. */
+        .dk-nav-item.is-active { background-color: #eef3ff; color: #4f7bff; }
         .dk-nav-item.is-active .dk-nav-item__label { color: #4f7bff; }
 
-        /* hover 는 중성 회색(slate-100). 파란 틴트로 두면 흰 배경 위에서 거의 구분되지 않고,
-           활성 상태(#eef3ff)와도 같은 색 계열이라 둘을 헷갈리게 한다. 웹 버전과 동일한 값. */
-        /* 터치 기기에서 탭 후 hover 가 잔상으로 남지 않도록, hover 는 마우스 환경에서만 건다. */
+        /* 호버는 마우스 환경에서만. 터치에서 탭 뒤 호버 잔상이 남으면 활성 상태와 헷갈린다.
+           태블릿에서 호버가 보이지 않는 것은 의도된 동작이고, 그쪽은 아래 :active 가 맡는다. */
         @media (hover: hover) and (pointer: fine) {
-          .dk-nav-item:hover { background-color: #f1f5f9; transform: translateX(2px); }
+          .dk-nav-item:hover { background-color: #f1f5f9; color: #475569; transform: translateX(3px); }
           .dk-nav-item:hover .dk-nav-item__label { color: #0f172a; }
-          .dk-nav-item.is-active:hover { background-color: #e3ebff; }
+          .dk-nav-item.is-active:hover { background-color: #e3ebff; color: #4f7bff; transform: none; }
           .dk-nav-item.is-active:hover .dk-nav-item__label { color: #4f7bff; }
         }
-        /* 터치에서는 누르고 있는 동안 hover 와 동일한 피드백을 준다. */
-        .dk-nav-item:active { background-color: #f1f5f9; transform: translateX(2px); }
+
+        /* 터치 — 누르고 있는 동안만. 배경을 호버보다 한 단계 진하게(#e2e8f0) 해서
+           손가락에 가려도 눌린 것이 보이게 한다. */
+        .dk-nav-item:active { background-color: #e2e8f0; color: #475569; transform: translateX(2px); }
         .dk-nav-item:active .dk-nav-item__label { color: #0f172a; }
-        .dk-nav-item.is-active:active { background-color: #e3ebff; }
+        .dk-nav-item.is-active:active { background-color: #dbe4ff; color: #4f7bff; transform: none; }
         .dk-nav-item.is-active:active .dk-nav-item__label { color: #4f7bff; }
+
+        /* 터치에서는 들어갈 때도 빠질 때도 80ms — 손을 떼면 곧바로 원래대로 돌아온다. */
+        @media (pointer: coarse) {
+          .dk-nav-item, .dk-nav-item .dk-nav-item__label { transition-duration: 80ms; }
+        }
 
         @media (prefers-reduced-motion: reduce) {
           .dk-nav-item { transition: none; }
@@ -698,9 +1062,10 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
   );
 }
 
-function TopBar({ onMenuOpen, onBack, showBack, onCreditClick, onBellClick }: {
+function TopBar({ onMenuOpen, onBack, showBack, onCreditClick, onBellClick, bellRef }: {
   onMenuOpen: () => void; onBack?: () => void; showBack?: boolean;
   onCreditClick?: () => void; onBellClick?: () => void;
+  bellRef?: React.RefObject<HTMLButtonElement | null>;
 }) {
   return (
     <header className="h-14 flex items-center justify-between px-4 shrink-0 bg-[#f8fafc]">
@@ -713,14 +1078,8 @@ function TopBar({ onMenuOpen, onBack, showBack, onCreditClick, onBellClick }: {
         <img alt="딸깍.net" className="h-[22px] w-auto object-contain" src={imgImageNet} />
       </div>
       <div className="flex items-center gap-2">
-        <button onClick={onCreditClick} className="bg-[#f8fafc] h-9 rounded-[20px] border border-[#dfe6ed] flex items-center gap-2 px-3"
-          style={{ boxShadow: "0px 1px 1.5px rgba(0,0,0,0.1)" }}>
-          <div className="bg-[#4f7bff] rounded-full size-5 flex items-center justify-center">
-            <span style={{ ...f, fontWeight: 700, fontSize: 10, color: "white" }}>C</span>
-          </div>
-          <span style={{ ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a" }}>{CREDIT_BALANCE.toLocaleString()}</span>
-        </button>
-        <button onClick={onBellClick} className="relative size-9 flex items-center justify-center">
+        <CreditBadge amount={CREDIT_BALANCE} onClick={onCreditClick} />
+        <button ref={bellRef} onClick={onBellClick} className="relative size-9 flex items-center justify-center">
           <IconBell />
           <div className="absolute top-[6px] left-[22px] bg-[#2b7fff] rounded-full size-2" />
         </button>
@@ -729,48 +1088,402 @@ function TopBar({ onMenuOpen, onBack, showBack, onCreditClick, onBellClick }: {
   );
 }
 
-function ChatInputBox() {
+// ─── 컴포저 칩 툴바 (홈·워크스페이스 공용) ─────────────────────────────────────
+// 데스크톱과 동일하게 "양식 업로드"를 포함하고, 토글 칩에는 설명 툴팁을 붙인다.
+// 자리가 모자라면 줄바꿈으로 내리지 않고 가로 슬라이드로 가려뒀다가 밀어서 볼 수 있게 한다.
+const CHIP_TOOLTIP = {
+  upload: "올린 양식과 똑같은 형식으로 문서를 만들어줍니다.",
+  auto: "질문에 맞게 프롬프트를 자동으로 최적화하여 더 정확한 답변을 생성합니다.",
+  doc: "참고문서 원문 전체를 AI 입력에 포함합니다. 입력 크기가 증가하여 처리 비용과 응답 시간이 증가할 수 있습니다.",
+} as const;
+
+function ComposerChips({ showUpload = true }: { showUpload?: boolean }) {
+  const [autoOn, setAutoOn] = useState(true);
+  const [docOn, setDocOn] = useState(false);
+  const [tip, setTip] = useState<{ text: string; left: number; width: number; arrowX: number } | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const scRef = useRef<HTMLDivElement>(null);
+  const [edge, setEdge] = useState({ left: false, right: false });
+  const tipTimer = useRef<number | undefined>(undefined);
+
+  // 좌우 끝에 가려진 칩이 있는지 — 페이드로 "더 있다"는 걸 알린다
+  const updateEdges = useCallback(() => {
+    const el = scRef.current;
+    if (!el) return;
+    setEdge({
+      left: el.scrollLeft > 2,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 2,
+    });
+  }, []);
+
+  useEffect(() => {
+    updateEdges();
+    const el = scRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(updateEdges);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [updateEdges]);
+
+  useEffect(() => () => window.clearTimeout(tipTimer.current), []);
+
+  // 데스크톱은 hover로, 터치 기기(hover 없음)는 탭으로 툴팁을 띄운다.
+  const showTip = (el: HTMLElement, text: string, autoHide: boolean) => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const r = el.getBoundingClientRect();
+    const w = wrap.getBoundingClientRect();
+    // 말풍선은 컨테이너 안에 가두고, 화살표만 칩 중앙을 가리키게 한다
+    const width = Math.min(280, w.width);
+    const center = r.left + r.width / 2 - w.left;
+    const left = Math.min(Math.max(center, width / 2), w.width - width / 2);
+    const arrowX = Math.min(Math.max(center, left - width / 2 + 12), left + width / 2 - 12);
+    setTip({ text, left, width, arrowX });
+    window.clearTimeout(tipTimer.current);
+    if (autoHide) tipTimer.current = window.setTimeout(() => setTip(null), 2800);
+  };
+
+  // 칩 하나에 붙일 툴팁 핸들러 묶음 — 포인터 종류로 그때그때 판단한다.
+  // 마우스는 hover로, 터치·펜은 탭으로 (자동 숨김) 띄운다.
+  const lastPointer = useRef<string>("mouse");
+  const tipHandlers = (text: string) => ({
+    onPointerEnter: (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (e.pointerType === "mouse") showTip(e.currentTarget, text, false);
+    },
+    onPointerLeave: (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (e.pointerType === "mouse") setTip(null);
+    },
+    onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
+      lastPointer.current = e.pointerType || "mouse";
+    },
+    onClick: (e: React.MouseEvent<HTMLButtonElement>) => {
+      if (lastPointer.current !== "mouse") showTip(e.currentTarget, text, true);
+    },
+  });
+
+  const chipStyle = (on: boolean) => ({
+    background: on ? "#eff6ff" : "white",
+    border: `1px solid ${on ? "rgba(79,123,255,0.35)" : "#e2e8f0"}`,
+  });
+  const chipText = (on: boolean) => ({ ...f, fontWeight: 600, fontSize: 11, color: on ? "#4f7bff" : "#62748e" });
+
   return (
-    <div className="w-full">
-      <div className="bg-white rounded-[20px] border-2 border-[#4f7bff]" style={{ boxShadow: "0px 8px 32px 0px rgba(79,123,255,0.1)" }}>
-        <div className="bg-[rgba(255,255,255,0.8)] rounded-[17px] border border-[rgba(223,230,237,0.5)] m-0.5" style={{ boxShadow: "0px 1px 2px 0px rgba(0,0,0,0.05)" }}>
-          <div className="px-5 pt-4 pb-2" style={{ minHeight: 80 }}>
-            <p style={{ ...f, fontWeight: 400, fontSize: 13.5, color: "#a7b3c7", lineHeight: 1.6 }}>
-              무엇을 만들까요? 대화로 자연스럽게 요청하거나 템플릿을 선택해 바로 생성해보세요!
+    <div ref={wrapRef} className="relative flex-1 min-w-0">
+      {/* 툴팁 — 스크롤 컨테이너 밖에 그려야 잘리지 않는다 */}
+      {tip && (
+        <>
+          <div
+            className="absolute z-20 rounded-[12px] px-4 py-2.5 pointer-events-none"
+            style={{
+              bottom: "calc(100% + 9px)",
+              left: tip.left,
+              transform: "translateX(-50%)",
+              width: tip.width,
+              background: "#333A47",
+              boxShadow: "0px 8px 24px rgba(16,24,40,0.24)",
+            }}
+          >
+            <p style={{ ...f, fontWeight: 700, fontSize: 12, color: "white", lineHeight: 1.6, letterSpacing: "-0.2px", textAlign: "center" }}>
+              {tip.text}
             </p>
           </div>
-          <div className="flex items-center gap-1.5 px-3.5 pb-3.5 pt-2">
-            <div className="flex items-center gap-1 flex-1 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
-              <button className="bg-white border border-[#e2e8f0] rounded-full size-[32px] flex items-center justify-center shrink-0"><IconAttach /></button>
-              <button className="bg-[#eff6ff] border border-[rgba(79,123,255,0.25)] rounded-full size-[32px] flex items-center justify-center shrink-0"><IconSparkle /></button>
-              <button className="bg-white border border-[#e2e8f0] rounded-full h-[32px] flex items-center gap-1 px-2.5 shrink-0">
-                <IconAutoPrompt />
-                <span style={{ ...f, fontWeight: 600, fontSize: 11, color: "#62748e" }}>자동 프롬프트</span>
-              </button>
-              <button className="bg-white border border-[#e2e8f0] rounded-full h-[32px] flex items-center gap-1 px-2.5 shrink-0">
-                <IconDocRef />
-                <span style={{ ...f, fontWeight: 600, fontSize: 11, color: "#62748e" }}>원문 적용</span>
-              </button>
-            </div>
-            <button className="bg-[#4f7bff] rounded-full size-[32px] flex items-center justify-center shrink-0"><IconSend /></button>
-          </div>
-        </div>
+          <div
+            className="absolute z-20 pointer-events-none"
+            style={{
+              bottom: "calc(100% + 3px)",
+              left: tip.arrowX,
+              transform: "translateX(-50%)",
+              width: 0,
+              height: 0,
+              borderLeft: "7px solid transparent",
+              borderRight: "7px solid transparent",
+              borderTop: "7px solid #333A47",
+            }}
+          />
+        </>
+      )}
+
+      {/* 가로 슬라이드 영역 */}
+      <div
+        ref={scRef}
+        onScroll={() => { updateEdges(); setTip(null); }}
+        className="composer-chips-scroll flex items-center gap-1.5 overflow-x-auto"
+        style={{ scrollbarWidth: "none", flexWrap: "nowrap", WebkitOverflowScrolling: "touch" }}
+      >
+        <button data-tutorial="attach" className="bg-white border border-[#e2e8f0] rounded-full size-[32px] flex items-center justify-center shrink-0" aria-label="파일 첨부"><IconAttach /></button>
+        <button data-tutorial="skill" className="bg-[#eff6ff] border border-[rgba(79,123,255,0.25)] rounded-full size-[32px] flex items-center justify-center shrink-0" aria-label="스킬"><IconSparkle /></button>
+
+        {/* 양식 업로드 — 홈 컴포저에만. 워크스페이스에서는 숨긴다(구분선도 함께). */}
+        {showUpload && (
+          <>
+            <span className="shrink-0 w-px h-5 bg-[#e2e8f0]" />
+            <button
+              data-tutorial="upload"
+              {...tipHandlers(CHIP_TOOLTIP.upload)}
+              className="rounded-full h-[32px] flex items-center gap-1 px-2.5 shrink-0"
+              style={chipStyle(false)}
+            >
+              <Upload size={13} strokeWidth={1.9} color="#62748e" />
+              <span style={{ ...chipText(false), whiteSpace: "nowrap" }}>양식 업로드</span>
+            </button>
+            <span className="shrink-0 w-px h-5 bg-[#e2e8f0]" />
+          </>
+        )}
+
+        {/* 자동 프롬프트 — 토글 + 툴팁 */}
+        <button
+          data-tutorial="auto-prompt"
+          {...tipHandlers(CHIP_TOOLTIP.auto)}
+          onClick={(e) => { setAutoOn((v) => !v); if (lastPointer.current !== "mouse") showTip(e.currentTarget, CHIP_TOOLTIP.auto, true); }}
+          aria-pressed={autoOn}
+          className="rounded-full h-[32px] flex items-center gap-1 px-2.5 shrink-0"
+          style={chipStyle(autoOn)}
+        >
+          {autoOn ? <Check size={13} strokeWidth={2.6} color="#4f7bff" /> : <IconAutoPrompt />}
+          <span style={{ ...chipText(autoOn), whiteSpace: "nowrap" }}>자동 프롬프트</span>
+        </button>
+
+        {/* 원문 사용 — 토글 + 툴팁 */}
+        <button
+          data-tutorial="doc-source"
+          {...tipHandlers(CHIP_TOOLTIP.doc)}
+          onClick={(e) => { setDocOn((v) => !v); if (lastPointer.current !== "mouse") showTip(e.currentTarget, CHIP_TOOLTIP.doc, true); }}
+          aria-pressed={docOn}
+          className="rounded-full h-[32px] flex items-center gap-1 px-2.5 shrink-0"
+          style={chipStyle(docOn)}
+        >
+          {docOn ? <Check size={13} strokeWidth={2.6} color="#4f7bff" /> : <IconDocRef />}
+          <span style={{ ...chipText(docOn), whiteSpace: "nowrap" }}>원문 사용</span>
+        </button>
+      </div>
+
+      {/* 가려진 칩이 있음을 알리는 페이드 */}
+      {edge.left && (
+        <div className="absolute inset-y-0 left-0 w-6 pointer-events-none"
+          style={{ background: "linear-gradient(to right, white, rgba(255,255,255,0))" }} />
+      )}
+      {edge.right && (
+        <div className="absolute inset-y-0 right-0 w-6 pointer-events-none"
+          style={{ background: "linear-gradient(to left, white, rgba(255,255,255,0))" }} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * 컴포저 본문 영역 높이 — 접힘 / 펼침.
+ *
+ * 카드 전체 높이는 여기에 칩 줄과 테두리가 더해진 값이다(접힘 144 / 펼침 680).
+ * 카드가 아니라 본문 영역의 높이를 바꾼다. 양쪽 다 확정값이라야 height 전이가 걸리고,
+ * 카드에 auto → 고정px 를 주면 애니메이션이 붙지 않는다.
+ */
+const COMPOSER_H = { collapsed: 80, expanded: 616 } as const;
+/** 확대/축소 전이 시간. 홈과 워크스페이스가 같은 값을 쓴다. */
+const COMPOSER_ANIM = "height 200ms ease";
+
+/**
+ * 컴포저 카드 껍데기 — 배경·테두리·그림자. 안쪽 여백은 화면마다 달라 각자 둔다.
+ *
+ * - focus(기본): 파란 테두리로 강조하는 원래 모습. 메인과 각 서비스 화면이 쓴다.
+ *   바깥 흰 카드 + 파란 2px 테두리, 안쪽에 80% 흰색 층을 한 겹 더 얹는 두 겹 구성이다.
+ * - plain: 워크스페이스 전용. 이미 작업 중인 화면이라 입력창을 파랗게 강조하지 않고
+ *   옅은 회색 테두리만 둔다. 파란 테두리가 없으면 흰 배경 위의 80% 흰색 층이
+ *   아무 차이도 만들지 않으므로 한 겹으로 둔다.
+ */
+function ComposerCard({ variant = "focus", children }: { variant?: "focus" | "plain"; children: ReactNode }) {
+  if (variant === "plain") {
+    return (
+      <div
+        className="bg-white rounded-[20px]"
+        style={{ border: "1px solid #e8ecf2", boxShadow: "0px 2px 20px rgba(0,0,0,0.09)" }}
+      >
+        {children}
+      </div>
+    );
+  }
+  return (
+    <div className="bg-white rounded-[20px] border-2 border-[#4f7bff]" style={{ boxShadow: "0px 8px 32px 0px rgba(79,123,255,0.1)" }}>
+      <div className="bg-[rgba(255,255,255,0.8)] rounded-[17px] border border-[rgba(223,230,237,0.5)] m-0.5" style={{ boxShadow: "0px 1px 2px 0px rgba(0,0,0,0.05)" }}>
+        {children}
       </div>
     </div>
   );
 }
 
-function TemplateCard({ title, isVideo = false, ratio = "66%", onApply }: { title: string; isVideo?: boolean; ratio?: string; onApply?: () => void }) {
-  const [isFav, setIsFav] = useState(false);
+/** 컴포저 우상단 확대/축소 토글. 두 컴포저가 같은 버튼을 쓴다. */
+function ComposerExpandToggle({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={expanded ? "입력창 축소" : "입력창 확대"}
+      aria-expanded={expanded}
+      className="absolute top-2.5 right-2.5 size-8 rounded-[10px] flex items-center justify-center shrink-0"
+      style={{ color: "#475569", opacity: 0.45 }}
+    >
+      {expanded ? <Minimize2 size={16} strokeWidth={1.8} /> : <Maximize2 size={16} strokeWidth={1.8} />}
+    </button>
+  );
+}
+
+/** 컴포저 본문 영역 최소 높이 — 빈 상태의 현재 높이를 그대로 유지한다. */
+const COMPOSER_MIN_BODY = 80;
+/** 확대 버튼을 눌렀을 때의 본문 높이. 카드 전체로는 680px 이 된다. */
+const COMPOSER_EXPANDED_BODY = 616;
+
+function ChatInputBox() {
+  const [value, setValue] = useState("");
+  // 우상단 확대/축소. 자동 높이와 별개로, 눌러서 한 번에 크게 펼쳐 쓰는 용도다.
+  const [expanded, setExpanded] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  // 내부 스크롤이 생겼고 아직 맨 아래가 아닐 때만 하단 페이드를 띄운다.
+  const [fade, setFade] = useState(false);
+  // 접힌 상태에서 상한을 넘겼는지. 여기 걸려야 확대 버튼이 의미가 있다.
+  const [overflowing, setOverflowing] = useState(false);
+
+  const syncFade = useCallback(() => {
+    const el = taRef.current;
+    if (!el) return;
+    const canScroll = el.scrollHeight > el.clientHeight + 1;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+    setFade(canScroll && !atBottom);
+  }, []);
+
+  /**
+   * 높이를 내용에 맞춘다. auto 로 한 번 접었다 scrollHeight 로 다시 펴야
+   * 글자를 지웠을 때도 정확히 줄어든다. max-height(CSS 변수)에 걸리면 내부 스크롤로 넘긴다.
+   * 전이(transition)는 주지 않는다 — 타이핑 중 높이가 출렁여 보인다.
+   */
+  const resize = useCallback(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+    const over = el.scrollHeight > el.clientHeight + 1;
+    el.style.overflowY = over ? "auto" : "hidden";
+    // 확대 가능 여부는 "접힌 상태에서 넘쳤는가"로만 판단한다.
+    // 펼친 상태의 상한(592)으로 재면 거의 항상 false 가 되어 버튼이 사라진다.
+    if (!expanded) setOverflowing(over);
+    syncFade();
+  }, [syncFade, expanded]);
+
+  // 초기 렌더와 값이 바뀔 때(외부 주입 포함) 모두 다시 계산한다.
+  // 확대/축소로 상한이 바뀔 때도 같이 다시 잰다.
+  useLayoutEffect(() => { resize(); }, [value, expanded, resize]);
+
+  // 폭이 바뀌면 줄바꿈 위치가 달라지고, 브레이크포인트가 넘어가면 max-height 도 바뀐다.
+  useEffect(() => {
+    const on = () => resize();
+    window.addEventListener("resize", on);
+    window.addEventListener("orientationchange", on);
+    return () => {
+      window.removeEventListener("resize", on);
+      window.removeEventListener("orientationchange", on);
+    };
+  }, [resize]);
+
+  /** 모바일·태블릿에서 키보드가 올라오면 입력창이 가리지 않도록 화면 안으로 끌어온다. */
+  const keepVisible = useCallback(() => {
+    taRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const on = () => {
+      if (document.activeElement === taRef.current) keepVisible();
+    };
+    vv.addEventListener("resize", on);
+    return () => vv.removeEventListener("resize", on);
+  }, [keepVisible]);
+
+  return (
+    <div className="w-full" data-tutorial="composer">
+      <ComposerCard>
+          {/* 본문 — 빈 상태 높이는 지금과 같고, 3줄째부터 내용만큼 커진다.
+              확대 상태에서는 바닥 높이만 크게 잡고, 그 안에서 자동 높이가 그대로 동작한다.
+              전이는 min-height 에만 건다. 타이핑으로 바뀌는 건 textarea 높이라 흔들리지 않는다. */}
+          <div
+            className="relative px-5 pt-4 pb-2"
+            style={{
+              minHeight: expanded ? COMPOSER_EXPANDED_BODY : COMPOSER_MIN_BODY,
+              transition: "min-height 200ms ease",
+            }}
+          >
+            <textarea
+              ref={taRef}
+              rows={1}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onScroll={syncFade}
+              onFocus={keepVisible}
+              placeholder={COMPOSER_PLACEHOLDER}
+              className="composer-textarea w-full block resize-none bg-transparent outline-none border-0 p-0"
+              style={{
+                ...f,
+                fontWeight: 400,
+                fontSize: "var(--composer-ph-size)",
+                color: "#0a0a0a",
+                lineHeight: 1.6,
+                minHeight: 24,
+                // 확대 상태에서는 상한을 본문 높이까지 올려, 펼친 만큼 그대로 쓸 수 있게 한다.
+                maxHeight: expanded ? COMPOSER_EXPANDED_BODY - 24 : "var(--composer-max-h)",
+                paddingRight: 34,
+                overflowY: "hidden",
+              }}
+            />
+            {/* 빈 상태나 짧은 입력에서는 펼쳐도 보여줄 게 없다. 자동 높이가 이미 전부 보여주는 구간에서는
+                버튼 자체를 내보내지 않는다. 펼친 뒤에는 되돌릴 수 있어야 하므로 계속 남긴다. */}
+            {(expanded || overflowing) && (
+              <ComposerExpandToggle expanded={expanded} onToggle={() => setExpanded((v) => !v)} />
+            )}
+            {/* 최대 높이에 걸려 아래에 더 있을 때만 뜨는 페이드 */}
+            <div
+              aria-hidden
+              style={{
+                position: "absolute",
+                left: 20,
+                right: 20,
+                bottom: 8,
+                height: 16,
+                pointerEvents: "none",
+                opacity: fade ? 1 : 0,
+                background: "linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.95))",
+              }}
+            />
+          </div>
+          <div className="flex items-center gap-1.5 px-3.5 pb-3.5 pt-2">
+            <ComposerChips />
+            <button className="bg-[#4f7bff] rounded-full size-[32px] flex items-center justify-center shrink-0"><IconSend /></button>
+          </div>
+      </ComposerCard>
+      <style>{`
+        .composer-textarea::placeholder { color: #a7b3c7; }
+        /* 스크롤바는 숨기고 스크롤은 살린다 */
+        .composer-textarea { scrollbar-width: none; }
+        .composer-textarea::-webkit-scrollbar { display: none; }
+      `}</style>
+    </div>
+  );
+}
+
+function TemplateCard({ title, isVideo = false, ratio = "66%", onApply, favorited = false }: { title: string; isVideo?: boolean; ratio?: string; onApply?: () => void; favorited?: boolean }) {
+  // 즐겨찾기 화면의 카드는 처음부터 즐겨찾기 상태(노란 별)로 표시된다.
+  const [isFav, setIsFav] = useState(favorited);
   const [hovered, setHovered] = useState(false);
+  // 마지막으로 카드를 건드린 포인터 종류. 모듈 로드 시점의 hover 판정(HAS_HOVER)에 의존하면
+  // 기기 에뮬레이션을 켜고 끄거나 마우스·터치를 섞어 쓸 때 값이 어긋나므로 이벤트마다 판단한다.
+  const lastPointer = useRef<string>("mouse");
 
   return (
     <div
       className="group flex flex-col rounded-[14px] overflow-hidden bg-white border border-[#e2e8f0] cursor-pointer"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      // 데스크톱은 hover로 오버레이를 노출한다. 터치 기기는 hover가 없으므로 카드를 탭하면 오버레이(적용 버튼·별)를 노출한다.
-      onClick={() => { if (!HAS_HOVER) setHovered((v) => !v); }}
+      // 마우스: 올리면 바로 노출, 벗어나면 숨김
+      onPointerEnter={(e) => { if (e.pointerType === "mouse") setHovered(true); }}
+      onPointerLeave={(e) => { if (e.pointerType === "mouse") setHovered(false); }}
+      onPointerDown={(e) => { lastPointer.current = e.pointerType || "mouse"; }}
+      // 터치·펜: hover가 없으므로 탭하면 오버레이(적용 버튼·별)를 토글한다
+      onClick={() => { if (lastPointer.current !== "mouse") setHovered((v) => !v); }}
       style={{
         boxShadow: hovered
           ? "0px 8px 24px rgba(0,0,0,0.13)"
@@ -942,13 +1655,14 @@ function FormsAIScreen({ activeTab, onTabChange, sortOption, onSortChange, scrol
     <>
     <main ref={mainRef} onScroll={(e) => { scrollTopRef.current = e.currentTarget.scrollTop; }}
       className="flex-1 flex flex-col overflow-y-auto" style={{ scrollbarWidth: "none" }}>
-      <div style={{ paddingTop: "var(--gap-hero-top)", paddingLeft: "var(--gap-screen-x)", paddingRight: "var(--gap-screen-x)" }}>
-        <p className="text-center leading-[1.3]" style={{ ...f, fontWeight: 700, fontSize: 22, letterSpacing: "-1.1px", wordBreak: "keep-all", marginBottom: "var(--gap-title-sub)" }}>
+      {/* 히어로(헤드라인·부제·입력창) — 태블릿에서만 --svc-hero-max(720px) 축을 따른다 */}
+      <div className="w-full mx-auto" style={{ maxWidth: "var(--svc-hero-max)", paddingTop: "var(--gap-hero-top)", paddingLeft: "var(--gap-screen-x)", paddingRight: "var(--gap-screen-x)" }}>
+        <p className="text-center leading-[1.3]" style={{ ...f, fontWeight: 700, fontSize: "var(--svc-title-size)", letterSpacing: "var(--svc-title-tracking)", wordBreak: "keep-all", marginBottom: "var(--gap-title-sub)" }}>
           <span style={{ color: "#4f7bff" }}>서식</span>
           <span style={{ color: "#0a0a0a" }}>, 한 줄이면 충분해요</span>
         </p>
-        <p className="text-center" style={{ ...f, fontWeight: 500, fontSize: 12.5, color: "#737373", letterSpacing: "-0.3px", lineHeight: 1.6, wordBreak: "keep-all", marginBottom: "var(--gap-sub-composer)" }}>
-          원하는 서식을 고르거나 직접 설명해 바로 만들어 보세요.
+        <p className="text-center" style={{ ...f, fontWeight: 500, fontSize: "var(--svc-sub-size)", color: SUBTITLE_COLOR, letterSpacing: "-0.3px", lineHeight: 1.6, wordBreak: "keep-all", marginBottom: "var(--gap-sub-composer)" }}>
+          {SERVICE_COPY.forms}
         </p>
         <ChatInputBox />
       </div>
@@ -984,8 +1698,8 @@ function FormsAIScreen({ activeTab, onTabChange, sortOption, onSortChange, scrol
         <span style={{ ...f, fontWeight: 500, fontSize: 12.5, color: "#90a1b9" }}>134개의 서식</span>
       </div>
 
-      {/* 서식 카드 목록 */}
-      <div className="flex flex-col" style={{ gap: 14, padding: `0 var(--gap-screen-x) var(--gap-grid-bottom)` }}>
+      {/* 서식 카드 목록 — 모바일 1열, 768px 이상 2열 */}
+      <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: 14, padding: `0 var(--gap-screen-x) var(--gap-grid-bottom)` }}>
         {formsCards.map((card) => (
           <FormsCard key={card.id} {...card} onClick={() => onOpenForm(card.id, card.title)} />
         ))}
@@ -1002,34 +1716,51 @@ function FormsAIScreen({ activeTab, onTabChange, sortOption, onSortChange, scrol
 // ─── 화면 컴포넌트 ────────────────────────────────────────────────────────────
 
 function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
+  // 태블릿에서는 푸터가 화면 하단 고정이 아니라 콘텐츠 흐름 끝에 와야 하므로
+  // 셸(App)이 아니라 스크롤 컨테이너인 이 main 안에서 렌더한다.
+  const isTabletRange = useIsTabletRange();
   return (
-    <main className="flex-1 flex flex-col px-4 pb-6 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
-      <div className="flex-[2_0_0] min-h-[24px] max-h-[72px]" />
-      {/* Heading */}
-      <div className="mb-10 text-center">
-        <p className="leading-[1.25] whitespace-nowrap" style={{ ...f, fontWeight: 700, fontSize: 26, letterSpacing: "-1.5px" }}>
-          <span style={{ color: "#4f7bff" }}>딸깍</span>
-          <span style={{ color: "#0a0a0a" }}> 한 번이면, 작업은 더 빠르게</span>
-        </p>
-        <p className="mt-2" style={{ ...f, fontWeight: 500, fontSize: 13, color: "#737373", letterSpacing: "-0.3px", lineHeight: 1.6 }}>
-          이미지, 문서, 발표자료, 검수까지 필요한 AI 작업을 한 곳에서.
-        </p>
+    <main
+      className="flex-1 flex flex-col pb-6 overflow-y-auto"
+      style={{ scrollbarWidth: "none", paddingLeft: "var(--gap-screen-x)", paddingRight: "var(--gap-screen-x)" }}
+    >
+      {/* 비율 스페이서 — 모바일·데스크톱 배치용. 태블릿에서는 CSS 로 숨기고 중앙 정렬로 대체한다. */}
+      <div className="home-spacer flex-[2_0_0] min-h-[24px] max-h-[72px]" />
+      {/* .home-stack — 모바일·데스크톱에서는 display:contents 라 아래 두 블록이 main 의 flex 흐름에
+          그대로 참여한다(기존 배치 유지). 태블릿에서만 720px 축의 세로 중앙 정렬 컨테이너가 된다. */}
+      <div className="home-stack">
+        {/* Heading */}
+        <div className="home-heading text-center">
+          <p className="leading-[1.25] whitespace-nowrap" style={{ ...f, fontWeight: 700, fontSize: "var(--hero-title-size)", letterSpacing: "var(--hero-title-tracking)" }}>
+            <span style={{ color: "#4f7bff" }}>딸깍</span>
+            <span style={{ color: "#0a0a0a" }}> 한 번이면, 작업은 더 빠르게</span>
+          </p>
+          <p className="home-sub" style={{ ...f, fontWeight: 500, fontSize: "var(--hero-sub-size)", color: SUBTITLE_COLOR, letterSpacing: "-0.3px", lineHeight: 1.6, wordBreak: "keep-all" }}>
+            이미지, 문서, 발표자료, 검수까지 필요한 AI 작업을 한 곳에서.
+          </p>
+        </div>
+        {/* 프롬프트 입력창 + 카테고리 공통 컨테이너.
+            두 영역 모두 width:100%로 이 컨테이너를 채우므로 좌우 정렬선이 항상 일치한다.
+            flex 값은 .home-body 로 옮겼다(태블릿에서 늘어나지 않게 덮어쓰기 위함). */}
+        <div className="home-body w-full mx-auto flex flex-col" style={{ maxWidth: "var(--home-container)" }}>
+          <ChatInputBox />
+          <div className="home-spacer flex-[1_0_0] min-h-[20px] max-h-[40px]" />
+          {/* Categories — <1200px: 4열(태블릿 전 구간 4열 x 2행), ≥1200px: 8열 */}
+          <div data-tutorial="categories" className="home-grid grid grid-cols-4 wide:grid-cols-8 gap-x-3 gap-y-5">
+            {homeCategories.map((cat) => (
+              <button key={cat.label} onClick={() => onNavigate(cat.screen)} className="flex flex-col items-center gap-2.5">
+                <div className="bg-[#f1f5f9] rounded-full flex items-center justify-center shrink-0"
+                  style={{ width: "var(--cat-circle)", height: "var(--cat-circle)", filter: "drop-shadow(0px 4px 6px rgba(0,0,0,0.04))" }}>
+                  {cat.icon}
+                </div>
+                <span className="text-center w-full" style={{ ...f, fontWeight: 600, fontSize: "var(--cat-label-size)", color: "#334155", letterSpacing: "-0.25px", lineHeight: 1.3 }}>{cat.label}</span>
+              </button>
+            ))}
+          </div>
+          <div className="home-spacer flex-[1_0_0] min-h-[16px] max-h-[32px]" />
+        </div>
       </div>
-      <ChatInputBox />
-      <div className="flex-[1_0_0] min-h-[20px] max-h-[40px]" />
-      {/* Categories */}
-      <div className="grid grid-cols-4 gap-x-3 gap-y-5">
-        {homeCategories.map((cat) => (
-          <button key={cat.label} onClick={() => onNavigate(cat.screen)} className="flex flex-col items-center gap-2.5">
-            <div className="bg-[#f1f5f9] rounded-full size-[56px] flex items-center justify-center"
-              style={{ filter: "drop-shadow(0px 4px 6px rgba(0,0,0,0.04))" }}>
-              {cat.icon}
-            </div>
-            <span className="text-center w-full" style={{ ...f, fontWeight: 600, fontSize: 11.5, color: "#334155", letterSpacing: "-0.25px", lineHeight: 1.3 }}>{cat.label}</span>
-          </button>
-        ))}
-      </div>
-      <div className="flex-[1_0_0] min-h-[16px] max-h-[32px]" />
+      {isTabletRange && <Footer />}
     </main>
   );
 }
@@ -1103,8 +1834,10 @@ function SortBottomSheet({ selected, onSelect, onClose }: {
   );
 }
 
-function AIAgentScreen({ title, category, filterTabs, cards, cardRatio = "66%", wsCategory, onWorkspace }: {
+function AIAgentScreen({ title, category, desc, filterTabs, cards, cardRatio = "66%", wsCategory, onWorkspace }: {
   title: string; category: string;
+  /** 헤드라인 아래 부제. 문구는 SERVICE_COPY 에서 가져온다. */
+  desc: string;
   filterTabs: string[];
   cards: { title: string }[];
   cardRatio?: string;
@@ -1138,13 +1871,14 @@ function AIAgentScreen({ title, category, filterTabs, cards, cardRatio = "66%", 
     <>
     <main className="flex-1 flex flex-col overflow-y-auto" style={{ scrollbarWidth: "none" }}>
       {/* Hero */}
-      <div style={{ paddingTop: "var(--gap-hero-top)", paddingLeft: "var(--gap-screen-x)", paddingRight: "var(--gap-screen-x)" }}>
-        <p className="text-center leading-[1.3]" style={{ ...f, fontWeight: 700, fontSize: 22, letterSpacing: "-1.1px", wordBreak: "keep-all", marginBottom: "var(--gap-title-sub)" }}>
+      {/* 히어로(헤드라인·부제·입력창) — 태블릿에서만 --svc-hero-max(720px) 축을 따른다 */}
+      <div className="w-full mx-auto" style={{ maxWidth: "var(--svc-hero-max)", paddingTop: "var(--gap-hero-top)", paddingLeft: "var(--gap-screen-x)", paddingRight: "var(--gap-screen-x)" }}>
+        <p className="text-center leading-[1.3]" style={{ ...f, fontWeight: 700, fontSize: "var(--svc-title-size)", letterSpacing: "var(--svc-title-tracking)", wordBreak: "keep-all", marginBottom: "var(--gap-title-sub)" }}>
           <span style={{ color: "#4f7bff" }}>{category}</span>
           <span style={{ color: "#0a0a0a" }}>{title}</span>
         </p>
-        <p className="text-center" style={{ ...f, fontWeight: 500, fontSize: 12.5, color: "#737373", letterSpacing: "-0.3px", lineHeight: 1.6, wordBreak: "keep-all", marginBottom: "var(--gap-sub-composer)" }}>
-          원하는 템플릿을 고르거나 직접 설명해 바로 만들어 보세요.
+        <p className="text-center" style={{ ...f, fontWeight: 500, fontSize: "var(--svc-sub-size)", color: SUBTITLE_COLOR, letterSpacing: "-0.3px", lineHeight: 1.6, wordBreak: "keep-all", marginBottom: "var(--gap-sub-composer)" }}>
+          {desc}
         </p>
         <ChatInputBox />
       </div>
@@ -1251,7 +1985,10 @@ function AIAgentScreen({ title, category, filterTabs, cards, cardRatio = "66%", 
       {/* Card grid */}
       {visibleCards.length > 0 ? (
         <div
-          className="grid grid-cols-2"
+          data-tutorial="template-grid"
+          /* 1024px 이상 3열, 1200px 이상 4열 — 768~1023px 은 2열(태블릿에서 카드가 너무 작아지지 않게).
+             카드 비율(cardRatio)은 폭에 맞춰 그대로 유지된다 */
+          className="grid grid-cols-2 lg:max-wide:grid-cols-3 wide:grid-cols-4"
           style={{
             gap: "var(--gap-card-y) var(--gap-card-x)",
             padding: `var(--gap-chips-grid) var(--gap-screen-x) var(--gap-grid-bottom)`,
@@ -1303,9 +2040,10 @@ function FavoritesScreen() {
       </div>
       <SearchFilterBar />
       {/* Card grid */}
-      <div className="grid grid-cols-2 gap-3 px-4 pb-6">
+      {/* 카테고리 화면과 동일한 반응형 — 768px 이상 3열, 1200px 이상 4열 */}
+      <div className="grid grid-cols-2 md:max-wide:grid-cols-3 wide:grid-cols-4 gap-3 px-4 pb-6">
         {favoritesCards.map((card, i) => (
-          <TemplateCard key={i} title={card.title} />
+          <TemplateCard key={i} title={card.title} favorited />
         ))}
       </div>
     </main>
@@ -1429,6 +2167,91 @@ function CreditBottomSheet({ onClose, onHistoryClick }: { onClose: () => void; o
   );
 }
 
+// ─── 크레딧 충전 — 768px 이상: 중앙 모달 ──────────────────────────────────────
+function CreditModal({ onClose, onHistoryClick }: { onClose: () => void; onHistoryClick: () => void }) {
+  const [selected, setSelected] = useState(0);
+  const pkg = CREDIT_PACKAGES[selected];
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+      style={{ background: "rgba(15,23,42,0.35)", backdropFilter: "blur(6px)", animation: "fadeIn 180ms ease" }}
+    >
+      <div
+        role="dialog"
+        aria-label="크레딧 충전"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full flex flex-col"
+        style={{
+          maxWidth: 440, background: "white", borderRadius: 20,
+          boxShadow: "0px 24px 64px rgba(16,24,40,0.24)",
+          animation: "creditModalIn 200ms cubic-bezier(0.32,0.72,0,1)",
+          maxHeight: "calc(100dvh - 48px)", overflowY: "auto", scrollbarWidth: "none",
+        }}
+      >
+        {/* 헤더 */}
+        <div className="flex items-start justify-between px-6 pt-6 pb-4">
+          <span style={{ ...f, fontWeight: 700, fontSize: 20, color: "#0a0a0a", letterSpacing: "-0.5px" }}>크레딧 충전</span>
+          <button onClick={onClose} aria-label="닫기" className="size-9 flex items-center justify-center rounded-full bg-[#f1f5f9] shrink-0">
+            <IconClose />
+          </button>
+        </div>
+        {/* 현재 잔액 */}
+        <div className="px-6 pb-5">
+          <p style={{ ...f, fontWeight: 500, fontSize: 12.5, color: "#90a1b9", marginBottom: 4 }}>현재 잔액</p>
+          <p style={{ ...f, fontWeight: 700, fontSize: 26, color: "#0a0a0a", letterSpacing: "-1px" }}>
+            {CREDIT_BALANCE.toLocaleString()} <span style={{ fontWeight: 500, fontSize: 15, color: "#737373" }}>크레딧</span>
+          </p>
+        </div>
+        {/* 충전 패키지 */}
+        <div className="px-6">
+          <p style={{ ...f, fontWeight: 600, fontSize: 12.5, color: "#90a1b9", marginBottom: 10 }}>충전 패키지</p>
+          <div className="flex flex-col gap-2.5">
+            {CREDIT_PACKAGES.map((p, i) => (
+              <button key={i} onClick={() => setSelected(i)} aria-pressed={i === selected}
+                className="w-full flex items-center justify-between rounded-[14px] px-4 py-3.5"
+                style={{ border: i === selected ? "1.5px solid #4f7bff" : "1.5px solid #e2e8f0", background: i === selected ? "#f0f5ff" : "white" }}>
+                <div className="flex items-center gap-2.5">
+                  <div className="size-6 rounded-full bg-[#eff6ff] flex items-center justify-center shrink-0">
+                    <span style={{ ...f, fontWeight: 700, fontSize: 9, color: "#4f7bff" }}>C</span>
+                  </div>
+                  <span style={{ ...f, fontWeight: 700, fontSize: 15, color: "#0a0a0a", letterSpacing: "-0.4px" }}>
+                    {p.amount.toLocaleString()} <span style={{ fontWeight: 500, fontSize: 13, color: "#737373" }}>크레딧</span>
+                  </span>
+                  {p.best && (
+                    <span className="rounded-full px-2 py-0.5" style={{ background: "#eff6ff", ...f, fontWeight: 700, fontSize: 10, color: "#4f7bff" }}>BEST</span>
+                  )}
+                </div>
+                <span style={{ ...f, fontWeight: 600, fontSize: 14, color: "#334155" }}>{p.price}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* CTA */}
+        <div className="px-6 pt-5">
+          <button className="w-full rounded-[14px] flex items-center justify-center" style={{ height: 52, background: "#4f7bff" }}>
+            <span style={{ ...f, fontWeight: 700, fontSize: 16, color: "white", letterSpacing: "-0.4px" }}>{pkg.price} 충전하기</span>
+          </button>
+        </div>
+        <div className="flex justify-center pt-4 pb-6">
+          <button onClick={() => { onClose(); onHistoryClick(); }} style={{ ...f, fontWeight: 500, fontSize: 13, color: "#737373" }}>사용 내역 보기 →</button>
+        </div>
+      </div>
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes creditModalIn { from { transform: scale(0.97); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+      `}</style>
+    </div>
+  );
+}
+
 // ─── 알림 화면 ────────────────────────────────────────────────────────────────
 
 const notificationItems = [
@@ -1514,7 +2337,12 @@ function NotificationsPanel({ onClose, onViewAll }: { onClose: () => void; onVie
                       {!item.read && <div className="size-2 rounded-full bg-[#4f7bff]" />}
                     </div>
                   </div>
-                  <p className="line-clamp-2" style={{ ...f, fontWeight: 400, fontSize: 12, color: "#737373", lineHeight: 1.6, letterSpacing: "-0.2px" }}>{item.body}</p>
+                  <ClampedText
+                    text={item.body}
+                    lines={2}
+                    style={{ ...f, fontWeight: 400, fontSize: 12, color: "#737373", lineHeight: 1.6, letterSpacing: "-0.2px" }}
+                    toggleStyle={{ ...f, fontWeight: 600, fontSize: 11.5, color: "#4f7bff", letterSpacing: "-0.2px", marginTop: 4 }}
+                  />
                 </div>
               </div>
             ))}
@@ -1529,6 +2357,120 @@ function NotificationsPanel({ onClose, onViewAll }: { onClose: () => void; onVie
         @keyframes slideDown { from { transform: translateY(-12px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
       `}</style>
     </>
+  );
+}
+
+// ─── 알림 — 768px 이상: 벨 버튼에 붙는 드롭다운 팝오버 ────────────────────────
+function NotificationsPopover({ anchorRef, onClose, onViewAll }: {
+  anchorRef?: React.RefObject<HTMLButtonElement | null>;
+  onClose: () => void;
+  onViewAll: () => void;
+}) {
+  const [items, setItems] = useState(notificationItems);
+  const [pos, setPos] = useState({ top: 64, right: 16, maxHeight: 560 });
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  const markAllRead = () => setItems(items.map((it) => ({ ...it, read: true })));
+
+  // 벨 버튼 기준 배치 — 오른쪽 끝을 벨에 맞추고, 화면 밖으로 나가면 보정한다
+  const place = useCallback(() => {
+    const W = 400, M = 12;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const r = anchorRef?.current?.getBoundingClientRect();
+    const top = r ? r.bottom + 8 : 64;
+    let right = r ? Math.max(M, vw - r.right) : M;
+    if (vw - right - W < M) right = Math.max(M, vw - W - M); // 왼쪽으로 넘칠 때 보정
+    setPos({ top, right, maxHeight: Math.max(200, Math.min(560, vh - top - M)) });
+  }, [anchorRef]);
+
+  useLayoutEffect(place, [place]);
+  useEffect(() => {
+    window.addEventListener("resize", place);
+    window.addEventListener("orientationchange", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("orientationchange", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [place]);
+
+  // 바깥 클릭 / ESC로 닫힘 (오버레이 없음)
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (boxRef.current?.contains(t)) return;
+      if (anchorRef?.current?.contains(t)) return; // 벨은 토글이므로 제외
+      onClose();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose, anchorRef]);
+
+  return (
+    <div
+      ref={boxRef}
+      role="dialog"
+      aria-label="알림"
+      className="fixed z-[60] rounded-2xl flex flex-col overflow-hidden"
+      style={{
+        top: pos.top, right: pos.right, width: 400, maxHeight: pos.maxHeight,
+        background: "white", boxShadow: "0px 12px 32px rgba(16,24,40,0.16)",
+        animation: "notifPopIn 160ms cubic-bezier(0.32,0.72,0,1)",
+      }}
+    >
+      {/* 헤더 — 고정 */}
+      <div className="shrink-0 flex items-center justify-between px-5 pt-4 pb-3">
+        <span style={{ ...f, fontWeight: 700, fontSize: 17, color: "#0a0a0a", letterSpacing: "-0.4px" }}>알림</span>
+        <button onClick={markAllRead} style={{ ...f, fontWeight: 600, fontSize: 12.5, color: "#4f7bff" }}>모두 읽음으로 표시</button>
+      </div>
+
+      {/* 리스트 — 이 영역만 스크롤 */}
+      <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: "thin", borderTop: "1px solid #f1f5f9" }}>
+        {items.map((item, i) => (
+          <div
+            key={i}
+            onClick={() => setItems(items.map((it, j) => (j === i ? { ...it, read: true } : it)))}
+            className="flex gap-3 px-5 py-4 cursor-pointer"
+            style={{ borderBottom: i < items.length - 1 ? "1px solid #f1f5f9" : "none", background: item.read ? "white" : "#f8fbff" }}
+          >
+            <div className="shrink-0 size-10 rounded-full flex items-center justify-center" style={{ background: item.read ? "#f1f5f9" : "#eff6ff" }}>
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                <path d={svgPaths.p1c3efea0} stroke={item.read ? "#90a1b9" : "#4f7bff"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                <path d={svgPaths.p25877f40} stroke={item.read ? "#90a1b9" : "#4f7bff"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <p className="flex-1 truncate" style={{ ...f, fontWeight: 700, fontSize: 14, color: "#0a0a0a", letterSpacing: "-0.3px" }}>{item.title}</p>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span style={{ ...f, fontWeight: 400, fontSize: 12, color: "#b0bec5", whiteSpace: "nowrap" }}>{item.time}</span>
+                  {!item.read && <span className="size-2 rounded-full bg-[#4f7bff]" />}
+                </div>
+              </div>
+              <ClampedText
+                text={item.body}
+                lines={2}
+                style={{ ...f, fontWeight: 400, fontSize: 12.5, color: "#737373", lineHeight: 1.6, letterSpacing: "-0.2px", marginTop: 3 }}
+                toggleStyle={{ ...f, fontWeight: 600, fontSize: 12, color: "#4f7bff", letterSpacing: "-0.2px", marginTop: 5 }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 푸터 — 고정 */}
+      <div className="shrink-0 flex justify-center py-3.5" style={{ borderTop: "1px solid #f1f5f9" }}>
+        <button onClick={() => { onClose(); onViewAll(); }} style={{ ...f, fontWeight: 600, fontSize: 13.5, color: "#334155" }}>과거 알림 전체 보기</button>
+      </div>
+
+      <style>{`@keyframes notifPopIn { from { transform: translateY(-6px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }`}</style>
+    </div>
   );
 }
 
@@ -1581,6 +2523,10 @@ function NotificationsAllScreen() {
 
   return (
     <main className="flex-1 flex flex-col overflow-y-auto" style={{ scrollbarWidth: "none" }}>
+      {/* 본문 읽기 폭 제한 — 태블릿 이상에서 전폭을 쓰면 한 줄이 650px 을 넘어가 읽기 힘들고,
+          본문이 2줄 안에 다 들어가버려 2줄 말줄임·더보기가 아무 일도 하지 않게 된다.
+          640 은 본문 컬럼이 약 528px 이 되는 값 — 한 줄 55자 안팎의 읽기 좋은 길이다. */}
+      <div className="flex-1 flex flex-col w-full mx-auto" style={{ maxWidth: 640 }}>
       {/* 헤더 */}
       <div className="flex items-center justify-between px-4 pt-5 pb-4">
         <span style={{ ...f, fontWeight: 700, fontSize: 20, color: "#0a0a0a", letterSpacing: "-0.5px" }}>알림</span>
@@ -1638,14 +2584,18 @@ function NotificationsAllScreen() {
                     {!item.read && <div className="size-2 rounded-full bg-[#4f7bff] shrink-0" />}
                   </div>
                 </div>
-                <p style={{ ...f, fontWeight: 400, fontSize: 12.5, color: "#737373", lineHeight: 1.65, letterSpacing: "-0.2px" }}>
-                  {item.body}
-                </p>
+                <ClampedText
+                  text={item.body}
+                  lines={2}
+                  style={{ ...f, fontWeight: 400, fontSize: 12.5, color: "#737373", lineHeight: 1.65, letterSpacing: "-0.2px" }}
+                  toggleStyle={{ ...f, fontWeight: 600, fontSize: 12, color: "#4f7bff", letterSpacing: "-0.2px", marginTop: 5 }}
+                />
               </div>
             </div>
           ))}
         </div>
       )}
+      </div>
     </main>
   );
 }
@@ -1784,9 +2734,10 @@ function WorkspaceDrawer({ open, onClose, onGoHome }: { open: boolean; onClose: 
         </div>
         <div className="flex flex-col gap-1 px-2 shrink-0">
           {[
-            { icon: <IconHome />, label: "홈", onClick: () => { onGoHome(); onClose(); } },
-            { icon: <IconWork />, label: "내 작업", onClick: onClose },
-            { icon: <IconStar />, label: "즐겨찾기", onClick: onClose },
+            // currentColor 아이콘이라 여기서는 기존 색(#1E293B)을 명시해 그대로 유지한다.
+            { icon: <span style={{ color: "#1E293B", display: "inline-flex" }}><IconHome /></span>, label: "홈", onClick: () => { onGoHome(); onClose(); } },
+            { icon: <span style={{ color: "#1E293B", display: "inline-flex" }}><IconWork /></span>, label: "내 작업", onClick: onClose },
+            { icon: <span style={{ color: "#1E293B", display: "inline-flex" }}><IconStar /></span>, label: "즐겨찾기", onClick: onClose },
           ].map(({ icon, label, onClick }) => (
             <button key={label} onClick={onClick} className="h-11 rounded-[14px] flex items-center gap-3 px-3 w-full">
               {icon}
@@ -1822,48 +2773,38 @@ function WorkspaceDrawer({ open, onClose, onGoHome }: { open: boolean; onClose: 
 }
 
 function WsChatInput({ onGenerate }: { onGenerate: () => void }) {
+  const [expanded, setExpanded] = useState(false);
   return (
-    <div className="px-4 pb-5 pt-2" style={{ background: "#f8fafc" }}>
-      <div className="bg-white rounded-[22px]" style={{ boxShadow: "0px 2px 20px rgba(0,0,0,0.09)", border: "1px solid #e8ecf2" }}>
+    // 입력창은 콘텐츠 위에 고정으로 떠 있다. 이 띠를 불투명하게 두면 뒤 내용이
+    // 가로로 뚝 잘려 보이므로, 반투명 + 배경 블러로 뒤가 살짝 비치게 한다.
+    <div
+      className="pb-5 pt-2"
+      style={{
+        background: "rgba(248, 250, 252, 0.72)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+      }}
+    >
+      {/* 채팅 영역과 같은 정렬 축 — 카드와 입력창의 좌우 끝선이 일치한다 */}
+      <div className="mx-auto w-full max-w-[900px] px-4 md:px-6">
+      <ComposerCard variant="plain">
 
         {/* 텍스트 입력 영역 */}
-        <div className="relative px-4 pt-4 pb-3" style={{ minHeight: 80 }}>
-          <p style={{ ...f, fontWeight: 400, fontSize: 14, color: "#adb8c9", lineHeight: 1.65, paddingRight: 32 }}>
-            무엇을 만들까요? 대화로 자연스럽게 요청하거나 템플릿을 선택해 바로 생성해보세요!
+        <div
+          className="relative px-4 pt-4 pb-3 overflow-y-auto"
+          style={{ height: expanded ? COMPOSER_H.expanded : COMPOSER_H.collapsed, transition: COMPOSER_ANIM }}
+        >
+          <p style={{ ...f, fontWeight: 400, fontSize: 14, color: "#adb8c9", lineHeight: 1.65, paddingRight: 34 }}>
+            {COMPOSER_PLACEHOLDER}
           </p>
-          {/* 확장(↗↙) 아이콘 — 우상단 */}
-          <button className="absolute top-3.5 right-3.5 size-6 flex items-center justify-center" style={{ opacity: 0.38 }}>
-            <svg width="16" height="16" fill="none" viewBox="0 0 16 16">
-              <path d="M10 2H14V6M2 14L6 10M6 14H2V10M14 2L10 6" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
+          <ComposerExpandToggle expanded={expanded} onToggle={() => setExpanded((v) => !v)} />
         </div>
 
         {/* 하단 툴바 — 홈 ChatInputBox와 동일한 버튼(가로 스크롤 + 고정 전송 버튼 레이아웃 유지) */}
         <div className="flex items-center px-3 pb-3 gap-2">
 
-          {/* 가로 스크롤 영역 */}
-          <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
-
-            {/* 클립 첨부 */}
-            <button className="bg-white border border-[#e2e8f0] rounded-full size-[32px] flex items-center justify-center shrink-0"><IconAttach /></button>
-
-            {/* 스파클 — 연파랑 배경 */}
-            <button className="bg-[#eff6ff] border border-[rgba(79,123,255,0.25)] rounded-full size-[32px] flex items-center justify-center shrink-0"><IconSparkle /></button>
-
-            {/* 자동 프롬프트 pill */}
-            <button className="bg-white border border-[#e2e8f0] rounded-full h-[32px] flex items-center gap-1 px-2.5 shrink-0">
-              <IconAutoPrompt />
-              <span style={{ ...f, fontWeight: 600, fontSize: 11, color: "#62748e" }}>자동 프롬프트</span>
-            </button>
-
-            {/* 원문 적용 pill */}
-            <button className="bg-white border border-[#e2e8f0] rounded-full h-[32px] flex items-center gap-1 px-2.5 shrink-0">
-              <IconDocRef />
-              <span style={{ ...f, fontWeight: 600, fontSize: 11, color: "#62748e" }}>원문 적용</span>
-            </button>
-
-          </div>
+          {/* 가로 슬라이드 칩 — 워크스페이스에서는 양식 업로드 없이 기존 구성 유지 */}
+          <ComposerChips showUpload={false} />
 
           {/* 전송 버튼 — 스크롤 밖 고정 (onGenerate 동작 유지) */}
           <button
@@ -1874,6 +2815,7 @@ function WsChatInput({ onGenerate }: { onGenerate: () => void }) {
           </button>
 
         </div>
+      </ComposerCard>
       </div>
     </div>
   );
@@ -2397,7 +3339,7 @@ function ResultSheet({ category, sheetPos, onSheetChange }: {
 function FcHeader({ steps, activeStep }: { steps: string[]; activeStep: number }) {
   return (
     <div className="relative shrink-0 w-full" style={{ borderBottom: "1px solid #F0F2F5" }}>
-      <div className="flex flex-wrap gap-x-[11px] gap-y-0 items-center pb-[17px] pt-[16px] px-[18px]">
+      <div className="flex flex-wrap gap-x-[11px] gap-y-0 items-center pb-[17px] pt-[16px] px-[18px] md:px-6">
         {/* Icon */}
         <div className="shrink-0 rounded-[10px] size-[34px] flex items-center justify-center"
           style={{ background: "linear-gradient(135deg, #EEF0FF 0%, #E4E9FF 100%)" }}>
@@ -2428,7 +3370,8 @@ function FcHeader({ steps, activeStep }: { steps: string[]; activeStep: number }
 
 function FcPreview({ open, onToggle, children }: { open: boolean; onToggle: () => void; children?: React.ReactNode }) {
   return (
-    <div className="relative rounded-[15px] w-full overflow-hidden" style={{ border: "1px solid #ECEEF2" }}>
+    // md 이상에서만 아래 항목과의 간격을 24px로 벌린다(모바일 간격 유지)
+    <div className="relative rounded-[15px] w-full overflow-hidden md:mb-1" style={{ border: "1px solid #ECEEF2" }}>
       <button onClick={onToggle}
         className="bg-[#f8f9fc] min-h-[48px] w-full flex items-center gap-[10px] px-[15px] py-[13px] text-left">
         <svg className="shrink-0 size-[18px]" fill="none" viewBox="0 0 18 18">
@@ -2493,20 +3436,20 @@ function FcToggleRow({ autoOn, onToggleAuto, onToggleOriginal, origOn }: {
   );
 }
 
-function FcTextarea({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+function FcTextarea({ value, onChange, placeholder, minHeight = 60 }: { value: string; onChange: (v: string) => void; placeholder?: string; minHeight?: number }) {
   return (
     <div className="relative bg-white rounded-[14px] w-full" style={{ border: "1px solid #E3E6EB" }}>
       <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
         rows={3}
         className="w-full outline-none resize-none bg-transparent px-[17px] pt-[14px] pb-[14px]"
-        style={{ ...f, fontSize: 14.5, color: "#1B2440", lineHeight: "22.48px", minHeight: 60 }} />
+        style={{ ...f, fontSize: 14.5, color: "#1B2440", lineHeight: "22.48px", minHeight }} />
     </div>
   );
 }
 
 function FcInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
-    <div className="relative bg-white rounded-[14px] w-full min-h-[48px] flex items-center" style={{ border: "1px solid #E3E6EB" }}>
+    <div className="fc-single relative bg-white rounded-[14px] w-full min-h-[48px] flex items-center" style={{ border: "1px solid #E3E6EB" }}>
       <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
         className="w-full outline-none bg-transparent px-[17px] py-[15px]"
         style={{ ...f, fontSize: 14.5, color: "#1B2440" }} />
@@ -2516,7 +3459,7 @@ function FcInput({ value, onChange, placeholder }: { value: string; onChange: (v
 
 function FcSelect({ value, label }: { value: string; label?: string }) {
   return (
-    <div className="relative bg-white rounded-[14px] w-full min-h-[48px] flex items-center justify-between px-[17px] py-[15.5px]"
+    <div className="fc-single relative bg-white rounded-[14px] w-full min-h-[48px] flex items-center justify-between px-[17px] py-[15.5px]"
       style={{ border: "1px solid #E3E6EB" }}>
       <span style={{ ...f, fontWeight: 500, fontSize: 14.5, color: "#1B2440" }}>{value}</span>
       <svg className="shrink-0 size-4" fill="none" viewBox="0 0 16 16">
@@ -2539,11 +3482,11 @@ function FcColorField({ value, onChange }: { value: string; onChange: (v: string
   );
 }
 
-function FcPrimaryBtn({ label, onClick }: { label: string; onClick: () => void }) {
+function FcPrimaryBtn({ label, onClick, minHeight }: { label: string; onClick: () => void; minHeight?: number }) {
   return (
     <button onClick={onClick}
       className="flex-1 min-w-0 flex items-center justify-center gap-[9px] rounded-[14px] p-[15px]"
-      style={{ background: "#3B5BFE", boxShadow: "0px 4px 6px rgba(59,91,254,0.18)" }}>
+      style={{ background: "#3B5BFE", boxShadow: "0px 4px 6px rgba(59,91,254,0.18)", minHeight }}>
       <svg className="shrink-0 size-[17px]" fill="none" viewBox="0 0 17 17">
         <path d={svgCard.p31151900} stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.417" />
         <path d={svgCard.p249be200} stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.417" />
@@ -2553,11 +3496,11 @@ function FcPrimaryBtn({ label, onClick }: { label: string; onClick: () => void }
   );
 }
 
-function FcSecondaryBtn({ label, onClick }: { label: string; onClick: () => void }) {
+function FcSecondaryBtn({ label, onClick, minHeight }: { label: string; onClick: () => void; minHeight?: number }) {
   return (
     <button onClick={onClick}
       className="shrink-0 flex items-center justify-center rounded-[14px] px-5 py-[15px]"
-      style={{ border: "1.5px solid #E3E6EB", color: "#4B5262", ...f, fontWeight: 700, fontSize: 14 }}>
+      style={{ border: "1.5px solid #E3E6EB", color: "#4B5262", ...f, fontWeight: 700, fontSize: 14, minHeight }}>
       {label}
     </button>
   );
@@ -2576,24 +3519,31 @@ interface ImageFormState {
 }
 
 // ── 공통 카드 Shell ───────────────────────────────────────────────────────────
+// 폭 상한 없이 부모 콘텐츠 영역을 그대로 채운다(모든 화면 크기 공통).
+// 좌우 여백은 부모(채팅 스크롤 영역)의 페이지 패딩만 사용한다.
 const CARD_SHELL: React.CSSProperties = {
   background: "white", borderRadius: 22, border: "1px solid #ECEEF2",
   boxShadow: "0px 1px 2px rgba(16,24,40,0.04), 0px 12px 32px rgba(16,24,40,0.06)",
   display: "flex", flexDirection: "column", overflow: "hidden",
-  width: "100%", maxWidth: 380,
+  width: "100%", boxSizing: "border-box",
   maxHeight: "calc(100dvh - 120px)",
 };
+// 부모가 세로 flex 컨테이너이므로 자식은 기본적으로 가로로 stretch된다.
+// min-w-0 은 긴 내용이 카드를 밀어 가로 스크롤을 만들지 않게 하는 안전장치.
+const CARD_SHELL_CLASS = "w-full min-w-0 self-stretch";
 function CardBody({ children }: { children: React.ReactNode }) {
+  // fc-body: 768px 이상에서 2열 그리드로 전환된다(theme.css).
+  // 한 줄 입력(FcInput·FcSelect) 그룹만 반 폭을 쓰고, 긴 입력·미리보기·목록은 전체 폭을 유지한다.
   return (
     <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none" } as React.CSSProperties}
-         className="flex flex-col gap-5 px-[18px] pt-[18px] pb-6">
+         className="fc-body flex flex-col gap-5 px-[18px] md:px-6 pt-[18px] pb-6">
       {children}
     </div>
   );
 }
 function CardFooter({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex gap-3 px-[18px] pb-[14px] pt-[15px]" style={{ borderTop: "1px solid #EEF0F3", flexShrink: 0 }}>
+    <div className="flex gap-3 px-[18px] md:px-6 pb-[14px] pt-[15px]" style={{ borderTop: "1px solid #EEF0F3", flexShrink: 0 }}>
       {children}
     </div>
   );
@@ -2644,7 +3594,7 @@ function ImageFormCard({ onGenerate }: { onGenerate: () => void }) {
     </div>
   );
   return (
-    <div style={CARD_SHELL}>
+    <div className={CARD_SHELL_CLASS} style={CARD_SHELL}>
       <div style={{ flexShrink: 0 }}><FcHeader steps={["설명 입력", "스타일", "생성"]} activeStep={0} /></div>
       <CardBody>
         <FcPreview open={prevOpen} onToggle={() => setPrevOpen(v => !v)}><Preview /></FcPreview>
@@ -2722,7 +3672,7 @@ function DocsFormCard({ onGenerate }: { onGenerate: () => void }) {
     { label:"합의 일자", key:"agreementDate", ph:"예) 2026-06-23" },
   ];
   return (
-    <div style={CARD_SHELL}>
+    <div className={CARD_SHELL_CLASS} style={CARD_SHELL}>
       <div style={{ flexShrink: 0 }}><FcHeader steps={["정보 입력","생성"]} activeStep={0} /></div>
       <CardBody>
         <FcPreview open={prevOpen} onToggle={() => setPrevOpen(v=>!v)}><Preview /></FcPreview>
@@ -2760,7 +3710,7 @@ function PptFormCard({ onGenerate }: { onGenerate: () => void }) {
     </div>
   );
   if (step === 1) return (
-    <div style={CARD_SHELL}>
+    <div className={CARD_SHELL_CLASS} style={CARD_SHELL}>
       <div style={{ flexShrink: 0 }}><FcHeader steps={["주제 입력","내용 편집","생성"]} activeStep={0} /></div>
       <CardBody>
         <FcPreview open={prevOpen} onToggle={() => setPrevOpen(v=>!v)}><Preview /></FcPreview>
@@ -2811,7 +3761,7 @@ function PptFormCard({ onGenerate }: { onGenerate: () => void }) {
     </div>
   );
   return (
-    <div style={CARD_SHELL}>
+    <div className={CARD_SHELL_CLASS} style={CARD_SHELL}>
       <div style={{ flexShrink: 0 }}><FcHeader steps={["주제 입력","내용 편집","생성"]} activeStep={1} /></div>
       <CardBody>
         <FcPreview open={prevOpen} onToggle={() => setPrevOpen(v=>!v)}><Preview /></FcPreview>
@@ -2871,7 +3821,7 @@ function VideoFormCard({ onGenerate }: { onGenerate: () => void }) {
     </div>
   );
   if (step === 1) return (
-    <div style={CARD_SHELL}>
+    <div className={CARD_SHELL_CLASS} style={CARD_SHELL}>
       <div style={{ flexShrink: 0 }}><FcHeader steps={["주제 입력","장면 편집","생성"]} activeStep={0} /></div>
       <CardBody>
         <FcPreview open={prevOpen} onToggle={() => setPrevOpen(v=>!v)}><Preview /></FcPreview>
@@ -2978,7 +3928,7 @@ function VideoFormCard({ onGenerate }: { onGenerate: () => void }) {
     </div>
   );
   return (
-    <div style={CARD_SHELL}>
+    <div className={CARD_SHELL_CLASS} style={CARD_SHELL}>
       <div style={{ flexShrink: 0 }}><FcHeader steps={["주제 입력","장면 편집","생성"]} activeStep={1} /></div>
       <CardBody>
         <FcPreview open={prevOpen} onToggle={() => setPrevOpen(v=>!v)}><Preview /></FcPreview>
@@ -3063,7 +4013,7 @@ function LandingFormCard({ onGenerate }: { onGenerate: () => void }) {
     </div>
   );
   if (step === 1) return (
-    <div style={CARD_SHELL}>
+    <div className={CARD_SHELL_CLASS} style={CARD_SHELL}>
       <div style={{ flexShrink: 0 }}><FcHeader steps={["주제 입력","내용 편집","생성"]} activeStep={0} /></div>
       <CardBody>
         <FcPreview open={prevOpen} onToggle={() => setPrevOpen(v=>!v)}><Preview /></FcPreview>
@@ -3076,25 +4026,26 @@ function LandingFormCard({ onGenerate }: { onGenerate: () => void }) {
           </div>
           <FcTextarea value={s.intro} onChange={v=>set("intro",v)} placeholder="예) 딸깍.net — AI 문서 자동생성 서비스. 누구나 쉽게 전문 문서를 만들 수 있습니다." />
         </div>
-        {/* 2. 스타일 힌트 (선택) */}
-        <div className="flex flex-col gap-[10px]">
-          <div className="flex items-center gap-1.5">
-            <FcLabel label="스타일 힌트" />
-            <span style={{ ...f, fontSize:12, color:"#98A2B3" }}>(선택)</span>
+        {/* 2·3. 스타일 힌트 + 섹션 수 — 합쳐서 100% (오른쪽 끝이 위 textarea와 일치) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-[10px] min-w-0">
+            <div className="flex items-center gap-1.5">
+              <FcLabel label="스타일 힌트" />
+              <span style={{ ...f, fontSize:12, color:"#98A2B3" }}>(선택)</span>
+            </div>
+            <FcInput value={s.styleHint} onChange={v=>set("styleHint",v)} placeholder="예) 시네마틱 다크 우주" />
           </div>
-          <FcInput value={s.styleHint} onChange={v=>set("styleHint",v)} placeholder="예) 시네마틱 다크 우주" />
-        </div>
-        {/* 3. 섹션 수 */}
-        <div className="flex flex-col gap-[10px]">
-          <FcLabel label="섹션 수" />
-          <FcSelect value={s.sectionCount} />
+          <div className="flex flex-col gap-[10px] min-w-0">
+            <FcLabel label="섹션 수" />
+            <FcSelect value={s.sectionCount} />
+          </div>
         </div>
       </CardBody>
       <CardFooter><FcPrimaryBtn label="내용 생성" onClick={() => setStep(2)} /></CardFooter>
     </div>
   );
   return (
-    <div style={CARD_SHELL}>
+    <div className={CARD_SHELL_CLASS} style={CARD_SHELL}>
       <div style={{ flexShrink: 0 }}><FcHeader steps={["주제 입력","내용 편집","생성"]} activeStep={1} /></div>
       <CardBody>
         <FcPreview open={prevOpen} onToggle={() => setPrevOpen(v=>!v)}><Preview /></FcPreview>
@@ -3103,30 +4054,35 @@ function LandingFormCard({ onGenerate }: { onGenerate: () => void }) {
         <ScrollableChips
           variant="outline"
           centerActiveOnChange
-          edgeClassName="-mx-[18px] px-[18px]"
+          edgeClassName="-mx-[18px] px-[18px] md:-mx-6 md:px-6"
           items={LANDING_SECTIONS}
           activeIndex={s.activeSection}
           onChange={(i) => set("activeSection", i)}
         />
-        {/* 제목 */}
-        <div className="flex flex-col gap-[10px]">
-          <FcLabel label="제목" />
-          <FcInput value={s.sectionTitle} onChange={v=>set("sectionTitle",v)} placeholder="예) 딸깍" />
-        </div>
-        {/* 서브 카피 */}
-        <div className="flex flex-col gap-[10px]">
-          <FcLabel label="서브 카피" />
-          <FcTextarea value={s.subCopy} onChange={v=>set("subCopy",v)} placeholder="예) 클릭 한 번으로 AI가 실행합니다." />
-        </div>
-        {/* 버튼 */}
-        <div className="flex flex-col gap-[10px]">
-          <FcLabel label="버튼" />
-          <FcInput value={s.ctaBtn} onChange={v=>set("ctaBtn",v)} placeholder="예) 시작하기" />
+        {/* 섹션 입력 — 모바일 1열(제목 → 서브 카피 → 버튼 순서 그대로),
+            768px 이상에서는 제목·버튼을 한 줄에 나란히 두고 서브 카피가 아래 전체 폭을 쓴다.
+            DOM 순서는 건드리지 않고 md 이상에서 배치만 지정해 모바일 순서를 보존한다. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* 제목 */}
+          <div className="flex flex-col gap-[10px] min-w-0 md:col-start-1 md:row-start-1">
+            <FcLabel label="제목" />
+            <FcInput value={s.sectionTitle} onChange={v=>set("sectionTitle",v)} placeholder="예) 딸깍" />
+          </div>
+          {/* 서브 카피 — 항상 전체 폭 */}
+          <div className="flex flex-col gap-[10px] min-w-0 md:col-span-2 md:row-start-2">
+            <FcLabel label="서브 카피" />
+            <FcTextarea value={s.subCopy} onChange={v=>set("subCopy",v)} placeholder="예) 클릭 한 번으로 AI가 실행합니다." minHeight={120} />
+          </div>
+          {/* 버튼 */}
+          <div className="flex flex-col gap-[10px] min-w-0 md:col-start-2 md:row-start-1">
+            <FcLabel label="버튼" />
+            <FcInput value={s.ctaBtn} onChange={v=>set("ctaBtn",v)} placeholder="예) 시작하기" />
+          </div>
         </div>
       </CardBody>
       <CardFooter>
-        <FcSecondaryBtn label="이전" onClick={() => setStep(1)} />
-        <FcPrimaryBtn label="랜딩페이지 생성" onClick={onGenerate} />
+        <FcSecondaryBtn label="이전" onClick={() => setStep(1)} minHeight={52} />
+        <FcPrimaryBtn label="랜딩페이지 생성" onClick={onGenerate} minHeight={52} />
       </CardFooter>
     </div>
   );
@@ -3152,7 +4108,7 @@ function DetailFormCard({ onGenerate }: { onGenerate: () => void }) {
     </div>
   );
   if (step === 1) return (
-    <div style={CARD_SHELL}>
+    <div className={CARD_SHELL_CLASS} style={CARD_SHELL}>
       <div style={{ flexShrink: 0 }}><FcHeader steps={["제품 입력","내용 편집","생성"]} activeStep={0} /></div>
       <CardBody>
         <FcPreview open={prevOpen} onToggle={() => setPrevOpen(v=>!v)}><Preview /></FcPreview>
@@ -3191,7 +4147,7 @@ function DetailFormCard({ onGenerate }: { onGenerate: () => void }) {
     </div>
   );
   return (
-    <div style={CARD_SHELL}>
+    <div className={CARD_SHELL_CLASS} style={CARD_SHELL}>
       <div style={{ flexShrink: 0 }}><FcHeader steps={["제품 입력","내용 편집","생성"]} activeStep={1} /></div>
       <CardBody>
         <FcPreview open={prevOpen} onToggle={() => setPrevOpen(v=>!v)}><Preview /></FcPreview>
@@ -3200,7 +4156,7 @@ function DetailFormCard({ onGenerate }: { onGenerate: () => void }) {
         <ScrollableChips
           variant="outline"
           centerActiveOnChange
-          edgeClassName="-mx-[18px] px-[18px]"
+          edgeClassName="-mx-[18px] px-[18px] md:-mx-6 md:px-6"
           items={DETAIL_SECTIONS}
           activeIndex={s.activeSection}
           onChange={(i) => set("activeSection", i)}
@@ -3443,10 +4399,90 @@ function WsResult({ category, templateName }: { category: WorkspaceCategory; tem
   );
 }
 
+// 뷰포트 분기용 공통 훅.
+// 서버에는 window가 없으므로 false(모바일 기준)로 시작하고, 클라이언트에서 즉시 실제 값으로 맞춘다.
+// change + orientationchange를 모두 구독해 창 크기 변경·기기 회전에 실시간으로 반응한다.
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(query).matches
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia(query);
+    const update = () => setMatches(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      mq.removeEventListener("change", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, [query]);
+  return matches;
+}
+
+// 768px 이상(태블릿) — 결과 뷰어·알림 팝오버·크레딧 모달의 분기 기준
+function useIsTabletUp() {
+  return useMediaQuery("(min-width: 768px)");
+}
+
+// 1200px 이상을 데스크톱으로 본다. 서식 채우기 화면(DESKTOP_MIN)과 같은 경계다.
+function useIsDesktop() {
+  return useMediaQuery("(min-width: 1200px)");
+}
+
+// 768~1199px — 태블릿 전용 홈 레이아웃(세로 중앙 정렬 + 푸터를 콘텐츠 흐름 끝에 배치)의 분기 기준.
+// 나머지 크기 조정은 theme.css 의 같은 범위 미디어 블록이 담당한다.
+function useIsTabletRange() {
+  return useMediaQuery("(min-width: 768px) and (max-width: 1199px)");
+}
+
 // ─── 결과물 뷰어 (전체화면) ────────────────────────────────────────────────────
 function ResultViewer({ variant, filename, templateName, onClose }: {
   variant: ResultCardVariant; filename: string; templateName: string; onClose: () => void;
 }) {
+  const isTabletUp = useIsTabletUp();
+
+  // 태블릿 이상: 공통 태블릿 셸(56px 상단바 + safe-area)로 감싼다.
+  if (isTabletUp) {
+    // 영상 — 커스텀 컨트롤 플레이어 전용 뷰어
+    if (variant === "mp4") {
+      return (
+        <TabletVideoResultViewer fileName={filename} onClose={onClose} />
+      );
+    }
+    // 문서(.docx) — 결과 확인하기를 누르면 곧바로 편집기 화면이 열리고,
+    // 편집 영역 안에 문서가 그대로 렌더된다.
+    if (variant === "word") {
+      return (
+        <TabletDocEditorViewer fileName={filename} onBack={onClose} onClose={onClose}>
+          <ResultPreview variant={variant} templateName={templateName} />
+        </TabletDocEditorViewer>
+      );
+    }
+    // 이미지 · 랜딩페이지 · 프레젠테이션 — 미니 에디터로 연다
+    const editorMeta = {
+      png: { ratio: "4 / 5", size: "1024 × 1280 px", pages: 1 },
+      html: { ratio: "3 / 4", size: "1440 × 1920 px", pages: 1 },
+      slides: { ratio: "16 / 9", size: "1536 × 1024 px", pages: 7 },
+    } as const;
+    const meta = editorMeta[variant as keyof typeof editorMeta];
+    return (
+      <TabletMiniEditor
+        fileName={filename}
+        ratio={meta.ratio}
+        canvasSize={meta.size}
+        pages={meta.pages}
+        onClose={onClose}
+      >
+        <div className="w-full h-full flex flex-col">
+          <ResultPreview variant={variant} templateName={templateName} />
+        </div>
+      </TabletMiniEditor>
+    );
+  }
+
+  // 767px 이하: 기존 모바일 뷰어 그대로
   return (
     <div className="fixed inset-0 z-[95] bg-white flex flex-col" style={{ animation: "wsFadeIn 200ms ease" }}>
       {/* 헤더 */}
@@ -3464,6 +4500,104 @@ function ResultViewer({ variant, filename, templateName, onClose }: {
 
       {/* 콘텐츠 스크롤 영역 */}
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col" style={{ scrollbarWidth: "none" }}>
+        <ResultPreview variant={variant} templateName={templateName} />
+      </div>
+    </div>
+  );
+}
+
+// ── 문서 미리보기 본문 (목업) ────────────────────────────────────────────────
+// 자리표시자 막대 대신 실제 문서 텍스트를 그대로 렌더한다.
+const DOC_SECTIONS: { heading: string; rows: [string, string][] }[] = [
+  {
+    heading: "민원인 인적사항",
+    rows: [
+      ["성명", "홍길동"],
+      ["생년월일", "1988. 04. 12."],
+      ["연락처 / 주소", "010-1234-5678 / 서울특별시 강남구 테헤란로 123"],
+    ],
+  },
+  {
+    heading: "수용자 인적사항",
+    rows: [
+      ["성명", "김철수"],
+      ["민원인과의 관계", "형제"],
+      ["수용 기관", "서울남부교도소"],
+    ],
+  },
+  {
+    heading: "신청 사유",
+    rows: [
+      ["처분 일자", "2026. 06. 23."],
+      ["처분 내용", "접견 제한 처분 (30일)"],
+      ["신청 사유", "처분 사유에 사실관계 오인이 있어 재심사를 요청합니다."],
+    ],
+  },
+];
+
+function DocumentPagePreview({ templateName }: { templateName: string }) {
+  return (
+    <div className="flex-1 bg-[#e9ecf0] py-5 px-4">
+      <div
+        className="mx-auto bg-white"
+        style={{
+          width: "100%",
+          maxWidth: 720,
+          boxShadow: "0 2px 14px rgba(0,0,0,0.12)",
+          padding: "clamp(28px, 6%, 56px) clamp(22px, 7%, 60px)",
+          minHeight: 660,
+        }}
+      >
+        {/* 표제 */}
+        <p className="text-center" style={{ ...f, fontWeight: 800, fontSize: 22, color: "#1B2440", letterSpacing: "-0.5px", lineHeight: 1.35 }}>
+          {templateName}
+        </p>
+        <p className="text-center" style={{ ...f, fontWeight: 500, fontSize: 13.5, color: "#4B5262", lineHeight: 1.7, marginTop: 10 }}>
+          행정처분에 대한 이의신청 및 권리 구제 신청서
+        </p>
+        <div className="mx-auto" style={{ width: 56, height: 2, background: "#1B2440", margin: "18px auto 26px" }} />
+
+        {/* 본문 섹션 */}
+        {DOC_SECTIONS.map((sec) => (
+          <div key={sec.heading} style={{ marginBottom: 24 }}>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="size-2 bg-black shrink-0" />
+              <span style={{ ...f, fontWeight: 700, fontSize: 14, color: "#111" }}>{sec.heading}</span>
+            </div>
+            <div className="border border-[#c9ccd2]">
+              {sec.rows.map(([label, value], rw) => (
+                <div key={label} className="flex" style={{ borderBottom: rw < sec.rows.length - 1 ? "1px solid #d5d8dd" : "none" }}>
+                  <div className="w-[32%] px-3 py-2.5 bg-[#f3f4f6] shrink-0 flex items-center" style={{ borderRight: "1px solid #d5d8dd" }}>
+                    <span style={{ ...f, fontWeight: 600, fontSize: 13, color: "#374151", lineHeight: 1.5 }}>{label}</span>
+                  </div>
+                  <div className="flex-1 min-w-0 px-3 py-2.5">
+                    <span style={{ ...f, fontWeight: 400, fontSize: 13, color: "#111", lineHeight: 1.6 }}>{value}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {/* 확인 문구 · 서명란 */}
+        <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#111", marginTop: 26, lineHeight: 1.8 }}>
+          본인은 위 내용이 사실과 다름이 없음을 확인하며, 신청서 제출에 동의합니다.
+        </p>
+        <p className="text-center" style={{ ...f, fontWeight: 500, fontSize: 13, color: "#374151", marginTop: 26 }}>
+          2026년 8월 5일
+        </p>
+        <p className="text-right" style={{ ...f, fontWeight: 500, fontSize: 13, color: "#111", marginTop: 14 }}>
+          신청인: 홍길동 &nbsp;(인)
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// 결과물 미리보기 — 모바일 뷰어와 태블릿 셸이 함께 쓰는 콘텐츠(마크업 그대로)
+function ResultPreview({ variant, templateName }: { variant: ResultCardVariant; templateName: string }) {
+  return (
+    <>
       {/* ── 영상 ── */}
       {variant === "mp4" && (
         <div className="flex-1 bg-black flex items-center justify-center">
@@ -3502,35 +4636,8 @@ function ResultViewer({ variant, filename, templateName, onClose }: {
         </div>
       )}
 
-      {/* ── 문서 (Word/HWP) ── */}
-      {variant === "word" && (
-        <div className="flex-1 bg-[#e9ecf0] py-4 px-4">
-          <div className="mx-auto bg-white" style={{ maxWidth: 520, boxShadow: "0 2px 14px rgba(0,0,0,0.1)", padding: "34px 24px", minHeight: 660 }}>
-            <p className="text-center" style={{ ...f, fontWeight: 700, fontSize: 18, color: "#111", letterSpacing: "-0.3px", marginBottom: 26, lineHeight: 1.4 }}>{templateName}</p>
-            {["민원인 인적사항", "수용자 인적사항", "신청 사유"].map((h, i) => (
-              <div key={i} style={{ marginBottom: 22 }}>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="size-2 bg-black shrink-0" />
-                  <span style={{ ...f, fontWeight: 700, fontSize: 13.5, color: "#111" }}>{h}</span>
-                </div>
-                <div className="border border-[#c9ccd2]">
-                  {[0, 1, 2].map((rw) => (
-                    <div key={rw} className="flex" style={{ borderBottom: rw < 2 ? "1px solid #d5d8dd" : "none" }}>
-                      <div className="w-[32%] px-2.5 py-3 bg-[#f3f4f6] shrink-0" style={{ borderRight: "1px solid #d5d8dd" }}>
-                        <div className="h-2 rounded bg-[#cfd3d9]" style={{ width: "70%" }} />
-                      </div>
-                      <div className="flex-1 px-2.5 py-3"><div className="h-2 rounded bg-[#e5e7eb]" style={{ width: `${75 - rw * 12}%` }} /></div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-            <p style={{ ...f, fontWeight: 500, fontSize: 12.5, color: "#333", marginTop: 22, lineHeight: 1.75 }}>
-              본인은 위 내용이 사실과 다름이 없음을 확인하며, 신청서 제출에 동의합니다.
-            </p>
-          </div>
-        </div>
-      )}
+      {/* ── 문서 (Word/HWP) ── 실제 문서 페이지처럼 텍스트를 그대로 렌더한다 */}
+      {variant === "word" && <DocumentPagePreview templateName={templateName} />}
 
       {/* ── 슬라이드 ── */}
       {variant === "slides" && (
@@ -3578,8 +4685,7 @@ function ResultViewer({ variant, filename, templateName, onClose }: {
           </div>
         </div>
       )}
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -3592,6 +4698,7 @@ function WorkspaceScreen({ category, templateName, onBack, onCreditClick, onBell
   const [generated, setGenerated] = useState(false);
   const [stepsOpen, setStepsOpen] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const isDesktop = useIsDesktop();
 
   const wsSteps: { type: "read" | "help"; text: string; file: boolean }[] = [
     { type: "read", text: "이미지 생성 스킬의 워크플로우를 확인하기 위해 SKILL.md 파일을 읽습니다.", file: true },
@@ -3619,17 +4726,26 @@ function WorkspaceScreen({ category, templateName, onBack, onCreditClick, onBell
         @keyframes wsSlideRight { from { opacity:0; transform:translateX(-6px); } to { opacity:1; transform:translateX(0); } }
         @keyframes wsDot { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-4px); } }
       `}</style>
-      <WorkspaceDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} onGoHome={onBack} />
+      {/* 드로어는 데스크톱에서만 쓴다. 좁은 화면에서는 좌상단이 뒤로가기라 열 진입점이 없다. */}
+      {isDesktop && <WorkspaceDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} onGoHome={onBack} />}
 
       {/* TopBar */}
       <header className="h-14 flex items-center gap-3 px-4 shrink-0 bg-[#f8fafc] z-10">
-        <button onClick={() => setDrawerOpen(true)} className="flex items-center justify-center size-9 rounded-[10px] opacity-80 shrink-0"><IconMenu /></button>
+        {/* 좁은 화면에서는 사이드바 대신 직전 화면으로 돌아가는 ←.
+            히스토리(back)가 아니라 onBack 을 쓴다 — 이 앱은 라우터가 없어
+            화면 전환이 히스토리에 쌓이지 않으므로 history.back() 은 앱 밖으로 나간다. */}
+        {isDesktop ? (
+          <button onClick={() => setDrawerOpen(true)} aria-label="메뉴 열기" className="flex items-center justify-center size-9 rounded-[10px] opacity-80 shrink-0"><IconMenu /></button>
+        ) : (
+          <button onClick={onBack} aria-label="뒤로 가기" className="flex items-center justify-center size-9 rounded-[10px] shrink-0"><IconChevronLeft /></button>
+        )}
         <p className="flex-1 truncate" style={{ ...f, fontWeight: 600, fontSize: 15, color: "#0a0a0a", letterSpacing: "-0.4px" }}>{templateName}</p>
       </header>
 
       {/* Chat scroll */}
-      <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-4 pb-4" style={{ paddingBottom: `calc(${promptBottom === "0px" ? "130px" : promptBottom} + 80px)`, scrollbarWidth: "none" }}>
-        <div className="flex flex-col gap-3.5" style={{ animation: "wsFadeIn 300ms ease" }}>
+      <div ref={chatScrollRef} className="flex-1 overflow-y-auto pb-4" style={{ paddingBottom: `calc(${promptBottom === "0px" ? "130px" : promptBottom} + 80px)`, scrollbarWidth: "none" }}>
+        {/* 채팅 정렬 축 — 말풍선·단계 아코디언·상세 프롬프트 카드·결과가 모두 이 래퍼 안에서 같은 좌우 끝선을 쓴다 */}
+        <div className="mx-auto w-full max-w-[900px] px-4 md:px-6 flex flex-col gap-3.5" style={{ animation: "wsFadeIn 300ms ease" }}>
           {/* Template preview card — 사용자 메시지처럼 오른쪽 정렬 + 축소 */}
           <div className="flex justify-end">
             <div className="rounded-[16px] overflow-hidden" style={{ width: "66%", background: "#eef1f7", boxShadow: "0px 2px 10px rgba(0,0,0,0.06)" }}>
@@ -3755,23 +4871,87 @@ export default function App() {
   const [formsSort, setFormsSort] = useState<SortOption>("인기순");
   const formsScrollTop = useRef(0);
 
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  // 알림 팝오버의 앵커(헤더 벨 버튼)
+  const bellRef = useRef<HTMLButtonElement>(null);
+  const isTabletRange = useIsTabletRange();
+  // 768px 이상에서는 알림·크레딧을 팝오버/모달로 바꿔 렌더한다(컴포넌트 자체를 교체 — CSS 숨김 아님)
+  const isTabletUp = useIsTabletUp();
+
   const isSubScreen = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai", "credit-history", "notifications-all"].includes(screen);
+
+  // 튜토리얼 다시 보기 — 홈으로 돌아가 1단계부터 다시 실행한다(중복 실행 방지)
+  const startTutorial = () => {
+    if (tutorialOpen) return;
+    setDrawerOpen(false);
+    setSettingsOpen(false);
+    setWorkspace(null);
+    setScreen("home");
+    requestAnimationFrame(() => setTutorialOpen(true));
+  };
+
+  const tutorialSteps: TutorialStepConfig[] = [
+    {
+      target: '[data-tutorial="composer"]',
+      title: "메시지 입력",
+      description: "만들고 싶은 작업을 자유롭게 적고 전송 버튼으로 대화를 시작하세요.",
+    },
+    {
+      target: '[data-tutorial="attach"]',
+      title: "파일 첨부",
+      description: "이미지·PDF·엑셀 등 파일을 첨부하면 AI가 함께 분석합니다.",
+    },
+    {
+      target: '[data-tutorial="skill"]',
+      title: "스킬 선택",
+      description: "전문 스킬을 선택하면 더 정확하고 풍부한 결과를 얻을 수 있어요.",
+    },
+    {
+      target: '[data-tutorial="upload"]',
+      title: "양식 업로드",
+      description: "올린 양식과 똑같은 형식으로 문서를 만들어줍니다.",
+    },
+    {
+      target: ['[data-tutorial="auto-prompt"]', '[data-tutorial="doc-source"]'],
+      title: "자동 프롬프트 · 원문 사용",
+      description: "자동 프롬프트는 질문을 최적화하고, 원문 사용은 참고문서 전체를 AI 입력에 포함합니다.",
+    },
+    {
+      target: '[data-tutorial="categories"]',
+      title: "카테고리",
+      description: "이미지·랜딩페이지·동영상·문서 등 원하는 작업을 골라 바로 시작할 수 있어요.",
+    },
+    {
+      target: '[data-tutorial="template-grid"]',
+      title: "템플릿 선택",
+      description: "카테고리를 열면 바로 쓸 수 있는 템플릿이 나와요. 카드를 눌러 템플릿을 적용해 보세요.",
+      onEnter: () => setScreen("image-ai"),
+      onExit: () => setScreen("home"),
+    },
+    {
+      target: null,
+      title: "결과 확인하기 (보너스)",
+      description: "작업이 끝나면 파일 카드의 '결과 확인하기'로 결과물을 바로 열어보고 다운로드할 수 있습니다.",
+    },
+  ];
 
   return (
     <div className="bg-[#f8fafc] h-[100dvh] w-full flex flex-col overflow-hidden" style={f}>
-      <SidebarDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} currentScreen={screen} onNavigate={setScreen} onSettingsOpen={() => setSettingsOpen(true)} />
+      <SidebarDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} currentScreen={screen} onNavigate={setScreen} onSettingsOpen={() => setSettingsOpen(true)} onStartTutorial={startTutorial} />
       <TopBar
         onMenuOpen={() => setDrawerOpen(true)}
         onBack={() => setScreen("home")}
         showBack={isSubScreen}
         onCreditClick={() => setCreditOpen(true)}
         onBellClick={() => setNotifOpen((v) => !v)}
+        bellRef={bellRef}
       />
       {screen === "home" && <HomeScreen onNavigate={setScreen} />}
       {screen === "image-ai" && (
         <AIAgentScreen
           category="이미지"
           title=", 한 줄이면 충분해요"
+          desc={SERVICE_COPY.image}
           filterTabs={["전체", "이미지", "카드뉴스", "상세페이지"]}
           cards={imageAICards}
           wsCategory="image"
@@ -3782,6 +4962,7 @@ export default function App() {
         <AIAgentScreen
           category="랜딩페이지"
           title=", 한 줄이면 충분해요"
+          desc={SERVICE_COPY.landing}
           filterTabs={["전체", "SaaS", "서비스", "이벤트"]}
           cards={landingAICards}
           wsCategory="landing"
@@ -3802,6 +4983,7 @@ export default function App() {
         <AIAgentScreen
           category="문서"
           title=", 한 줄이면 충분해요"
+          desc={SERVICE_COPY.docs}
           filterTabs={["전체", "워드", "한글", "엑셀", "논문"]}
           cards={docsCards}
           cardRatio="140%"
@@ -3813,6 +4995,7 @@ export default function App() {
         <AIAgentScreen
           category="오디오"
           title=", 한 줄이면 충분해요"
+          desc={SERVICE_COPY.audio}
           filterTabs={["전체", "음악", "팟캐스트"]}
           cards={[]}
         />
@@ -3821,6 +5004,7 @@ export default function App() {
         <AIAgentScreen
           category="프레젠테이션"
           title=", 한 줄이면 충분해요"
+          desc={SERVICE_COPY.ppt}
           filterTabs={["전체", "비즈니스", "교육", "포트폴리오"]}
           cards={pptAICards}
           cardRatio="81%"
@@ -3832,6 +5016,7 @@ export default function App() {
         <AIAgentScreen
           category="동영상"
           title=", 한 줄이면 충분해요"
+          desc={SERVICE_COPY.video}
           filterTabs={["전체", "영상", "유튜브영상"]}
           cards={videoAICards}
           cardRatio="203%"
@@ -3841,14 +5026,29 @@ export default function App() {
       )}
       {screen === "favorites" && <FavoritesScreen />}
       {screen === "mywork" && <MyWorkScreen />}
-      {screen === "home" && <Footer />}
+      {/* 태블릿(768~1199px)에서는 HomeScreen 이 스크롤 흐름 끝에서 직접 렌더한다. */}
+      {screen === "home" && !isTabletRange && <Footer />}
       {screen === "notifications-all" && <NotificationsAllScreen />}
       {screen === "credit-history" && (
         <CreditHistoryScreen onCharge={() => { setScreen("home"); setCreditOpen(true); }} />
       )}
-      {notifOpen && <NotificationsPanel onClose={() => setNotifOpen(false)} onViewAll={() => { setNotifOpen(false); setScreen("notifications-all"); }} />}
-      {creditOpen && <CreditBottomSheet onClose={() => setCreditOpen(false)} onHistoryClick={() => setScreen("credit-history")} />}
-      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {notifOpen && (isTabletUp ? (
+        <NotificationsPopover anchorRef={bellRef} onClose={() => setNotifOpen(false)} onViewAll={() => { setNotifOpen(false); setScreen("notifications-all"); }} />
+      ) : (
+        <NotificationsPanel onClose={() => setNotifOpen(false)} onViewAll={() => { setNotifOpen(false); setScreen("notifications-all"); }} />
+      ))}
+      {creditOpen && (isTabletUp ? (
+        <CreditModal onClose={() => setCreditOpen(false)} onHistoryClick={() => setScreen("credit-history")} />
+      ) : (
+        <CreditBottomSheet onClose={() => setCreditOpen(false)} onHistoryClick={() => setScreen("credit-history")} />
+      ))}
+      <TutorialTour isOpen={tutorialOpen} steps={tutorialSteps} onClose={() => { setTutorialOpen(false); setScreen("home"); }} />
+      {settingsOpen && (
+        <SettingsModal
+          onClose={() => setSettingsOpen(false)}
+          onCreditHistory={() => { setSettingsOpen(false); setScreen("credit-history"); }}
+        />
+      )}
       {/* 서식 채우기 — 데스크톱 3단. TopBar·사이드바까지 덮는 전체 화면이라 최상단에 얹는다.
           좌측 컬럼은 앱 공용 SidebarDrawer 를 docked 로 주입한다(서식 화면 전용 사이드바 없음). */}
       {screen === "forms-fill" && fillTarget && (
@@ -3865,6 +5065,7 @@ export default function App() {
               currentScreen={screen}
               onNavigate={setScreen}
               onSettingsOpen={() => setSettingsOpen(true)}
+              onStartTutorial={startTutorial}
               recentForms={formsCards.slice(0, 4).map((c) => ({ id: c.id, title: c.title }))}
               currentFormId={fillTarget.id}
               onSelectForm={(id, title) => setFillTarget({ id, title })}

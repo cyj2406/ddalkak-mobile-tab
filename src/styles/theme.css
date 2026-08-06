@@ -44,6 +44,28 @@
   --gap-card-y: 14px;
   --gap-card-padding: 12px;
   --gap-grid-bottom: 32px;
+  /* ── 홈 히어로 공통 컨테이너 폭 ─────────────
+     프롬프트 입력창과 카테고리 그리드가 같은 좌우 정렬선을 쓰도록 공유하는 값.
+     모바일(<768px)은 화면 폭을 그대로 사용해 기존 레이아웃을 유지한다. */
+  --home-container: 100%;
+  /* ── 홈·서비스 히어로 타이포 스케일 ─────────────
+     기본값 = 지금의 모바일(≤767px) 수치. 데스크톱(≥1200px)도 이 값을 그대로 쓴다.
+     태블릿(768~1199px)만 아래 미디어 블록에서 키운다. */
+  --hero-title-size: 26px;      /* 홈 헤드라인 */
+  --hero-title-tracking: -1.5px;
+  --hero-sub-size: 13px;        /* 홈 부제 */
+  --svc-title-size: 22px;       /* 서비스·서식 헤드라인 */
+  --svc-title-tracking: -1.1px;
+  --svc-sub-size: 12.5px;       /* 서비스·서식 부제 */
+  --svc-hero-max: 100%;         /* 서비스 히어로(헤드라인·부제·입력창)의 최대 폭 */
+  --composer-ph-size: 13.5px;   /* 입력창 placeholder */
+  /* 컴포저 textarea 최대 높이. 넘어가면 내부 스크롤.
+     화면이 낮은 기기에서 입력창이 화면을 다 먹지 않도록 40vh 로도 한 번 더 조인다. */
+  --composer-max-h: min(160px, 40vh);
+  --cat-label-size: 11.5px;     /* 홈 아이콘 그리드 라벨 */
+  --cat-circle: 56px;           /* 홈 아이콘 원 지름 */
+  --cat-icon: 22px;             /* 홈 아이콘 svg */
+  --cat-row-gap: 20px;          /* 홈 아이콘 그리드 행 간격 */
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: #030213;
@@ -90,6 +112,107 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.269 0 0);
   --sidebar-ring: oklch(0.439 0 0);
+}
+
+/* 태블릿 이상: 프롬프트 입력창 + 카테고리 공통 컨테이너 폭 (좌우 정렬선 기준) */
+@media (min-width: 768px) {
+  :root { --home-container: 720px; }
+}
+@media (min-width: 1200px) {
+  :root { --home-container: 1120px; }
+}
+
+@theme {
+  /* 카테고리 8열 전환 기준점 */
+  --breakpoint-wide: 1200px;
+}
+
+/* 홈 기본 배치 (모바일 ≤767px / 데스크톱 ≥1200px).
+   .home-stack 은 display:contents 라 flex 흐름에 끼어들지 않는다 — 기존 배치 그대로.
+   아래 태블릿 블록이 이 값들을 덮으므로 반드시 이 순서를 유지할 것. */
+.home-stack { display: contents; }
+.home-body { flex: 2 1 auto; }
+.home-heading { margin-bottom: 40px; }
+.home-sub { margin-top: 8px; }
+
+/* 아이콘 크기는 svg 속성 대신 토큰으로 — 기본 22px 라 모바일·데스크톱은 그대로다. */
+.home-grid svg { width: var(--cat-icon); height: var(--cat-icon); }
+
+/* ── 태블릿(768~1199px) 홈·서비스 화면 ────────────────────────────────────────
+   데스크톱 레이아웃을 폭만 줄여 쓰던 것을 태블릿 전용 스케일로 다시 잡는다.
+   이 블록 밖(모바일 ≤767px / 데스크톱 ≥1200px)은 위 기본값을 그대로 쓰므로 영향이 없다. */
+@media (min-width: 768px) {
+  :root { --composer-max-h: min(220px, 40vh); }
+}
+@media (min-width: 1200px) {
+  :root { --composer-max-h: min(280px, 40vh); }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  :root {
+    --hero-title-size: 34px;
+    --hero-title-tracking: -1.2px;
+    --hero-sub-size: 15.5px;
+    --svc-title-size: 34px;
+    --svc-title-tracking: -1.2px;
+    --svc-sub-size: 15.5px;
+    --svc-hero-max: 720px;
+    --composer-ph-size: 15px;
+    --cat-label-size: 14px;
+    --cat-circle: 64px;
+    --cat-icon: 24px;
+    --cat-row-gap: 32px;
+    /* 좌우 24px 축 (서비스·서식 화면 전용 토큰) */
+    --gap-screen-x: 24px;
+    --gap-title-sub: 12px;      /* 헤드라인 ↔ 부제 */
+    --gap-sub-composer: 32px;   /* 부제 ↔ 입력창 */
+    --gap-composer-chips: 48px; /* 입력창 ↔ 아이콘 그리드 / 필터바 */
+    --gap-card-x: 16px;
+    --gap-card-y: 16px;
+  }
+
+  /* 홈 — 헤더·푸터를 뺀 높이의 세로 중앙에 콘텐츠를 놓는다.
+     margin-block:auto 는 남는 공간이 없으면 0 이 되므로, 콘텐츠가 길어지면
+     자동으로 상단 정렬 + 스크롤로 넘어간다(justify-content:center 의 잘림 문제 없음). */
+  .home-spacer { display: none; }
+  .home-stack {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: var(--home-container);
+    margin-inline: auto;
+    margin-block: auto;
+    padding-block: 24px;
+  }
+  .home-body { flex: 0 0 auto; }
+  .home-heading { margin-bottom: var(--gap-sub-composer); }
+  .home-sub { margin-top: var(--gap-title-sub); }
+  .home-grid { margin-top: var(--gap-composer-chips); row-gap: var(--cat-row-gap); }
+}
+
+/* ── 워크스페이스 상세 프롬프트 카드 본문 ─────────────────────────────
+   카드가 콘텐츠 영역 전체 폭을 쓰므로, 768px 이상에서는 본문을 2열로 나눠
+   넓어진 공간을 활용한다. DOM 순서를 그대로 흘려보내므로 입력 항목 순서는 유지된다.
+   기본은 전체 폭이고, 한 줄 입력(.fc-single = FcInput·FcSelect)을 가진 그룹만 반 폭을 쓴다
+   — 긴 텍스트 입력·미리보기·목록·슬라이더가 억지로 한 줄에 들어가지 않게 하기 위함. */
+@media (min-width: 768px) {
+  .fc-body {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    align-content: start;
+    /* 암묵적 행을 항상 콘텐츠 높이로 잡는다.
+       이게 없으면 컨테이너 높이가 확정(flex:1 + overflow:auto)된 상태에서 auto 행이
+       접혔을 때 크기로 남아, 미리보기를 펼치면 아이템이 행 밖으로 넘쳐 아래 필드와 겹친다. */
+    grid-auto-rows: min-content;
+  }
+  .fc-body > * {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+  .fc-body > *:has(> .fc-single) {
+    grid-column: span 1;
+  }
 }
 
 @theme inline {
@@ -194,3 +317,6 @@
     line-height: 1.5;
   }
 }
+
+/* 컴포저 하단 칩 줄 — 가로 스크롤은 살리고 스크롤바만 감춘다(전송 버튼은 이 영역 밖에 고정). */
+.composer-chips-scroll::-webkit-scrollbar { display: none; }
