@@ -1,0 +1,107 @@
+/* ── 서식 채우기(formfill) 디자인 토큰 ──────────────────────────────────────
+   출처: Claude Design 프로젝트의 EditorLightDark.dc.html / DoneLightDark.dc.html
+
+   스코프 규칙 (중요)
+   - 모든 토큰은 `.ff-root` 아래에서만 정의된다. :root 에 올리지 않으므로
+     App.tsx 의 기존 화면(인라인 hex)에는 어떤 영향도 주지 않는다.
+   - 다크 전환도 `.ff-root.ff-dark` 로만 일어난다. 전역 `.dark` 클래스와
+     무관하게 formfill 서브트리 안에서만 테마가 바뀐다.
+   - A4 문서 내부 색(--ff-doc-*)은 두 테마에서 동일한 값을 쓴다.
+     다크모드에서도 문서는 흰 종이 그대로여야 하기 때문. */
+
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css');
+
+.ff-root {
+  /* 타이포 */
+  --ff-font: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, sans-serif;
+  --ff-font-sign: cursive;
+
+  /* 브랜드 — 테마 무관 */
+  --ff-brand: #2f6bff;
+  --ff-brand-hover: #245ae8;
+  --ff-brand-soft: #a9bcff;
+  --ff-focus-ring: rgba(47, 107, 255, 0.15);
+
+  /* 상태색 — 테마 무관 */
+  --ff-success: #16a34a;
+  --ff-success-strong: #22c55e;
+  --ff-sign: #8b5cf6;
+  --ff-sign-hover: #7c3aed;
+  --ff-photo: #0ea5b7;
+  --ff-photo-hover: #0c8f9f;
+  --ff-warn: #f5a623;
+
+  /* 표면 — 라이트 */
+  --ff-app: #f4f6fa;
+  --ff-panel: #ffffff;
+  --ff-card: #ffffff;
+  --ff-sub: #f5f7fa;
+  --ff-sub-2: #f2f5fa;
+  --ff-border: #eaeef4;
+  --ff-border-strong: #e2e7f0;
+  --ff-success-bg: #e9f9ef;
+
+  /* 텍스트 — 라이트 */
+  --ff-text: #1c2434;
+  --ff-text-2: #5a6578;
+  --ff-text-3: #8a94a6;
+  --ff-text-4: #a3adbd;
+
+  /* 입력 */
+  --ff-input-bg: #ffffff;
+  --ff-input-border: #d7deea;
+
+  /* A4 문서 내부 — 테마 무관 고정 (다크에서도 흰 종이) */
+  --ff-doc-paper: #ffffff;
+  --ff-doc-line: #333333;
+  --ff-doc-title: #111111;
+  --ff-doc-sub: #555555;
+  --ff-doc-rule: #999999;
+  --ff-doc-shadow: 0 4px 24px rgba(30, 45, 80, 0.1);
+
+  /* 형태 */
+  --ff-radius-card: 16px;
+  --ff-radius-ctl: 12px;
+  --ff-radius-sm: 9px;
+  --ff-shadow-card: 0 2px 14px rgba(30, 45, 80, 0.05);
+  --ff-shadow-pop: 0 16px 40px rgba(20, 28, 45, 0.16);
+
+  font-family: var(--ff-font);
+  color: var(--ff-text);
+}
+
+.ff-root.ff-dark {
+  /* 표면 — 다크 */
+  --ff-app: #0c0f16;
+  --ff-panel: #12161d;
+  --ff-card: #1b2230;
+  --ff-sub: #1b2230;
+  --ff-sub-2: #1a2231;
+  --ff-border: #2b3446;
+  --ff-border-strong: #242c3c;
+  --ff-success-bg: #12331f;
+
+  /* 텍스트 — 다크 */
+  --ff-text: #e6eaf2;
+  --ff-text-2: #aeb8c8;
+  --ff-text-3: #828d9f;
+  --ff-text-4: #788397;
+
+  /* 입력 */
+  --ff-input-bg: #12161d;
+  --ff-input-border: #2b3446;
+
+  --ff-shadow-card: 0 2px 14px rgba(0, 0, 0, 0.35);
+  --ff-shadow-pop: 0 16px 40px rgba(0, 0, 0, 0.55);
+  /* --ff-doc-* 는 의도적으로 재정의하지 않는다 (문서는 항상 흰 종이) */
+}
+
+/* 공통 인터랙션 — 스코프 안에서만 */
+.ff-root :focus-visible {
+  outline: none;
+  border-color: var(--ff-brand);
+  box-shadow: 0 0 0 3px var(--ff-focus-ring);
+}
+.ff-root ::placeholder {
+  color: var(--ff-text-4);
+}

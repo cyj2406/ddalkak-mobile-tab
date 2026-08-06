@@ -10,6 +10,8 @@ import imgUserAvatar from "@/imports/새대화딸깍/ec4bf4c83826b512a10ccb46952
 
 import { MobileEditorNotice } from "@/app/components/viewer/MobileEditorNotice";
 import { ScrollableChips } from "@/app/components/common/ScrollableChips";
+// [formfill 임시] ?formfill=1 확인용. 2단계에서 실제 레이아웃을 붙이면 이 import 와 아래 분기 3줄을 지운다.
+import FormFillPlayground from "@/app/components/formfill/__dev__/FormFillPlayground";
 
 
 // ─── 타입 ──────────────────────────────────────────────────────────────────────
@@ -3639,7 +3641,12 @@ function Footer() {
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
+// [formfill 임시] 모듈 로드 시 1회만 판정 — 렌더 중에 값이 바뀌지 않아 훅 순서에 영향이 없다.
+const FORMFILL_DEV = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("formfill") === "1";
+
 export default function App() {
+  if (FORMFILL_DEV) return <FormFillPlayground />; // [formfill 임시] 이 줄과 위 2줄, import 1줄만 지우면 원상 복구
+
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [screen, setScreen] = useState<Screen>("home");
   const [creditOpen, setCreditOpen] = useState(false);
