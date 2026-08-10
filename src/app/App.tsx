@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, type ReactNode } from "react";
-import { HelpCircle, Settings as SettingsIcon, Users, Mail, LogOut, Palette, Bell, Brain, Coins, Monitor, Sun, Moon, RefreshCw, FileText, FileVideo, Compass, Image as ImageIcon, Download, X as XIcon, ChevronDown, Play, Volume2, Maximize2, Minimize2, BookOpen, Search, Plus, Upload, Check } from "lucide-react";
+import { HelpCircle, Settings as SettingsIcon, Users, Mail, LogOut, Palette, Bell, Brain, Coins, Monitor, Sun, Moon, RefreshCw, FileText, FileVideo, FileSpreadsheet, FileType2, Compass, Image as ImageIcon, X as XIcon, Play, Volume2, Maximize2, Minimize2, BookOpen, Search, Plus, Upload, Check } from "lucide-react";
 
 // ── 공통 에셋 ──────────────────────────────────────────────────────────────────
 import svgPaths from "@/imports/새대화딸깍/svg-yz49hawimu";
@@ -12,6 +12,11 @@ import TabletEditorShell from "@/app/components/viewer/TabletEditorShell";
 import TabletVideoResultViewer from "@/app/components/viewer/TabletVideoResultViewer";
 import TabletDocEditorViewer from "@/app/components/viewer/TabletDocEditorViewer";
 import TabletMiniEditor from "@/app/components/viewer/TabletMiniEditor";
+import TabletResultViewer from "@/app/components/viewer/TabletResultViewer";
+import {
+  FILE_TYPE_META, fileNameFor, resolveFileType,
+  type ResultVersionInfo, type ViewerFileType,
+} from "@/app/components/viewer/viewerChrome";
 import TutorialTour, { type TutorialStepConfig } from "@/app/components/common/TutorialTour";
 import { MobileEditorNotice } from "@/app/components/viewer/MobileEditorNotice";
 import { ScrollableChips } from "@/app/components/common/ScrollableChips";
@@ -1842,7 +1847,9 @@ function AIAgentScreen({ title, category, desc, filterTabs, cards, cardRatio = "
   cards: { title: string }[];
   cardRatio?: string;
   wsCategory?: WorkspaceCategory;
-  onWorkspace?: (templateName: string) => void;
+  /** 템플릿 적용 — 템플릿명과 함께 진입 시점의 필터 탭 라벨(워드·한글·엑셀·논문·영상…)을 넘긴다.
+      이 값이 결과물의 확장자와 뷰어 상단바 구성을 결정한다. */
+  onWorkspace?: (templateName: string, tabLabel: string) => void;
 }) {
   const [activeTab, setActiveTab] = useState(0);
   const [sortOption, setSortOption] = useState<SortOption>("인기순");
@@ -1986,16 +1993,16 @@ function AIAgentScreen({ title, category, desc, filterTabs, cards, cardRatio = "
       {visibleCards.length > 0 ? (
         <div
           data-tutorial="template-grid"
-          /* 1024px 이상 3열, 1200px 이상 4열 — 768~1023px 은 2열(태블릿에서 카드가 너무 작아지지 않게).
+          /* 모바일 2열, 태블릿(768~1199px) 3열, 1200px 이상 4열 — 즐겨찾기 화면과 동일한 기준.
              카드 비율(cardRatio)은 폭에 맞춰 그대로 유지된다 */
-          className="grid grid-cols-2 lg:max-wide:grid-cols-3 wide:grid-cols-4"
+          className="grid grid-cols-2 md:max-wide:grid-cols-3 wide:grid-cols-4"
           style={{
             gap: "var(--gap-card-y) var(--gap-card-x)",
             padding: `var(--gap-chips-grid) var(--gap-screen-x) var(--gap-grid-bottom)`,
           }}
         >
           {visibleCards.map((card, i) => (
-            <TemplateCard key={i} title={card.title} ratio={cardRatio} onApply={wsCategory ? () => onWorkspace?.(card.title) : undefined} />
+            <TemplateCard key={i} title={card.title} ratio={cardRatio} onApply={wsCategory ? () => onWorkspace?.(card.title, filterTabs[activeTab]) : undefined} />
           ))}
         </div>
       ) : cards.length === 0 ? (
@@ -3532,8 +3539,8 @@ const CARD_SHELL: React.CSSProperties = {
 // min-w-0 은 긴 내용이 카드를 밀어 가로 스크롤을 만들지 않게 하는 안전장치.
 const CARD_SHELL_CLASS = "w-full min-w-0 self-stretch";
 function CardBody({ children }: { children: React.ReactNode }) {
-  // fc-body: 768px 이상에서 2열 그리드로 전환된다(theme.css).
-  // 한 줄 입력(FcInput·FcSelect) 그룹만 반 폭을 쓰고, 긴 입력·미리보기·목록은 전체 폭을 유지한다.
+  // fc-body: 모든 입력 항목이 본문 전체 폭을 쓰는 1열 레이아웃(theme.css).
+  // FcInput·FcTextarea·FcSelect 가 같은 좌우 정렬선을 공유하도록 폭 기준을 full-width 로 통일했다.
   return (
     <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "none" } as React.CSSProperties}
          className="fc-body flex flex-col gap-5 px-[18px] md:px-6 pt-[18px] pb-6">
@@ -4192,17 +4199,27 @@ function FormCardSlot({ category, onGenerate }: { category: WorkspaceCategory; o
 }
 
 // ─── 생성 결과물 카드 ─────────────────────────────────────────────────────────
+// 미리보기 본문의 생김새를 고르는 값. 파일 형식(ViewerFileType)과 1:1은 아니다
+// — 예를 들어 docx·hwpx·xlsx·pdf 는 모두 문서 페이지 미리보기를 쓴다.
 type ResultCardVariant = "slides" | "word" | "mp4" | "html" | "png";
 
-function WsResultCard({ variant, filename, onOpen }: { variant: ResultCardVariant; filename: string; onOpen: () => void }) {
-  const meta: Record<Exclude<ResultCardVariant, "slides">, { sub: string; icon: React.ReactNode }> = {
-    word: { sub: "Word 파일", icon: <FileText size={24} color="#0a0a0a" strokeWidth={1.6} /> },
-    mp4:  { sub: "MP4 파일",  icon: <FileVideo size={24} color="#0a0a0a" strokeWidth={1.6} /> },
-    html: { sub: "HTML 파일", icon: <Compass size={24} color="#0a0a0a" strokeWidth={1.6} /> },
-    png:  { sub: "PNG 파일",  icon: <ImageIcon size={24} color="#0a0a0a" strokeWidth={1.6} /> },
-  };
+/** 파일 형식 → 결과물 카드/미리보기 아이콘 */
+const FILE_TYPE_ICON: Record<ViewerFileType, React.ReactNode> = {
+  docx: <FileText size={24} color="#0a0a0a" strokeWidth={1.6} />,
+  hwpx: <FileText size={24} color="#0a0a0a" strokeWidth={1.6} />,
+  xlsx: <FileSpreadsheet size={24} color="#0a0a0a" strokeWidth={1.6} />,
+  pdf:  <FileType2 size={24} color="#0a0a0a" strokeWidth={1.6} />,
+  pptx: <FileText size={24} color="#0a0a0a" strokeWidth={1.6} />,
+  mp4:  <FileVideo size={24} color="#0a0a0a" strokeWidth={1.6} />,
+  html: <Compass size={24} color="#0a0a0a" strokeWidth={1.6} />,
+  png:  <ImageIcon size={24} color="#0a0a0a" strokeWidth={1.6} />,
+};
+
+function WsResultCard({ variant, fileType, filename, onOpen }: {
+  variant: ResultCardVariant; fileType: ViewerFileType; filename: string; onOpen: () => void;
+}) {
   const isSlides = variant === "slides";
-  const m = isSlides ? null : meta[variant];
+  const m = isSlides ? null : { sub: FILE_TYPE_META[fileType].label, icon: FILE_TYPE_ICON[fileType] };
 
   return (
     <div className="bg-white rounded-[18px] border border-[#e8ecf2] flex items-center gap-3 px-3.5 py-3.5"
@@ -4266,89 +4283,103 @@ function PptSlidesPanel({ templateName }: { templateName: string }) {
   );
 }
 
+/**
+ * 결과물 버전 — 목업. 같은 워크스페이스에서 재생성할 때마다 쌓이는 버전 목록을 가정한다.
+ * 데스크톱(1200px 이상) 결과물 뷰어의 다운로드 드롭다운이 이 값을 그대로 보여준다:
+ * 현재 버전 = 마지막 항목, 전체 버전 개수 = 길이.
+ */
+const RESULT_VERSIONS = ["1.0", "2.0"];
+
+/** 필터 탭이 "전체"일 때 쓰는 카테고리별 기본 결과물 형식 */
+const CATEGORY_FILE_TYPE: Record<WorkspaceCategory, ViewerFileType> = {
+  docs: "docx", ppt: "pptx", video: "mp4", landing: "html", image: "png", detail: "html",
+};
+
+/** 문서 계열(docx·hwpx·xlsx·pdf)은 미리보기 본문을 문서 페이지로 공유한다. */
+const FILE_TYPE_VARIANT: Record<ViewerFileType, ResultCardVariant> = {
+  docx: "word", hwpx: "word", xlsx: "word", pdf: "word",
+  pptx: "slides", mp4: "mp4", html: "html", png: "png",
+};
+
 const RESULT_CONFIG: Record<WorkspaceCategory, {
   intro: string;
-  summary: [string, string][];
-  variant: ResultCardVariant;
-  file: (slug: string) => string;
+  /** 산출물 요약 — 확장자 문구가 결과물 형식을 따라가도록 형식을 받는다 */
+  summary: (t: ViewerFileType) => [string, string][];
+  /** 템플릿명과 무관하게 이름이 고정된 결과물(웹 페이지·슬라이드 덱) */
+  fixedName?: string;
   credit: number;
   agent: string;
 }> = {
   ppt: {
     intro: "요청하신 디자인 톤앤매너를 반영하여 투자자의 시선을 사로잡는 고품질 슬라이드 덱을 구성하였습니다.",
-    summary: [
+    summary: () => [
       ["온라인 슬라이드 덱", "presentation.html (슬라이드 뷰어/에디터 통합 파일)"],
       ["오프라인 발표자료", "발표 및 배포용 PPTX 파일"],
       ["슬라이드별 이미지", "각 슬라이드의 원본 디자인 이미지 7장"],
     ],
-    variant: "slides",
-    file: () => "",
+    fixedName: "presentation.pptx",
     credit: 623,
     agent: "image-ppt",
   },
   docs: {
     intro: "표준 서식과 필수 조항을 반영하여 바로 사용할 수 있는 문서를 작성하였습니다.",
-    summary: [
-      ["편집용 문서", "Word에서 편집 가능한 .docx 파일"],
+    summary: (t) => [
+      ["편집용 문서", `${FILE_TYPE_META[t].label} — .${FILE_TYPE_META[t].ext} 형식으로 편집 가능`],
       ["서식", "표준 계약 서식 및 조항 자동 반영"],
     ],
-    variant: "word",
-    file: (s) => `${s}.docx`,
     credit: 48,
     agent: "document-generation",
   },
   video: {
     intro: "요청하신 콘셉트와 톤앤매너를 반영하여 완성도 높은 영상을 제작하였습니다.",
-    summary: [
+    summary: () => [
       ["영상 파일", "1080p 해상도의 MP4 파일"],
       ["구성", "인트로 · 본문 · 아웃트로 자동 편집"],
     ],
-    variant: "mp4",
-    file: (s) => `${s}.mp4`,
     credit: 340,
     agent: "video-generation",
   },
   landing: {
     intro: "전환에 최적화된 반응형 랜딩페이지를 제작하였습니다.",
-    summary: [
+    summary: () => [
       ["웹 페이지", "반응형 HTML 파일 (모바일·데스크톱 대응)"],
       ["구성", "히어로 · 기능 · 후기 · CTA 섹션 포함"],
     ],
-    variant: "html",
-    file: () => "presentation.html",
+    fixedName: "presentation.html",
     credit: 185,
     agent: "landing-generation",
   },
   image: {
     intro: "요청하신 콘셉트를 반영하여 고해상도 이미지를 생성하였습니다.",
-    summary: [
+    summary: () => [
       ["이미지 파일", "고해상도 PNG 파일"],
       ["구성", "메인 비주얼 및 카피 자동 배치"],
     ],
-    variant: "png",
-    file: (s) => `${s}.png`,
     credit: 120,
     agent: "image-generation",
   },
   detail: {
     intro: "제품의 매력을 강조한 반응형 상세페이지를 제작하였습니다.",
-    summary: [
+    summary: () => [
       ["웹 페이지", "반응형 HTML 파일"],
       ["구성", "제품 소개 · 특징 · 리뷰 섹션 포함"],
     ],
-    variant: "html",
-    file: () => "detail_page.html",
+    fixedName: "detail_page.html",
     credit: 160,
     agent: "detail-generation",
   },
 };
 
-function WsResult({ category, templateName }: { category: WorkspaceCategory; templateName: string }) {
+function WsResult({ category, templateName, fileType }: {
+  category: WorkspaceCategory; templateName: string; fileType: ViewerFileType;
+}) {
   const r = RESULT_CONFIG[category];
   const slug = templateName.trim().replace(/\s+/g, "_").replace(/[()]/g, "");
-  const filename = r.file(slug);
-  const viewerName = r.variant === "slides" ? "presentation.html" : filename;
+  // 파일명 확장자는 진입한 카테고리(필터 탭)가 정한 결과물 형식을 따른다.
+  const filename = r.fixedName ?? fileNameFor(slug, fileType);
+  const variant = FILE_TYPE_VARIANT[fileType];
   const [viewerOpen, setViewerOpen] = useState(false);
+  const versions = { version: RESULT_VERSIONS[RESULT_VERSIONS.length - 1], count: RESULT_VERSIONS.length };
 
   return (
     <div className="flex flex-col gap-3.5" style={{ animation: "wsFadeIn 450ms ease" }}>
@@ -4361,7 +4392,7 @@ function WsResult({ category, templateName }: { category: WorkspaceCategory; tem
 
         <p style={{ ...f, fontWeight: 700, fontSize: 15, color: "#0a0a0a", letterSpacing: "-0.3px", marginTop: 18, marginBottom: 8 }}>📄 생성된 산출물 요약</p>
         <div className="flex flex-col gap-2">
-          {r.summary.map(([label, value], i) => (
+          {r.summary(fileType).map(([label, value], i) => (
             <div key={i} className="flex gap-2" style={{ ...f, fontSize: 13.5, lineHeight: 1.6 }}>
               <span style={{ color: "#94a3b8" }}>•</span>
               <p style={{ color: "#374151" }}>
@@ -4380,7 +4411,7 @@ function WsResult({ category, templateName }: { category: WorkspaceCategory; tem
       {category === "ppt" && <PptSlidesPanel templateName={templateName} />}
 
       {/* 결과물 카드 (카테고리별) */}
-      <WsResultCard variant={r.variant} filename={filename} onOpen={() => setViewerOpen(true)} />
+      <WsResultCard variant={variant} fileType={fileType} filename={filename} onOpen={() => setViewerOpen(true)} />
 
       {/* 사용 크레딧 배지 — 맨 아래 */}
       <div className="flex items-center gap-2 px-1">
@@ -4393,7 +4424,14 @@ function WsResult({ category, templateName }: { category: WorkspaceCategory; tem
 
       {/* 결과 확인하기 → 전체화면 뷰어 */}
       {viewerOpen && (
-        <ResultViewer variant={r.variant} filename={viewerName} templateName={templateName} onClose={() => setViewerOpen(false)} />
+        <ResultViewer
+          variant={variant}
+          fileType={fileType}
+          filename={filename}
+          templateName={templateName}
+          versions={versions}
+          onClose={() => setViewerOpen(false)}
+        />
       )}
     </div>
   );
@@ -4438,71 +4476,116 @@ function useIsTabletRange() {
 }
 
 // ─── 결과물 뷰어 (전체화면) ────────────────────────────────────────────────────
-function ResultViewer({ variant, filename, templateName, onClose }: {
-  variant: ResultCardVariant; filename: string; templateName: string; onClose: () => void;
+// 상단바 구성은 파일 형식(fileType)이 정한다 — viewerChrome.ts의 VIEWER_CHROME.
+// 여기서는 형식에 맞는 뷰어 컴포넌트를 고르고, 편집(연필)이 열 편집기를 연결한다.
+function ResultViewer({ variant, fileType, filename, templateName, versions, onClose }: {
+  variant: ResultCardVariant; fileType: ViewerFileType;
+  filename: string; templateName: string;
+  /** 다운로드 버전 드롭다운(1200px 이상)에 채울 값 */
+  versions?: ResultVersionInfo;
+  onClose: () => void;
 }) {
   const isTabletUp = useIsTabletUp();
+  // 뷰어에서 편집(연필)을 누르면 형식에 맞는 편집기로 넘어간다.
+  const [editing, setEditing] = useState(false);
+
+  const miniEditorMeta = {
+    png: { ratio: "4 / 5", size: "1024 × 1280 px", pages: 1 },
+    html: { ratio: "3 / 4", size: "1440 × 1920 px", pages: 1 },
+    slides: { ratio: "16 / 9", size: "1536 × 1024 px", pages: 7 },
+  } as const;
 
   // 태블릿 이상: 공통 태블릿 셸(56px 상단바 + safe-area)로 감싼다.
   if (isTabletUp) {
     // 영상 — 커스텀 컨트롤 플레이어 전용 뷰어
-    if (variant === "mp4") {
+    if (fileType === "mp4") {
       return (
-        <TabletVideoResultViewer fileName={filename} onClose={onClose} />
+        <TabletVideoResultViewer fileName={filename} versions={versions} onClose={onClose} />
       );
     }
-    // 문서(.docx) — 결과 확인하기를 누르면 곧바로 편집기 화면이 열리고,
-    // 편집 영역 안에 문서가 그대로 렌더된다.
-    if (variant === "word") {
+
+    // 이미지 · 랜딩페이지 — 편집이 곧 결과 확인이라 미니 에디터로 바로 연다
+    if (fileType === "png" || fileType === "html") {
+      const meta = miniEditorMeta[variant as keyof typeof miniEditorMeta];
       return (
-        <TabletDocEditorViewer fileName={filename} onBack={onClose} onClose={onClose}>
+        <TabletMiniEditor
+          fileName={filename}
+          ratio={meta.ratio}
+          canvasSize={meta.size}
+          pages={meta.pages}
+          onClose={onClose}
+        >
+          <div className="w-full h-full flex flex-col">
+            <ResultPreview variant={variant} templateName={templateName} />
+          </div>
+        </TabletMiniEditor>
+      );
+    }
+
+    // 프레젠테이션 — 뷰어의 편집은 미니 에디터로 이어진다
+    if (editing && fileType === "pptx") {
+      const meta = miniEditorMeta.slides;
+      return (
+        <TabletMiniEditor
+          fileName={filename}
+          ratio={meta.ratio}
+          canvasSize={meta.size}
+          pages={meta.pages}
+          onClose={() => setEditing(false)}
+        >
+          <div className="w-full h-full flex flex-col">
+            <ResultPreview variant="slides" templateName={templateName} />
+          </div>
+        </TabletMiniEditor>
+      );
+    }
+
+    // 문서 계열(docx·hwpx·xlsx·pdf) — 편집은 문서 편집기로 이어진다
+    if (editing) {
+      return (
+        <TabletDocEditorViewer fileName={filename} onBack={() => setEditing(false)} onClose={onClose}>
           <ResultPreview variant={variant} templateName={templateName} />
         </TabletDocEditorViewer>
       );
     }
-    // 이미지 · 랜딩페이지 · 프레젠테이션 — 미니 에디터로 연다
-    const editorMeta = {
-      png: { ratio: "4 / 5", size: "1024 × 1280 px", pages: 1 },
-      html: { ratio: "3 / 4", size: "1440 × 1920 px", pages: 1 },
-      slides: { ratio: "16 / 9", size: "1536 × 1024 px", pages: 7 },
-    } as const;
-    const meta = editorMeta[variant as keyof typeof editorMeta];
+
+    // 문서 계열 · 프레젠테이션 — 형식별 상단바를 가진 결과물 뷰어
     return (
-      <TabletMiniEditor
+      <TabletResultViewer
+        fileType={fileType}
         fileName={filename}
-        ratio={meta.ratio}
-        canvasSize={meta.size}
-        pages={meta.pages}
+        versions={versions}
+        onEdit={() => setEditing(true)}
         onClose={onClose}
       >
-        <div className="w-full h-full flex flex-col">
-          <ResultPreview variant={variant} templateName={templateName} />
-        </div>
-      </TabletMiniEditor>
+        <ResultPreview variant={variant} templateName={templateName} />
+      </TabletResultViewer>
     );
   }
 
-  // 767px 이하: 기존 모바일 뷰어 그대로
+  // 767px 이하 — 상단바는 태블릿·데스크톱과 같은 구성을 그대로 쓰고,
+  // 상단바 아래에 "PC 에디터" 안내 스트립만 덧붙인다.
+  // 모바일에서는 편집기로 들어가지 않으므로 onEdit 은 넘기지 않는다.
+  if (fileType === "mp4") {
+    return (
+      <TabletVideoResultViewer
+        fileName={filename}
+        versions={versions}
+        notice={<MobileEditorNotice />}
+        onClose={onClose}
+      />
+    );
+  }
   return (
-    <div className="fixed inset-0 z-[95] bg-white flex flex-col" style={{ animation: "wsFadeIn 200ms ease" }}>
-      {/* 헤더 */}
-      <header className="h-14 flex items-center gap-1 px-3 shrink-0 bg-white">
-        <div className="flex-1 min-w-0 flex items-center gap-1">
-          <span className="truncate" style={{ ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a", letterSpacing: "-0.3px" }}>{filename}</span>
-          <ChevronDown size={15} color="#94a3b8" className="shrink-0" />
-        </div>
-        <button className="size-9 rounded-[10px] flex items-center justify-center shrink-0"><Download size={18} color="#475569" /></button>
-        <button onClick={onClose} className="size-9 rounded-[10px] flex items-center justify-center shrink-0"><XIcon size={19} color="#475569" /></button>
-      </header>
-
-      {/* PC 에디터 안내 — 모바일에서만, 헤더 아래 full-bleed 스트립으로 고정 (모든 카테고리 공통) */}
-      <MobileEditorNotice />
-
-      {/* 콘텐츠 스크롤 영역 */}
-      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col" style={{ scrollbarWidth: "none" }}>
-        <ResultPreview variant={variant} templateName={templateName} />
-      </div>
-    </div>
+    <TabletResultViewer
+      fileType={fileType}
+      fileName={filename}
+      versions={versions}
+      notice={<MobileEditorNotice />}
+      onClose={onClose}
+    >
+      <ResultPreview variant={variant} templateName={templateName} />
+    </TabletResultViewer>
   );
 }
 
@@ -4690,8 +4773,10 @@ function ResultPreview({ variant, templateName }: { variant: ResultCardVariant; 
 }
 
 // ─── Workspace ────────────────────────────────────────────────────────────────
-function WorkspaceScreen({ category, templateName, onBack, onCreditClick, onBellClick }: {
+function WorkspaceScreen({ category, templateName, fileType, onBack, onCreditClick, onBellClick }: {
   category: WorkspaceCategory; templateName: string;
+  /** 진입한 카테고리(필터 탭)가 정한 결과물 형식 — 확장자와 뷰어 상단바를 함께 결정한다 */
+  fileType: ViewerFileType;
   onBack: () => void; onCreditClick: () => void; onBellClick: () => void;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -4816,7 +4901,7 @@ function WorkspaceScreen({ category, templateName, onBack, onCreditClick, onBell
           <FormCardSlot category={category} onGenerate={handleGenerate} />
 
           {/* 생성 결과물 — 생성하기 클릭 후 노출 */}
-          {generated && <WsResult category={category} templateName={templateName} />}
+          {generated && <WsResult category={category} templateName={templateName} fileType={fileType} />}
 
         </div>
       </div>
@@ -4862,7 +4947,17 @@ export default function App() {
   const [creditOpen, setCreditOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [workspace, setWorkspace] = useState<{ category: WorkspaceCategory; templateName: string } | null>(null);
+  // fileType — "템플릿 적용하기"로 들어온 카테고리(필터 탭)가 정한 결과물 형식.
+  // 워드 → .docx / 한글 → .hwpx / 엑셀 → .xlsx / 논문 → .pdf / 영상 → .mp4
+  const [workspace, setWorkspace] = useState<
+    { category: WorkspaceCategory; templateName: string; fileType: ViewerFileType } | null
+  >(null);
+  const openWorkspace = (category: WorkspaceCategory) => (templateName: string, tabLabel: string) =>
+    setWorkspace({
+      category,
+      templateName,
+      fileType: resolveFileType(tabLabel, CATEGORY_FILE_TYPE[category]),
+    });
 
   // 서식 채우기 — screen 문자열만으로는 "어떤 서식인지"를 담을 수 없어 대상만 따로 든다.
   const [fillTarget, setFillTarget] = useState<{ id: string; title: string } | null>(null);
@@ -4955,7 +5050,7 @@ export default function App() {
           filterTabs={["전체", "이미지", "카드뉴스", "상세페이지"]}
           cards={imageAICards}
           wsCategory="image"
-          onWorkspace={(t) => setWorkspace({ category: "image", templateName: t })}
+          onWorkspace={openWorkspace("image")}
         />
       )}
       {screen === "landing-ai" && (
@@ -4966,7 +5061,7 @@ export default function App() {
           filterTabs={["전체", "SaaS", "서비스", "이벤트"]}
           cards={landingAICards}
           wsCategory="landing"
-          onWorkspace={(t) => setWorkspace({ category: "landing", templateName: t })}
+          onWorkspace={openWorkspace("landing")}
         />
       )}
       {screen === "forms-ai" && (
@@ -4988,7 +5083,7 @@ export default function App() {
           cards={docsCards}
           cardRatio="140%"
           wsCategory="docs"
-          onWorkspace={(t) => setWorkspace({ category: "docs", templateName: t })}
+          onWorkspace={openWorkspace("docs")}
         />
       )}
       {screen === "audio-ai" && (
@@ -5009,7 +5104,7 @@ export default function App() {
           cards={pptAICards}
           cardRatio="81%"
           wsCategory="ppt"
-          onWorkspace={(t) => setWorkspace({ category: "ppt", templateName: t })}
+          onWorkspace={openWorkspace("ppt")}
         />
       )}
       {screen === "video-ai" && (
@@ -5021,7 +5116,7 @@ export default function App() {
           cards={videoAICards}
           cardRatio="203%"
           wsCategory="video"
-          onWorkspace={(t) => setWorkspace({ category: "video", templateName: t })}
+          onWorkspace={openWorkspace("video")}
         />
       )}
       {screen === "favorites" && <FavoritesScreen />}
@@ -5077,6 +5172,7 @@ export default function App() {
         <WorkspaceScreen
           category={workspace.category}
           templateName={workspace.templateName}
+          fileType={workspace.fileType}
           onBack={() => setWorkspace(null)}
           onCreditClick={() => setCreditOpen(true)}
           onBellClick={() => setNotifOpen(true)}

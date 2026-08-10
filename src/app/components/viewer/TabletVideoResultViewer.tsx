@@ -1,23 +1,23 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Film, Maximize2, Minimize2, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import TabletEditorShell from "@/app/components/viewer/TabletEditorShell";
+import { type ResultVersionInfo } from "@/app/components/viewer/viewerChrome";
 
 /**
  * 태블릿(768~1024px, 터치) 영상 결과 뷰어.
  * 1단계에서 만든 TabletEditorShell을 그대로 감싸 상단바·규격·진입 애니메이션을 공유한다.
  *
+ * - 상단바는 fileType="mp4" 구성(VIEWER_CHROME) — 페이지네이션 없음,
+ *   우측은 다운로드(버전 드롭다운)·공유·구분선·확대·닫기
+ * - 상단바 아래는 곧바로 플레이어다. 회색 띠 없이 "편집기 열기"만 영상 위 우상단에 띄운다
+ *   (768px 미만에서는 이 버튼을 감춘다).
  * - 16:9 플레이어를 폭 100%로, 남는 공간의 상하 중앙에 배치
  * - 커스텀 컨트롤(재생/일시정지 · 진행바 · 시간 · 음소거 · 전체화면)
- * - 편집 기능 없음. 상단바의 다운로드만 주요 동작으로 강조
  */
 
 const C = {
-  primary: "#3B5BFF",
-  bg: "#F5F7FA",
   card: "#FFFFFF",
   text: "#1A1D29",
-  sub: "#8A90A2",
-  line: "#E7EAF0",
 } as const;
 
 const font = { fontFamily: "'Pretendard Variable', Pretendard, sans-serif" };
@@ -41,14 +41,36 @@ export interface TabletVideoResultViewerProps {
   src?: string;
   poster?: string;
   duration?: number;
+  /** 다운로드 버튼에 붙는 버전 드롭다운 값 (데스크톱·태블릿 공통) */
+  versions?: ResultVersionInfo;
   onBack?: () => void;
   onDownload?: () => void;
   onShare?: () => void;
   onClose?: () => void;
-  /** 상단바 연필 — 프로덕션의 "수정 요청" 자리 */
+  /** 본문 "편집기 열기" — 프로덕션의 "수정 요청" 자리. 상단바에는 편집 아이콘을 두지 않는다. */
   onEdit?: () => void;
-  /** 상단바 필름 아이콘 — 장면 목록 */
-  onScenes?: () => void;
+  /** 상단바 바로 아래 full-bleed 슬롯. 모바일의 "PC 에디터" 안내 스트립이 여기 들어간다. */
+  notice?: React.ReactNode;
+}
+
+/**
+ * 플레이어 위에 얹는 알약 버튼 — 편집기 열기.
+ * 검은 영상 위에 바로 놓이므로 옅은 테두리 대신 짙은 그림자로 경계를 만든다.
+ */
+function OverlayButton({
+  label, icon, onClick,
+}: { label: string; icon: React.ReactNode; onClick?: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="shrink-0 h-10 px-3.5 rounded-[10px] flex items-center gap-2 transition-colors active:bg-[#EDF0F5] hover:bg-[#F2F4F8]"
+      style={{ background: C.card, boxShadow: "0px 4px 16px rgba(0,0,0,0.32)" }}
+    >
+      <span className="shrink-0" style={{ color: C.text, display: "flex" }}>{icon}</span>
+      <span style={{ fontSize: 13.5, fontWeight: 600, color: C.text, whiteSpace: "nowrap" }}>{label}</span>
+    </button>
+  );
 }
 
 export default function TabletVideoResultViewer({
@@ -57,12 +79,13 @@ export default function TabletVideoResultViewer({
   src,
   poster,
   duration: durationProp = MOCK.duration,
+  versions,
   onBack,
   onDownload,
   onShare,
   onClose,
   onEdit,
-  onScenes,
+  notice,
 }: TabletVideoResultViewerProps) {
   const playerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -158,29 +181,21 @@ export default function TabletVideoResultViewer({
 
   return (
     <TabletEditorShell
+      fileType="mp4"
       fileName={fileName}
       files={files ?? [fileName]}
-      titleAlign="left"
+      versions={versions}
       bleed
       onBack={onBack}
       onDownload={onDownload}
       onShare={onShare}
       onClose={onClose}
       onEdit={onEdit}
-      extraActions={
-        <button
-          type="button"
-          aria-label="장면 보기"
-          onClick={onScenes}
-          className="shrink-0 w-11 h-11 rounded-[12px] flex items-center justify-center active:bg-[#EDF0F5]"
-          style={{ color: C.text }}
-        >
-          <Film size={20} strokeWidth={1.8} />
-        </button>
-      }
+      toolbar={notice}
     >
       <div className="h-full flex flex-col" style={font}>
-        {/* ── 플레이어 — 프로덕션과 동일하게 화면을 꽉 채우고 영상은 레터박스로 담긴다 ── */}
+        {/* ── 플레이어 — 상단바 바로 아래부터 화면을 꽉 채우고 영상은 레터박스로 담긴다.
+            편집기 열기는 별도 띠 없이 플레이어 위 우상단에 띄운다 ── */}
         <div ref={playerRef} className="relative flex-1 min-h-0" style={{ background: "#000000" }}>
           {src ? (
             <video
@@ -204,6 +219,13 @@ export default function TabletVideoResultViewer({
               />
             </div>
           )}
+
+          {/* 편집기 열기 — 영상 위 우상단. 태블릿(768px) 이상에서만 노출한다
+              (모바일은 편집기로 들어가지 않고 "PC 에디터" 안내만 띄운다).
+              가운데 재생 버튼이 inset-0 로 화면 전체를 덮으므로 z-20 으로 그 위에 올린다 */}
+          <div className="hidden md:block absolute right-4 top-4 z-20">
+            <OverlayButton label="편집기 열기" icon={<Film size={16} strokeWidth={1.8} />} onClick={onEdit} />
+          </div>
 
           {/* 가운데 큰 재생 버튼 — 정지 상태에서만 */}
           {!playing && (

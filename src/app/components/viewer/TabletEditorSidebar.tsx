@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import {
-  ChevronDown, Copy, Eye, FileText, Heading, Image as ImageIcon, Lock,
-  MousePointer2, Square, Type, Upload,
+  ArrowDown, ArrowUp, Copy, Crop, Eye, FileText, FlipHorizontal2, FlipVertical2,
+  Heading, Image as ImageIcon, Lock, MousePointer2, RotateCcw, RotateCw, Square, Trash2, Type, Upload,
 } from "lucide-react";
 
 /**
@@ -134,96 +134,208 @@ function AddButton({ icon, label }: { icon: React.ReactNode; label: string }) {
   );
 }
 
-/* ── 디자인 탭 — 요소가 선택됐을 때의 속성 편집 ───────────────────── */
+/* ── 디자인 탭 — 요소가 선택됐을 때의 속성 편집 ─────────────────────
+   선택한 요소 종류(칩) → 크기/위치 → 회전 → 정렬 → 벡터화 → 변형 → 조정 순.
+   섹션 사이는 얇은 구분선으로 나눈다. */
 function PropertyPanel() {
+  const [rotation, setRotation] = useState(0);
+  const [align, setAlign] = useState(4);
+  const [adjust, setAdjust] = useState({ 밝기: 0, 대비: 0, 채도: 0 });
+
   return (
-    <div className="p-4 flex flex-col gap-4">
-      <Section title="텍스트">
-        <Row label="글꼴">
-          <Select value="Noto Sans KR" />
-        </Row>
-        <Row label="크기">
-          <Select value="120px" />
-        </Row>
-        <Row label="굵기">
-          <Select value="Bold" />
-        </Row>
-      </Section>
+    <div className="flex flex-col">
+      {/* 선택 요소 + 순서·복제·삭제 */}
+      <div className="px-4 py-3 flex items-center gap-1">
+        <span
+          className="shrink-0 h-8 px-2.5 rounded-full flex items-center gap-1.5"
+          style={{ background: C.card, border: `1px solid ${C.primary}` }}
+        >
+          <ImageIcon size={13} strokeWidth={1.9} color={C.primary} />
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: C.primary }}>이미지</span>
+        </span>
+        <div className="flex-1 min-w-0" />
+        <MiniIcon label="앞으로 가져오기"><ArrowUp size={16} strokeWidth={1.9} /></MiniIcon>
+        <MiniIcon label="뒤로 보내기"><ArrowDown size={16} strokeWidth={1.9} /></MiniIcon>
+        <MiniIcon label="복제"><Copy size={15} strokeWidth={1.9} /></MiniIcon>
+        <MiniIcon label="삭제" danger><Trash2 size={15} strokeWidth={1.9} /></MiniIcon>
+      </div>
 
-      <Section title="색상">
-        <div className="flex items-center gap-2">
-          {PALETTE.map((c) => (
-            <button
-              key={c}
-              aria-label={c}
-              className="rounded-[10px]"
-              style={{ width: 36, height: 36, background: c, border: `1px solid ${C.line}` }}
-            />
-          ))}
+      <Divider />
+
+      <Section title="크기 / 위치">
+        <div className="grid grid-cols-4 gap-1.5">
+          <Field label="X" value="0" />
+          <Field label="Y" value="0" />
+          <Field label="W" value="1536" />
+          <Field label="H" value="1024" />
         </div>
       </Section>
 
-      <Section title="위치 · 크기">
-        <div className="grid grid-cols-2 gap-2">
-          <Field label="X" value="120" />
-          <Field label="Y" value="248" />
-          <Field label="W" value="1080" />
-          <Field label="H" value="180" />
-        </div>
-      </Section>
+      {/* 회전 — 슬라이더 + 각도 입력 */}
+      <div className="px-4 pb-4 flex items-center gap-3">
+        <span className="shrink-0" style={{ width: 34, fontSize: 12.5, color: C.sub }}>회전</span>
+        <input
+          type="range"
+          aria-label="회전"
+          min={-180}
+          max={180}
+          value={rotation}
+          onChange={(e) => setRotation(Number(e.target.value))}
+          className="flex-1 min-w-0 cursor-pointer"
+          style={{ accentColor: C.primary }}
+        />
+        <span
+          className="shrink-0 h-9 w-[54px] rounded-[10px] flex items-center justify-center tabular-nums"
+          style={{ border: `1px solid ${C.line}`, fontSize: 13, fontWeight: 600, color: C.text }}
+        >
+          {rotation}
+        </span>
+        <span className="shrink-0" style={{ fontSize: 12, color: C.sub }}>°</span>
+      </div>
 
-      <Section title="정렬">
-        <div className="flex items-center gap-2">
-          {["왼쪽", "가운데", "오른쪽"].map((a) => (
+      {/* 정렬 — 3x3 */}
+      <div className="px-4 pb-4 flex items-start gap-3">
+        <span className="shrink-0" style={{ width: 34, fontSize: 12.5, color: C.sub, lineHeight: "34px" }}>정렬</span>
+        <div
+          className="grid grid-cols-3 rounded-[10px] overflow-hidden"
+          style={{ border: `1px solid ${C.line}`, width: 102 }}
+        >
+          {Array.from({ length: 9 }, (_, i) => (
             <button
-              key={a}
-              className="flex-1 h-10 rounded-[10px] active:bg-[#EDF0F5]"
-              style={{ border: `1px solid ${C.line}`, fontSize: 12.5, fontWeight: 600, color: C.text }}
+              key={i}
+              type="button"
+              aria-label={`정렬 ${i + 1}`}
+              aria-pressed={align === i}
+              onClick={() => setAlign(i)}
+              className="h-[34px] flex items-center justify-center transition-colors hover:bg-[#F5F7FA]"
+              style={{ background: align === i ? "#EEF1FF" : C.card, borderRight: i % 3 === 2 ? "none" : `1px solid ${C.line}`, borderBottom: i > 5 ? "none" : `1px solid ${C.line}` }}
             >
-              {a}
+              <span
+                className="rounded-[2px]"
+                style={{ width: 10, height: 10, background: align === i ? C.primary : "#D9DEE7" }}
+              />
             </button>
           ))}
         </div>
+      </div>
+
+      <Divider />
+
+      <Section title="벡터화">
+        <button
+          type="button"
+          className="w-full h-11 rounded-[10px] flex items-center justify-center transition-colors hover:brightness-[0.98] active:brightness-95"
+          style={{ background: C.primary, color: "#FFFFFF" }}
+        >
+          <span style={{ fontSize: 13.5, fontWeight: 700 }}>SVG로 벡터화</span>
+        </button>
+        <p style={{ fontSize: 12, color: C.sub, lineHeight: 1.6 }}>
+          이미지를 Recraft로 선명한 벡터(SVG)로 변환해 교체합니다.
+        </p>
+      </Section>
+
+      <Divider />
+
+      <Section title="변형">
+        <div className="grid grid-cols-4 gap-1.5">
+          <TransformButton label="왼쪽으로 회전"><RotateCcw size={16} strokeWidth={1.8} /></TransformButton>
+          <TransformButton label="오른쪽으로 회전"><RotateCw size={16} strokeWidth={1.8} /></TransformButton>
+          <TransformButton label="좌우 뒤집기"><FlipHorizontal2 size={16} strokeWidth={1.8} /></TransformButton>
+          <TransformButton label="상하 뒤집기"><FlipVertical2 size={16} strokeWidth={1.8} /></TransformButton>
+        </div>
+        <OutlineButton label="변형 초기화" />
+        <OutlineButton label="자르기" icon={<Crop size={15} strokeWidth={1.8} />} />
+      </Section>
+
+      <Divider />
+
+      <Section title="조정">
+        {(Object.keys(adjust) as (keyof typeof adjust)[]).map((k) => (
+          <div key={k} className="flex items-center gap-3">
+            <span className="shrink-0" style={{ width: 34, fontSize: 12.5, color: C.sub }}>{k}</span>
+            <input
+              type="range"
+              aria-label={k}
+              min={-100}
+              max={100}
+              value={adjust[k]}
+              onChange={(e) => setAdjust((a) => ({ ...a, [k]: Number(e.target.value) }))}
+              className="flex-1 min-w-0 cursor-pointer"
+              style={{ accentColor: C.primary }}
+            />
+            <span className="shrink-0 tabular-nums text-right" style={{ width: 30, fontSize: 12.5, fontWeight: 600, color: C.text }}>
+              {adjust[k]}
+            </span>
+          </div>
+        ))}
       </Section>
     </div>
+  );
+}
+
+function Divider() {
+  return <div className="shrink-0" style={{ height: 1, background: C.line }} />;
+}
+
+function MiniIcon({
+  label, danger = false, children,
+}: { label: string; danger?: boolean; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      className="shrink-0 w-8 h-8 rounded-[8px] flex items-center justify-center transition-colors hover:bg-[#F2F4F8] active:bg-[#EDF0F5]"
+      style={{ color: danger ? "#E5484D" : C.sub }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function TransformButton({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      className="h-10 rounded-[10px] flex items-center justify-center transition-colors hover:bg-[#F5F7FA] active:bg-[#EDF0F5]"
+      style={{ border: `1px solid ${C.line}`, color: C.text }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function OutlineButton({ label, icon }: { label: string; icon?: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      className="w-full h-10 rounded-[10px] flex items-center justify-center gap-1.5 transition-colors hover:bg-[#F5F7FA] active:bg-[#EDF0F5]"
+      style={{ border: `1px solid ${C.line}`, color: C.text }}
+    >
+      {icon && <span className="shrink-0 flex" style={{ color: C.sub }}>{icon}</span>}
+      <span style={{ fontSize: 13, fontWeight: 600 }}>{label}</span>
+    </button>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-2">
-      <p style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{title}</p>
+    <div className="px-4 py-4 flex flex-col gap-2.5">
+      <p style={{ fontSize: 12.5, fontWeight: 600, color: C.sub }}>{title}</p>
       {children}
     </div>
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="shrink-0" style={{ width: 40, fontSize: 12.5, color: C.sub }}>{label}</span>
-      <div className="flex-1 min-w-0">{children}</div>
-    </div>
-  );
-}
-
-function Select({ value }: { value: string }) {
-  return (
-    <button
-      className="w-full h-10 rounded-[10px] px-3 flex items-center justify-between active:bg-[#EDF0F5]"
-      style={{ border: `1px solid ${C.line}`, background: C.card }}
-    >
-      <span className="truncate" style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{value}</span>
-      <ChevronDown size={15} strokeWidth={1.9} color={C.sub} />
-    </button>
-  );
-}
-
 function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div className="h-10 rounded-[10px] px-3 flex items-center gap-2" style={{ border: `1px solid ${C.line}` }}>
-      <span style={{ fontSize: 12, color: C.sub }}>{label}</span>
-      <span className="flex-1 text-right tabular-nums" style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{value}</span>
+    <div className="h-9 rounded-[9px] px-2 flex items-center gap-1" style={{ border: `1px solid ${C.line}` }}>
+      <span className="shrink-0" style={{ fontSize: 11.5, color: C.sub }}>{label}</span>
+      <span className="flex-1 min-w-0 truncate text-right tabular-nums" style={{ fontSize: 12.5, fontWeight: 600, color: C.text }}>
+        {value}
+      </span>
     </div>
   );
 }

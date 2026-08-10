@@ -191,28 +191,14 @@
 }
 
 /* ── 워크스페이스 상세 프롬프트 카드 본문 ─────────────────────────────
-   카드가 콘텐츠 영역 전체 폭을 쓰므로, 768px 이상에서는 본문을 2열로 나눠
-   넓어진 공간을 활용한다. DOM 순서를 그대로 흘려보내므로 입력 항목 순서는 유지된다.
-   기본은 전체 폭이고, 한 줄 입력(.fc-single = FcInput·FcSelect)을 가진 그룹만 반 폭을 쓴다
-   — 긴 텍스트 입력·미리보기·목록·슬라이더가 억지로 한 줄에 들어가지 않게 하기 위함. */
-@media (min-width: 768px) {
-  .fc-body {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
-    align-content: start;
-    /* 암묵적 행을 항상 콘텐츠 높이로 잡는다.
-       이게 없으면 컨테이너 높이가 확정(flex:1 + overflow:auto)된 상태에서 auto 행이
-       접혔을 때 크기로 남아, 미리보기를 펼치면 아이템이 행 밖으로 넘쳐 아래 필드와 겹친다. */
-    grid-auto-rows: min-content;
-  }
-  .fc-body > * {
-    grid-column: 1 / -1;
-    min-width: 0;
-  }
-  .fc-body > *:has(> .fc-single) {
-    grid-column: span 1;
-  }
+   모든 입력 항목이 카드 본문 전체 폭을 쓰도록 1열로 흘려보낸다(.fc-body 는 세로 flex).
+   한 줄 입력(.fc-single = FcInput·FcSelect)만 반 폭으로 두면 텍스트영역과
+   오른쪽 정렬선이 어긋나 들쭉날쭉해 보이므로, 폭 기준을 full-width 하나로 통일한다.
+   좌우 패딩은 .fc-body 자체(px-[18px] / md:px-6)가 잡으므로 필드별 여백은 그대로다.
+   두 열이 필요한 개별 그룹은 해당 그룹 안에서 자체 그리드를 구성한다
+   (예: 랜딩 카드의 제목·버튼 행). */
+.fc-body > * {
+  min-width: 0;
 }
 
 @theme inline {
