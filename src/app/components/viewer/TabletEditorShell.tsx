@@ -409,13 +409,13 @@ export default function TabletEditorShell({
           outline-offset: 2px;
         }
 
-        /* 우측 액션 묶음 — 버튼 사이 간격도 탭 타깃과 같은 기준(입력 방식)으로 갈린다.
-           마우스는 8px, 손가락은 12px. 버튼 자체는 .viewer-action-btn 이 34/44px 를 잡으므로
-           아이콘 글리프 크기는 그대로 두고 여백만 늘어난다. */
+        /* 우측 액션 묶음 — 버튼 사이 간격은 입력 방식으로 갈린다(마우스 8px / 손가락 12px).
+           44px 탭 타깃은 간격이 아니라 .viewer-action-btn 의 크기(= 글리프 주변 패딩)로 확보한다.
+           아이콘 사이를 벌려서 타깃을 만들면 버튼들이 흩어져 그룹으로 읽히지 않는다.
+
+           구분선에는 따로 여백을 주지 않는다. gap 위에 margin 을 더하면 묶음 안 간격이
+           12 / 18 / 18 로 어긋나 리듬이 깨진다 — 구분선은 선 하나로 충분히 갈린다. */
         .viewer-actions { gap: 8px; }
-        /* 구분선 좌우는 버튼 사이 간격보다 넓게 둔다 — gap 이 이미 양쪽에 붙으므로
-           margin 6px 이 그 위에 더해져 실제 분리 폭은 마우스 14px / 손가락 18px 가 된다. */
-        .viewer-action-divider { margin-inline: 6px; }
         @media (pointer: coarse) {
           .viewer-actions { gap: 12px; }
         }
@@ -428,8 +428,12 @@ export default function TabletEditorShell({
           .viewer-file-name {
             overflow: hidden;
             text-overflow: ellipsis;
-            min-width: 7rem;
+            /* 최소 폭 — 이게 없으면 상단바가 비좁을 때 파일명이 0까지 줄어
+               셰브론만 남는다. 흔한 길이의 이름이 통째로 들어가는 값으로 잡는다. */
+            min-width: 8rem;
           }
+          /* 좁은 폭에서는 파일명 버튼의 좌우 패딩을 줄여 그만큼을 이름에 돌린다 */
+          .viewer-title-btn { padding-inline: 8px; }
         }
 
         /* 페이지 네비 pill — 본문 위에 떠서 화면 하단 가운데에 선다.
@@ -585,7 +589,7 @@ export default function TabletEditorShell({
           {extraActions}
           {actions.map((key, i) => {
             if (key === "divider") {
-              return <span key={`divider-${i}`} className="viewer-action-divider shrink-0 w-px h-6" style={{ background: C.line }} />;
+              return <span key={`divider-${i}`} className="shrink-0 w-px h-6" style={{ background: C.line }} />;
             }
             // 다운로드 — 아이콘 하나가 곧 트리거다. 누르면 무조건 메뉴가 열리므로
             // 셰브론이 따로 알려줄 정보가 없고, 본체/화살표를 나눈 분할 버튼도 쓰지 않는다.
