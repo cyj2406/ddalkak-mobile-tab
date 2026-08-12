@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Download } from "lucide-react";
 import TabletEditorShell from "@/app/components/viewer/TabletEditorShell";
-import { VIEWER_CHROME, type ResultVersionInfo, type ViewerFileType } from "@/app/components/viewer/viewerChrome";
+import OverlayButton from "@/app/components/viewer/OverlayButton";
+import { VIEWER_CHROME, type ViewerFileType } from "@/app/components/viewer/viewerChrome";
 
 /**
  * 태블릿(768px 이상) 결과물 뷰어 — 파일 형식별 구성.
@@ -39,8 +40,8 @@ export interface TabletResultViewerProps {
   files?: string[];
   /** 형식별 기본값(VIEWER_CHROME)을 덮어쓸 전체 페이지 수 */
   totalPages?: number;
-  /** 다운로드 버튼에 붙는 버전 드롭다운 값 (데스크톱·태블릿 공통) */
-  versions?: ResultVersionInfo;
+  /** 결과물을 이루는 파일 개수 — 다운로드 메뉴의 "전체 파일 받기 (N개)". 1이면 메뉴 없이 즉시 다운로드. */
+  downloadFileCount?: number;
   onDownload?: () => void;
   onStructure?: () => void;
   onShare?: () => void;
@@ -54,30 +55,12 @@ export interface TabletResultViewerProps {
   children?: React.ReactNode;
 }
 
-/** 본문 위에 얹는 작은 알약 버튼 — 형식별 보조 동작(편집기 열기·새로고침·다운로드) */
-function OverlayButton({
-  label, icon, onClick, disabled = false,
-}: { label: string; icon: React.ReactNode; onClick?: () => void; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="shrink-0 h-9 px-3 rounded-[10px] flex items-center gap-1.5 transition-colors disabled:opacity-40 active:bg-[#EDF0F5] hover:bg-[#F2F4F8]"
-      style={{ background: C.card, border: `1px solid ${C.line}`, boxShadow: "0px 1px 3px rgba(16,24,40,0.08)" }}
-    >
-      <span className="shrink-0" style={{ color: C.text, display: "flex" }}>{icon}</span>
-      <span style={{ fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: "nowrap" }}>{label}</span>
-    </button>
-  );
-}
-
 export default function TabletResultViewer({
   fileType,
   fileName,
   files,
   totalPages: totalPagesProp,
-  versions,
+  downloadFileCount,
   onDownload,
   onStructure,
   onShare,
@@ -127,9 +110,9 @@ export default function TabletResultViewer({
       page={page}
       totalPages={totalPages}
       onPageChange={setPage}
+      downloadFileCount={downloadFileCount}
       viewMode={viewMode}
       onViewModeChange={setViewMode}
-      versions={versions}
       onDownload={onDownload}
       onStructure={onStructure}
       onShare={onShare}
@@ -186,8 +169,11 @@ export default function TabletResultViewer({
         {/* ── 한글 — 본문 우상단 다운로드 버튼 ─────────────────── */}
         {fileType === "hwpx" && (
           <div className="shrink-0 flex items-center justify-end px-3 pt-3">
+            {/* 밝은 문서 미리보기 위 보조 동작 — 영상 위 액션과 같은 컴포넌트·반경을 쓰고 면만 다르다 */}
             <OverlayButton
               label="다운로드"
+              variant="surface"
+              size="sm"
               icon={<Download size={15} strokeWidth={1.9} />}
               onClick={onDownload}
               disabled={loading}

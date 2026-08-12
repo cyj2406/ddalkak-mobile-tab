@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  ChevronDown, ChevronLeft, ChevronRight, Clock, Download, Eraser, Fullscreen,
+  Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Download, Eraser, Fullscreen,
   History, Image as ImageIcon, Layers, LayoutTemplate, Maximize2, Minus, MousePointer2, Pencil, PenTool,
   Plus, Redo2, Save, Scissors, Search, Share2, Sparkles, Square, Type, Undo2, Wand2, X,
 } from "lucide-react";
@@ -67,6 +67,8 @@ const TONE_STRONG = "#1A1D29";
 const HOVER_BG = "#F2F4F8";
 /** 그룹 경계 세로 구분선 */
 const DIVIDER = "#E7EAF0";
+/** 좌측 그룹 묶음(편집 이력 + 화면 표시)이 갖는 옅은 면 */
+const GROUP_PILL_BG = "#F1F3F7";
 
 /**
  * 상단바 규격 — 바 56px 기준. 라운드 9 / 아이콘 19px.
@@ -95,12 +97,11 @@ const GAP_GROUP = 24;
 const BTN_ICON = 36;
 const BTN_R = 9;
 /**
- * 채워진 버튼(다운로드)이 그리는 파란 면의 크기.
- * 클릭 영역(BTN_TOUCH / BTN_ICON)보다 작게 잡아 56px 상단바 안에서
- * 위아래 여백이 눈에 보이도록 한다 — 터치 10px, 데스크톱 12px.
+ * 채워진 버튼(다운로드)이 그리는 파란 면의 높이 — 터치·데스크톱 모두 36px.
+ * 터치에서는 클릭 영역(BTN_TOUCH 44px)보다 작아 56px 상단바 안에서 위아래 여백이
+ * 눈에 보이고, 데스크톱에서는 클릭 영역(BTN_ICON)과 같아 면이 그 영역을 꽉 채운다.
  */
 const BTN_FILL = 36;
-const BTN_FILL_DESKTOP = 32;
 /** 상단바 아이콘 크기 */
 const ICON = 19;
 
@@ -228,11 +229,14 @@ function BarIcon({
  * 위아래 여백을 남기기 위함이다.
  */
 function BarButton({
-  label, icon, wide, primary = false, onClick, trailing,
+  label, icon, wide, primary = false, onClick, trailing, haspopup = false, expanded,
 }: {
   label: string; icon: React.ReactNode; wide: boolean; primary?: boolean;
   onClick?: () => void; trailing?: React.ReactNode;
+  /** 눌렀을 때 메뉴가 열리는 버튼 — 셰브론 대신 이 값이 그 사실을 전한다. */
+  haspopup?: boolean; expanded?: boolean;
 }) {
+  const popupProps = haspopup ? ({ "aria-haspopup": "menu" as const, "aria-expanded": !!expanded }) : {};
   // 라벨이 눈에 보이는 데스크톱에서는 툴팁을 달지 않는다.
   const withTooltip = (node: React.ReactNode) =>
     wide ? <>{node}</> : <IconTooltip label={label}>{node}</IconTooltip>;
@@ -251,6 +255,7 @@ function BarButton({
         type="button"
         aria-label={label}
         onClick={onClick}
+        {...popupProps}
         className={`bar-btn-primary ${hasLabel ? "bar-label" : "bar-icon"} shrink-0 flex items-center justify-center`}
         style={{ background: "transparent", padding: 0 }}
       >
@@ -274,6 +279,7 @@ function BarButton({
       type="button"
       aria-label={label}
       onClick={onClick}
+      {...popupProps}
       className={`bar-btn ${hasLabel ? "bar-label" : "bar-icon"} shrink-0 flex items-center justify-center ${
         hasLabel ? "gap-1.5" : ""
       }`}
@@ -410,8 +416,41 @@ export interface SaveEntry {
   id: number;
   /** 몇 번째 수동 저장본인지 */
   no: number;
-  /** 저장 시각 표기 */
+  /** 저장 시각 표기 (예: "2026. 08. 12. 오전 11:59") */
   time: string;
+  /** 저장 시점의 페이지 수 */
+  pages: number;
+}
+
+/**
+ * 저장본 개수 배지 — 저장 버튼과 드롭다운의 "저장 이력" 항목이 함께 쓴다.
+ *
+ * 0이면 아예 렌더하지 않는다. 아직 저장한 적이 없다는 사실을 "0"으로 보여 줄 이유가 없고,
+ * 빈 배지가 붙어 있으면 눌러야 할 것이 있는 것처럼 읽힌다.
+ *
+ * 드롭다운에서는 ⌘S 단축키와 같은 자리(항목 오른쪽 끝)에 서므로,
+ * 옅은 액센트 면을 둘러 "단축키 글자"가 아니라 "개수"로 읽히게 한다.
+ * (프로젝트에 --bg-accent/--text-accent 토큰이 없어 이 에디터의 액센트 쌍을 그대로 쓴다)
+ */
+function SaveCountBadge({ count }: { count: number }) {
+  if (count < 1) return null;
+  return (
+    <span
+      className="shrink-0 rounded-full px-1.5"
+      role="status"
+      aria-live="polite"
+      aria-label={`저장본 ${count}개`}
+      style={{
+        background: C.primarySoft,
+        color: C.primary,
+        fontSize: 11.5,
+        fontWeight: 700,
+        lineHeight: "18px",
+      }}
+    >
+      {count}
+    </span>
+  );
 }
 
 /**
@@ -419,8 +458,14 @@ export interface SaveEntry {
  * 수동 저장본만 쌓이고, 최근 HISTORY_MAX 개까지 보관한다.
  */
 function SaveHistoryPanel({
-  entries, onRestore, onClose,
-}: { entries: SaveEntry[]; onRestore: (e: SaveEntry) => void; onClose: () => void }) {
+  entries, appliedId, onOpen, onClose,
+}: {
+  entries: SaveEntry[];
+  /** 지금 에디터에 올라와 있는 저장본 */
+  appliedId: number | null;
+  onOpen: (e: SaveEntry) => void;
+  onClose: () => void;
+}) {
   return (
     <>
       {/* 어둡게 덮지 않고, 바깥을 누르면 닫히기만 한다 */}
@@ -478,43 +523,72 @@ function SaveHistoryPanel({
               </p>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
-              {entries.map((e, i) => (
-                <div
-                  key={e.id}
-                  className="flex items-center gap-3 rounded-[12px] px-3.5 py-3"
-                  style={{ border: `1px solid ${C.line}` }}
-                >
-                  <span
-                    className="shrink-0 flex items-center justify-center rounded-[10px]"
-                    style={{ width: 34, height: 34, background: C.bg, color: C.sub }}
+            <div className="flex flex-col gap-3">
+              {entries.map((e, i) => {
+                // 지금 에디터에 올라와 있는 버전인지 — 카드 전체의 색과 아래 줄 문구가 여기서 갈린다.
+                const applied = e.id === appliedId;
+                return (
+                  <div
+                    key={e.id}
+                    className="rounded-[16px]"
+                    style={{
+                      border: `1.5px solid ${applied ? C.primary : C.line}`,
+                      background: applied ? "#F6F8FF" : C.card,
+                    }}
                   >
-                    <Clock size={17} strokeWidth={1.8} />
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <span className="block truncate" style={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>
-                      저장본 {e.no}
-                      {i === 0 && (
-                        <span
-                          className="ml-1.5 rounded-full px-1.5"
-                          style={{ background: C.primarySoft, fontSize: 11, fontWeight: 700, color: C.primary }}
+                    {/* 시각 + 요약 + 상태 아이콘 */}
+                    <div className="flex items-start gap-3 px-4 pt-4 pb-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span style={{ fontSize: 15.5, fontWeight: 700, color: C.text, letterSpacing: "-0.3px" }}>
+                            {e.time}
+                          </span>
+                          {i === 0 && (
+                            <span
+                              className="rounded-full px-2"
+                              style={{ background: C.primarySoft, fontSize: 11.5, fontWeight: 700, color: C.primary, lineHeight: "20px" }}
+                            >
+                              최신
+                            </span>
+                          )}
+                        </div>
+                        <p style={{ fontSize: 13.5, color: C.sub, marginTop: 4 }}>
+                          {e.pages}개 페이지{i > 0 && ` · 이전 버전 ${i}`}
+                        </p>
+                      </div>
+                      <span
+                        className="shrink-0 flex items-center justify-center rounded-full"
+                        aria-hidden="true"
+                        style={{
+                          width: 34, height: 34,
+                          background: applied ? C.primary : C.bg,
+                          color: applied ? "#FFFFFF" : C.sub,
+                        }}
+                      >
+                        {applied ? <Check size={18} strokeWidth={2.4} /> : <Clock size={17} strokeWidth={1.8} />}
+                      </span>
+                    </div>
+
+                    {/* 아래 줄 — 적용 중이면 상태 문구, 아니면 그 버전을 여는 동작 */}
+                    <div style={{ borderTop: `1px solid ${applied ? "#DCE3FA" : C.line}` }}>
+                      {applied ? (
+                        <p className="px-4 py-3" style={{ fontSize: 14, fontWeight: 700, color: C.primary }}>
+                          현재 에디터에 적용됨
+                        </p>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => onOpen(e)}
+                          className="w-full text-left px-4 py-3 rounded-b-[15px] transition-colors hover:bg-[#F5F7FA] active:bg-[#EDF0F5]"
+                          style={{ fontSize: 14, fontWeight: 700, color: C.primary }}
                         >
-                          최신
-                        </span>
+                          이 버전 열기
+                        </button>
                       )}
-                    </span>
-                    <span className="block truncate" style={{ fontSize: 13, color: C.sub, marginTop: 2 }}>{e.time}</span>
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onRestore(e)}
-                    className="shrink-0 h-9 px-3 rounded-[10px] transition-colors hover:bg-[#F5F7FA] active:bg-[#EDF0F5]"
-                    style={{ border: `1px solid ${C.line}`, fontSize: 13, fontWeight: 600, color: C.text }}
-                  >
-                    되돌리기
-                  </button>
-                </div>
-              ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -592,6 +666,8 @@ export default function TabletMiniEditor({
   // 고정 컬럼일 때는 항상 열려 있고, 슬라이드일 때만 여닫는다.
   const [panelOpen, setPanelOpen] = useState(false);
   const sidebarOpen = docked || panelOpen;
+  // 속성 패널이 캔버스를 덮는 폭. 고정 컬럼(데스크톱)일 때는 캔버스가 실제로 줄어드니 0.
+  const coveredByPanel = docked ? 0 : panelOpen ? SIDEBAR_W : 0;
 
   // 상단바 팝오버 — 찾기 / 저장 드롭다운 / 다운로드 옵션 / 저장 이력 사이드 패널
   const [findOpen, setFindOpen] = useState(false);
@@ -602,19 +678,24 @@ export default function TabletMiniEditor({
   const [dlOpen, setDlOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<SaveEntry[]>([]);
+  // 지금 에디터에 올라와 있는 저장본. 저장하면 방금 것으로, "이 버전 열기"를 누르면 그 버전으로 옮겨간다.
+  const [appliedId, setAppliedId] = useState<number | null>(null);
 
   // 공유 — 결과물 뷰어 상단바와 같은 안내 문구를 쓴다.
   const { message: toast, share } = useShareToast();
 
   // 수동 저장 — 최신본이 맨 위에 쌓이고 HISTORY_MAX 개까지만 남는다.
+  // 방금 저장한 것이 곧 에디터에 올라와 있는 버전이므로 적용본도 함께 옮긴다.
   const saveNow = () => {
     setSaveOpen(false);
     setHistory((prev) => {
       const no = (prev[0]?.no ?? 0) + 1;
+      // 목록의 시각 표기는 "2026. 08. 12. 오전 11:59" 형태로 통일한다.
       const time = new Date().toLocaleString("ko-KR", {
-        month: "long", day: "numeric", hour: "numeric", minute: "2-digit",
+        year: "numeric", month: "2-digit", day: "2-digit", hour: "numeric", minute: "2-digit",
       });
-      return [{ id: no, no, time }, ...prev].slice(0, HISTORY_MAX);
+      setAppliedId(no);
+      return [{ id: no, no, time, pages }, ...prev].slice(0, HISTORY_MAX);
     });
   };
   const [dlFormat, setDlFormat] = useState(DL_FORMATS[0]);
@@ -671,6 +752,43 @@ export default function TabletMiniEditor({
     return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
   }, [measure]);
 
+  // ── 패널 여닫을 때 캔버스 리센터 ──────────────────────────────────────────
+  // 태블릿의 속성 패널은 캔버스 위를 덮고 미끄러지므로 스크롤 영역 자체는 그대로다.
+  // 그래서 "보이는 폭"(clientWidth − 가려진 폭)을 따로 계산해 그 한가운데로 맞춘다.
+  // 선택된 요소가 있으면 그 요소를, 없으면 캔버스 콘텐츠 중심을 기준으로 삼는다.
+  // 배율(zoom)은 건드리지 않고 스크롤(팬)만 옮긴다.
+  useEffect(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+    // 패널 슬라이드(220ms)가 끝난 뒤의 최종 배치를 기준으로 맞춘다.
+    const t = setTimeout(() => {
+      const visibleW = Math.max(1, c.clientWidth - coveredByPanel);
+
+      // 기준점 — 캔버스 스크롤 좌표계에서의 중심.
+      // offsetParent 에 기대지 않도록 화면 좌표에서 되돌려 계산한다.
+      const b = boardRef.current;
+      let cx = c.scrollWidth / 2;
+      let cy = c.scrollHeight / 2;
+      if (selected && b) {
+        const cr = c.getBoundingClientRect();
+        const br = b.getBoundingClientRect();
+        cx = br.left - cr.left + c.scrollLeft + br.width / 2;
+        cy = br.top - cr.top + c.scrollTop + br.height / 2;
+      }
+
+      const clamp = (v: number, max: number) => Math.max(0, Math.min(v, Math.max(0, max)));
+      const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      c.scrollTo({
+        left: clamp(cx - visibleW / 2, c.scrollWidth - c.clientWidth),
+        top: clamp(cy - c.clientHeight / 2, c.scrollHeight - c.clientHeight),
+        behavior: smooth ? "smooth" : "auto",
+      });
+      // 스크롤이 실제로 움직이지 않는 경우(넘치지 않을 때)에도 눈금자 원점은 갱신해야 한다.
+      measure();
+    }, 240);
+    return () => clearTimeout(t);
+  }, [panelOpen, coveredByPanel, selected, measure]);
+
   return (
     <div className="fixed inset-0 z-[95] flex flex-col" style={{ ...font, background: C.bg, color: C.text, fontSize: 15 }}>
       <style>{`
@@ -694,14 +812,12 @@ export default function TabletMiniEditor({
            아이콘 글리프 크기는 두 경우 모두 같다. */
         .bar-icon, .bar-label, .bar-pill { height: ${BTN_TOUCH}px; }
         .bar-icon { width: ${BTN_TOUCH}px; }
-        /* 채워진 버튼이 실제로 그리는 면 — 클릭 영역보다 작게 잡아 상단바 위아래 여백을 남긴다 */
+        /* 채워진 버튼이 실제로 그리는 면 — 36px 고정. 터치에서는 클릭 영역보다 작아 위아래 여백이 남는다 */
         .bar-fill { height: ${BTN_FILL}px; }
         .bar-fill-square { width: ${BTN_FILL}px; }
         @media (min-width: ${DESKTOP_MIN}px) {
           .bar-icon, .bar-label, .bar-pill { height: ${BTN_ICON}px; }
           .bar-icon { width: ${BTN_ICON}px; }
-          .bar-fill { height: ${BTN_FILL_DESKTOP}px; }
-          .bar-fill-square { width: ${BTN_FILL_DESKTOP}px; }
         }
         /* 면 없는 상단바 버튼 — 색은 CSS 변수로 받고, hover 때만 옅은 배경이 생긴다 */
         .bar-btn {
@@ -710,6 +826,18 @@ export default function TabletMiniEditor({
           transition: color 120ms ease, background-color 120ms ease;
         }
         .bar-btn:hover:not(:disabled) { background: ${HOVER_BG}; color: var(--bar-hover); }
+        /* 좌측 묶음(pill) — 툴바 56px 에서 위아래 8px 씩 뺀 40px 로 못박는다.
+           안쪽 버튼은 클릭 영역(터치 44)이 아니라 면 크기(36)를 쓰고 세로 패딩은 2px 만 남긴다.
+           이 고정이 없으면 터치 규격에서 44 + 패딩 8 = 52px 이 되어 툴바 위아래에 2px 밖에
+           남지 않고, 묶음이 창 경계와 툴바 구분선에 닿아 보인다. */
+        .bar-group-pill { height: 40px; padding: 2px; }
+        .bar-group-pill .bar-icon,
+        .bar-group-pill .bar-pill { height: 36px; }
+        .bar-group-pill .bar-icon { width: 36px; }
+        /* 묶음 안에서는 hover 배경(${HOVER_BG})이 면 색과 거의 같아 눌린 티가 나지 않는다.
+           흰 면으로 한 단계 띄워 세그먼트 컨트롤처럼 읽히게 한다. */
+        .bar-group-pill .bar-btn:hover:not(:disabled) { background: #FFFFFF; }
+        .bar-group-pill .bar-btn:active:not(:disabled) { background: #E9EDF3; }
         .bar-btn:active:not(:disabled) { background: #E9EDF3; }
         /* 비활성은 색이 아니라 투명도로 구분한다 — 활성 색과 확실히 갈리도록 낮게 잡는다 */
         .bar-btn:disabled { opacity: 0.32; }
@@ -736,14 +864,17 @@ export default function TabletMiniEditor({
             borderBottom: `1px solid ${C.line}`,
           }}
         >
-          {/* 편집 조작 — 실행취소 · 다시 실행 */}
-          <div className="flex items-center" style={{ gap: GAP_IN }}>
+          {/* 편집 이력 + 화면 표시 — 상단바에서 유일하게 면을 갖는 묶음.
+              두 그룹은 안쪽 세로 구분선 하나로만 나눈다. 나머지 그룹(문서 액션·창 제어)에는
+              면을 주지 않는다 — 알약이 여러 개 뜨면 그룹 구분이 오히려 시끄러워진다. */}
+          <div className="bar-group-pill flex items-center shrink-0" style={{ gap: 2, borderRadius: BTN_R + 5, background: GROUP_PILL_BG }}>
+            {/* 편집 이력 — 실행취소 · 다시 실행 */}
             <BarIcon label="실행취소" disabled><Undo2 size={ICON} strokeWidth={1.9} /></BarIcon>
             <BarIcon label="다시 실행" disabled><Redo2 size={ICON} strokeWidth={1.9} /></BarIcon>
-          </div>
 
-          {/* 확대축소 · 화면에 맞추기 — 감싸는 면 없이 색으로만 묶는다 */}
-          <div className="flex items-center" style={{ gap: GAP_IN, marginLeft: GAP_GROUP }}>
+            <BarDivider style={{ marginInline: 5 }} />
+
+            {/* 화면 표시 — 축소 · 배율 · 확대 · 화면에 맞추기 */}
             <BarIcon label="축소" onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z - 2))} disabled={zoom <= ZOOM_MIN}>
               <Minus size={ICON} strokeWidth={2.2} />
             </BarIcon>
@@ -761,6 +892,7 @@ export default function TabletMiniEditor({
             <BarIcon label="화면에 맞추기"><Fullscreen size={ICON} strokeWidth={1.8} /></BarIcon>
           </div>
 
+          {/* 좌측 묶음과 문서 액션 사이 — 구분선 없이 남는 폭 전부를 여백으로 쓴다 */}
           <div className="flex-1 min-w-0" />
 
           {/* ── 우측 액션 그룹 — 찾기부터 닫기까지 하나로 묶는다.
@@ -832,29 +964,17 @@ export default function TabletMiniEditor({
 
           {/* 저장 — 배지 + 드롭다운(저장 · 저장 이력) */}
           <div className="relative shrink-0">
+            {/* 저장 — 아이콘 자체가 단일 트리거다. 눌렀을 때 항상 메뉴가 열리므로
+                셰브론이 따로 알려줄 정보가 없고, 본체/화살표를 나눈 분할 버튼도 쓰지 않는다.
+                열려 있다는 사실은 aria-expanded 가 전한다. */}
             <BarButton
               label="저장"
               wide={isDesktop}
               icon={<Save size={ICON} strokeWidth={1.9} />}
               onClick={() => { setSaveOpen((v) => !v); setDlOpen(false); }}
-              trailing={
-                <>
-                  {history.length > 0 && (
-                    <span
-                      className="shrink-0 rounded-full px-1.5"
-                      style={{ background: C.bg, fontSize: 11.5, fontWeight: 700, color: C.sub, lineHeight: "18px" }}
-                    >
-                      {history.length}
-                    </span>
-                  )}
-                  <ChevronDown
-                    size={16}
-                    strokeWidth={2}
-                    className="shrink-0 transition-transform"
-                    style={{ transform: saveOpen ? "rotate(180deg)" : "none" }}
-                  />
-                </>
-              }
+              haspopup
+              expanded={saveOpen}
+              trailing={history.length > 0 ? <SaveCountBadge count={history.length} /> : undefined}
             />
             {saveOpen && (
               <Popover width={230} onClose={() => setSaveOpen(false)}>
@@ -875,12 +995,7 @@ export default function TabletMiniEditor({
                   >
                     <History size={17} strokeWidth={1.8} style={{ color: C.text }} />
                     <span className="flex-1 text-left" style={{ fontSize: 14, fontWeight: 600, color: C.text }}>저장 이력</span>
-                    <span
-                      className="rounded-full px-1.5"
-                      style={{ background: C.bg, fontSize: 11.5, fontWeight: 700, color: C.sub, lineHeight: "18px" }}
-                    >
-                      {history.length}
-                    </span>
+                    <SaveCountBadge count={history.length} />
                   </button>
                 </div>
               </Popover>
@@ -1009,7 +1124,15 @@ export default function TabletMiniEditor({
               <div
                 ref={canvasRef}
                 className="mini-editor-canvas flex-1 min-w-0 overflow-auto flex"
-                style={{ padding: CANVAS_PAD }}
+                /* 패널이 덮는 폭만큼 오른쪽 안여백을 준다.
+                   아트보드는 m-auto 로 가운데 서므로, 이 여백이 있어야 "캔버스 전체"가 아니라
+                   "실제로 보이는 영역"의 한가운데에 선다. 넘칠 때는 스크롤 영역도 그만큼 넓어져
+                   아래 리센터가 선택된 요소를 보이는 영역 가운데로 끌어올 수 있다. */
+                style={{
+                  padding: CANVAS_PAD,
+                  paddingRight: CANVAS_PAD + coveredByPanel,
+                  transition: "padding-right 220ms cubic-bezier(0.32,0.72,0,1)",
+                }}
                 onScroll={measure}
                 onClick={() => {
                   setSelected(false);
@@ -1168,7 +1291,8 @@ export default function TabletMiniEditor({
       {historyOpen && (
         <SaveHistoryPanel
           entries={history}
-          onRestore={() => setHistoryOpen(false)}
+          appliedId={appliedId}
+          onOpen={(e) => { setAppliedId(e.id); setHistoryOpen(false); }}
           onClose={() => setHistoryOpen(false)}
         />
       )}

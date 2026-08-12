@@ -1,0 +1,50 @@
+name: Deploy to GitHub Pages
+
+# main 에 push 되면 빌드해서 Pages 에 올린다. 수동 실행도 가능.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Pages 배포에 필요한 최소 권한
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포는 한 번에 하나만 — 뒤에 들어온 것이 앞의 것을 대체한다.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # 프로젝트 페이지는 https://<계정>.github.io/<저장소명>/ 아래에서 서비스되므로
+      # 에셋 경로 기준(base)을 저장소 이름에 맞춘다. 저장소명이 바뀌어도 따라간다.
+      # (로컬 개발·다른 호스팅에서는 base 가 "/" 라 vite.config.ts 는 건드리지 않는다)
+      - run: npx vite build --base=/${{ github.event.repository.name }}/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

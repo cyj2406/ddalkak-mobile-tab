@@ -15,7 +15,7 @@ import TabletMiniEditor from "@/app/components/viewer/TabletMiniEditor";
 import TabletResultViewer from "@/app/components/viewer/TabletResultViewer";
 import {
   FILE_TYPE_META, fileNameFor, resolveFileType,
-  type ResultVersionInfo, type ViewerFileType,
+  type ViewerFileType,
 } from "@/app/components/viewer/viewerChrome";
 import TutorialTour, { type TutorialStepConfig } from "@/app/components/common/TutorialTour";
 import { MobileEditorNotice } from "@/app/components/viewer/MobileEditorNotice";
@@ -96,8 +96,13 @@ function IconSend() {
 function IconSearch() {
   return <svg width="16" height="16" fill="none" viewBox="0 0 16 16"><P d="M14 14L11.1067 11.1067" stroke="#737373" strokeWidth="1.33333" /><circle cx="6.5" cy="6.5" r="4.5" stroke="#737373" strokeWidth="1.33333" /></svg>;
 }
-function IconFilter() {
-  return <svg width="16" height="16" fill="none" viewBox="0 0 16 16"><P d="M2 4h12M4 8h8M6 12h4" stroke="#334155" strokeWidth="1.33333" /></svg>;
+/** 필터 버튼 아이콘 — 깔때기(funnel). 색은 열림 상태에 따라 호출부가 넘긴다. */
+function IconFilter({ color = "#334155" }: { color?: string }) {
+  return (
+    <svg width="16" height="16" fill="none" viewBox="0 0 16 16">
+      <P d="M2 3h12l-4.6 5.4V13L6.6 11.5V8.4L2 3z" stroke={color} strokeWidth="1.33333" strokeLinejoin="round" />
+    </svg>
+  );
 }
 function IconApply() {
   return <svg width="14" height="14" fill="none" viewBox="0 0 14 14"><P d="M2.5 7L5.5 10L11.5 4" stroke="white" strokeWidth="1.5" /></svg>;
@@ -330,6 +335,13 @@ const memorySummary: MemorySummarySection[] = [
 
 // ─── 설정 모달 ────────────────────────────────────────────────────────────────
 
+/**
+ * 설정 푸터의 글자색 — 이 화면에서 각주에 쓰는 흐린 회색.
+ * 프로젝트에 --text-muted 토큰은 없고, 가장 가까운 --muted-foreground(#717182)는
+ * 각주로 쓰기엔 진해서 이 파일이 보조 설명에 쓰는 회색과 같은 값을 쓴다.
+ */
+const FOOTER_MUTED = "#9ca3af";
+
 type SettingsTab = "외관" | "알림" | "메모리" | "크레딧";
 type MemoryFilter = "전체" | "사실" | "요약";
 
@@ -395,6 +407,14 @@ function SettingsModal({ onClose, onCreditHistory }: { onClose: () => void; onCr
   // 탭 전환 시 콘텐츠 스크롤을 처음으로 되돌려 위치가 튀지 않게 한다.
   React.useEffect(() => { contentRef.current?.scrollTo({ top: 0 }); }, [tab]);
 
+  // Esc로 닫기 — 데스크톱 모달의 X와 짝을 이루는 표준 닫기.
+  // (모바일 바텀시트는 그랩 핸들과 바깥 탭으로 닫으므로 X를 두지 않는다)
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const tabIcons: Record<SettingsTab, React.ReactNode> = {
     "외관": <Palette size={17} strokeWidth={1.7} />,
     "알림": <Bell size={17} strokeWidth={1.7} />,
@@ -459,7 +479,10 @@ function SettingsModal({ onClose, onCreditHistory }: { onClose: () => void; onCr
           // md와 wide의 출력 순서에 기대지 않도록 태블릿 높이는 768~1199 범위로 못박는다
           "h-[min(82dvh,760px)] max-h-[calc(100dvh-64px)] " +
           "md:max-wide:h-[min(86dvh,880px)] md:max-wide:max-h-[calc(100dvh-48px)] " +
-          "wide:h-[min(78dvh,760px)] wide:max-h-[calc(100dvh-80px)]"
+          // 데스크톱은 좌측 탭 메뉴에 빈 공간이 많이 남는 반면 우측 콘텐츠가 먼저 넘친다.
+          // (외관 탭의 마지막 "언어" 셀렉트가 하단 경계에 물리던 원인)
+          // 세로를 태블릿과 같은 여유로 올려 콘텐츠 쪽 높이를 벌어준다.
+          "wide:h-[min(86dvh,880px)] wide:max-h-[calc(100dvh-80px)]"
         }
         style={{ boxShadow: "0px -8px 40px rgba(0,0,0,0.18)" }}
       >
@@ -474,8 +497,11 @@ function SettingsModal({ onClose, onCreditHistory }: { onClose: () => void; onCr
             <p style={{ ...f, fontWeight: 700, fontSize: 20, color: "#0a0a0a", letterSpacing: "-0.6px" }}>설정</p>
             <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", marginTop: 3, letterSpacing: "-0.2px" }}>딸깍의 외관과 동작을 설정합니다.</p>
           </div>
-          <button onClick={onClose}
-            className="size-9 rounded-full bg-[#f1f5f9] flex items-center justify-center shrink-0 mt-0.5">
+          {/* 닫기 — 데스크톱 모달 전용.
+              바텀시트에는 그랩 핸들과 바깥 탭(backdrop)·Esc 가 이미 있어 X가 중복이고,
+              원형 면에 담긴 X가 "설정" 제목과 시각적 무게를 나눠 가진다. */}
+          <button onClick={onClose} aria-label="닫기"
+            className="hidden wide:flex size-9 rounded-full bg-[#f1f5f9] items-center justify-center shrink-0 mt-0.5">
             <svg width="16" height="16" fill="none" viewBox="0 0 16 16">
               <path d="M4 4L12 12M12 4L4 12" stroke="#374151" strokeWidth="1.6" strokeLinecap="round"/>
             </svg>
@@ -507,10 +533,11 @@ function SettingsModal({ onClose, onCreditHistory }: { onClose: () => void; onCr
           </div>
 
           {/* content — 헤더/탭바/푸터를 뺀 남은 높이를 차지하고, 넘칠 때 이 영역만 스크롤한다.
-              minHeight:0 이 없으면 flex 자식이 콘텐츠 높이만큼 밀려 셸이 늘어난다. */}
+              minHeight:0 이 없으면 flex 자식이 콘텐츠 높이만큼 밀려 셸이 늘어난다.
+              하단 여백은 마지막 요소(외관 탭의 "언어" 셀렉트)가 푸터 구분선에 붙지 않게 하는 몫이다. */}
           <div
             ref={contentRef}
-            className="flex-1 overflow-y-auto px-4 pb-8 wide:px-8 wide:border-l wide:border-[#f1f5f9]"
+            className="flex-1 overflow-y-auto px-4 pb-10 wide:px-8 wide:pb-12 wide:border-l wide:border-[#f1f5f9]"
             style={{ scrollbarWidth: "none", minHeight: 0, overscrollBehavior: "contain" }}
           >
           {/* 본문은 읽기 좋은 너비로 제한하고 좌측 시작선을 통일한다.
@@ -840,14 +867,24 @@ function SettingsModal({ onClose, onCreditHistory }: { onClose: () => void; onCr
           </div>
         </div>
 
-        {/* footer — 모든 탭에서 같은 하단 위치에 고정 */}
-        <div className="shrink-0 border-t border-[#f1f5f9] px-5 py-3 wide:px-7 flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <img alt="딸깍.net" className="h-4 w-auto object-contain" src={imgImageNet} />
-            <span style={{ ...f, fontWeight: 500, fontSize: 11, color: "#9ca3af" }}>v1.0.242</span>
-            <span style={{ ...f, fontWeight: 400, fontSize: 11, color: "#d1d5db" }}>4cc9c46</span>
-          </div>
-          <span style={{ ...f, fontWeight: 400, fontSize: 10, color: "#d1d5db" }}>Build: 2026. 07. 23. 오전 10:26</span>
+        {/* footer — 모든 탭에서 같은 하단 위치에 고정.
+            설정 화면의 각주라, 어느 폭에서도 콘텐츠보다 눈에 띄지 않게 둔다:
+            로고는 모노톤으로 눌러 두고, 버전·해시는 mono pill 로 감싸 "기술 정보" 신호만 준다.
+            항목 구성은 전 뷰포트 공통이고 밀도만 다르다 —
+            빌드 시각은 좁은 폭에서 줄바꿈을 만드는데다 커밋 해시로 같은 빌드를 특정할 수 있어
+            데스크톱에서만 덧붙인다. 구분선도 여백이 넉넉한 데스크톱에서만 쓴다. */}
+        <div
+          className="shrink-0 px-5 pt-2 wide:px-7 wide:pt-4 wide:border-t wide:border-[#f1f5f9] flex items-center gap-2"
+          style={{ paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))" }}
+        >
+          <img alt="딸깍.net" className="h-3.5 w-auto object-contain grayscale opacity-40" src={imgImageNet} />
+          <span className="font-mono rounded-[6px] px-1.5 py-0.5 bg-[#f1f5f9]"
+            style={{ fontSize: 12, lineHeight: 1.4, color: FOOTER_MUTED }}>v1.0.242</span>
+          <span className="font-mono rounded-[6px] px-1.5 py-0.5 bg-[#f1f5f9]"
+            style={{ fontSize: 12, lineHeight: 1.4, color: FOOTER_MUTED }}>4cc9c46</span>
+          <span className="hidden wide:inline" style={{ ...f, fontWeight: 400, fontSize: 12, color: FOOTER_MUTED }}>
+            Build: 2026. 07. 23. 오전 10:26
+          </span>
         </div>
       </div>
       </div>
@@ -1184,8 +1221,10 @@ function ComposerChips({ showUpload = true }: { showUpload?: boolean }) {
               left: tip.left,
               transform: "translateX(-50%)",
               width: tip.width,
-              background: "#333A47",
-              boxShadow: "0px 8px 24px rgba(16,24,40,0.24)",
+              // 아이콘 툴팁과 같은 면·테두리·그림자를 쓴다(theme.css --tooltip-*).
+              background: "var(--tooltip)",
+              border: "1px solid var(--tooltip-border)",
+              boxShadow: "var(--tooltip-shadow)",
             }}
           >
             <p style={{ ...f, fontWeight: 700, fontSize: 12, color: "white", lineHeight: 1.6, letterSpacing: "-0.2px", textAlign: "center" }}>
@@ -1202,7 +1241,7 @@ function ComposerChips({ showUpload = true }: { showUpload?: boolean }) {
               height: 0,
               borderLeft: "7px solid transparent",
               borderRight: "7px solid transparent",
-              borderTop: "7px solid #333A47",
+              borderTop: "7px solid var(--tooltip)",
             }}
           />
         </>
@@ -1568,7 +1607,77 @@ function TemplateCard({ title, isVideo = false, ratio = "66%", onApply, favorite
   );
 }
 
-function SearchFilterBar({ placeholder = "검색어를 입력해 주세요" }: { placeholder?: string }) {
+/** 내 작업·즐겨찾기 필터 항목. 순서가 곧 메뉴 순서다. */
+const FILTER_OPTIONS = ["전체", "이미지", "랜딩페이지", "동영상", "프레젠테이션", "오디오", "문서"] as const;
+type FilterOption = typeof FILTER_OPTIONS[number];
+
+/** 앱 전반의 브랜드 블루 — 선택 항목과 열림 상태 테두리에 쓴다(theme.css 의 --brand 와 같은 값). */
+const ACCENT = "#4f7bff";
+
+/**
+ * 검색창 + 필터 버튼 (내 작업 · 즐겨찾기 공용).
+ *
+ * 필터는 전 뷰포트가 같은 앵커 드롭다운이다 — 좁은 화면이라고 바텀시트로 바뀌지 않고,
+ * 항목 문구도 선택 표시(액센트 글자색 + 우측 체크)도 폭에 따라 달라지지 않는다.
+ * 폭으로 갈리는 것은 항목 높이 하나뿐이고, 그마저 브레이크포인트가 아니라
+ * 입력 방식(pointer: coarse — 손가락 48px / 마우스 44px)으로 나눈다. → theme.css 의 .filter-menu
+ */
+function SearchFilterBar({ placeholder = "검색어를 입력해 주세요", value, onChange }: {
+  placeholder?: string;
+  /** 선택된 필터. 넘기지 않으면 컴포넌트가 직접 들고 있는다. */
+  value?: FilterOption;
+  onChange?: (v: FilterOption) => void;
+}) {
+  const [own, setOwn] = useState<FilterOption>("전체");
+  const selected = value ?? own;
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const close = useCallback((returnFocus: boolean) => {
+    setOpen(false);
+    if (returnFocus) triggerRef.current?.focus();
+  }, []);
+
+  // 열리면 첫 항목으로 포커스를 옮긴다 — 방향키 이동의 시작점.
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitemradio"]')?.focus();
+  }, [open]);
+
+  // Esc로 닫고 포커스는 트리거로 돌려보낸다.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(true); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, close]);
+
+  /** 방향키(↑↓·Home·End) 이동. Tab 으로 벗어나면 닫는다. */
+  const onMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Tab") { setOpen(false); return; }
+    const items = Array.from(
+      menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? [],
+    );
+    if (!items.length) return;
+    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    const to =
+      e.key === "ArrowDown" ? (at + 1) % items.length
+        : e.key === "ArrowUp" ? (at - 1 + items.length) % items.length
+          : e.key === "Home" ? 0
+            : e.key === "End" ? items.length - 1
+              : -1;
+    if (to < 0) return;
+    e.preventDefault();
+    items[to].focus();
+  };
+
+  const pick = (opt: FilterOption) => {
+    if (value === undefined) setOwn(opt);
+    onChange?.(opt);
+    close(true);
+  };
+
   return (
     <div className="flex items-center gap-2 px-4 pb-3">
       <div className="flex-1 relative">
@@ -1579,10 +1688,54 @@ function SearchFilterBar({ placeholder = "검색어를 입력해 주세요" }: {
           style={{ ...f, fontWeight: 400, fontSize: 13, color: "#0a0a0a" }}
         />
       </div>
-      <button className="h-10 bg-white border border-[#e2e8f0] rounded-[14px] flex items-center gap-1.5 px-3 shrink-0">
-        <IconFilter />
-        <span style={{ ...f, fontWeight: 600, fontSize: 13, color: "#334155" }}>필터</span>
-      </button>
+      {/* 메뉴가 이 래퍼 기준으로 버튼 바로 아래에 붙는다 */}
+      <div className="relative shrink-0">
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className="h-10 bg-white rounded-[14px] flex items-center gap-1.5 px-3"
+          style={{ border: `1px solid ${open ? ACCENT : "#e2e8f0"}`, transition: "border-color 120ms ease" }}
+        >
+          <IconFilter color={open ? ACCENT : "#334155"} />
+          <span style={{ ...f, fontWeight: 600, fontSize: 13, color: open ? ACCENT : "#334155" }}>필터</span>
+        </button>
+
+        {open && (
+          <>
+            <div className="fixed inset-0 z-50" onClick={() => close(false)} />
+            <div ref={menuRef} role="menu" aria-label="필터" onKeyDown={onMenuKeyDown} className="filter-menu">
+              {FILTER_OPTIONS.map((opt) => {
+                const active = opt === selected;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={active}
+                    onClick={() => pick(opt)}
+                    className="filter-menu-item"
+                  >
+                    <span
+                      className="filter-menu-label"
+                      style={{ ...f, fontWeight: active ? 700 : 500, color: active ? ACCENT : "#1e293b" }}
+                    >
+                      {opt}
+                    </span>
+                    {active && (
+                      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" className="shrink-0" aria-hidden="true">
+                        <path d="M5 12l5 5L19 7" stroke={ACCENT} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -1640,6 +1793,7 @@ function FormsAIScreen({ activeTab, onTabChange, sortOption, onSortChange, scrol
   const [stuck, setStuck] = useState(false);
   const sentinelRef = React.useRef<HTMLDivElement>(null);
   const mainRef = React.useRef<HTMLElement>(null);
+  const sortTriggerRef = React.useRef<HTMLButtonElement>(null);
   const sortActive = sortOption !== "인기순";
   const filterTabs = ["전체", "외국인 비자 서식", "법무 서식", "관공서 양식"];
 
@@ -1691,10 +1845,24 @@ function FormsAIScreen({ activeTab, onTabChange, sortOption, onSortChange, scrol
           <button className="flex items-center justify-center" style={{ width: 36, height: 36 }}>
             <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="#334155" strokeWidth="1.8" /><path d="M20 20L16.5 16.5" stroke="#334155" strokeWidth="1.8" strokeLinecap="round" /></svg>
           </button>
-          <button className="flex items-center justify-center relative" style={{ width: 36, height: 36 }} onClick={() => setSortSheetOpen(true)}>
-            <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4" stroke="#334155" strokeWidth="1.8" strokeLinecap="round" /></svg>
-            {sortActive && <span style={{ position: "absolute", top: 5, right: 5, width: 6, height: 6, borderRadius: "50%", background: "#4f7bff" }} />}
-          </button>
+          {/* 정렬 — 팝오버가 이 래퍼 기준으로 아래에 붙는다(모바일은 바텀시트라 무관) */}
+          <div style={{ position: "relative" }}>
+            <button
+              ref={sortTriggerRef}
+              aria-label="정렬"
+              aria-haspopup="menu"
+              aria-expanded={sortSheetOpen}
+              className="flex items-center justify-center relative rounded-[10px]"
+              style={{ width: 36, height: 36, background: sortSheetOpen ? "#e8edf3" : "transparent", transition: "background-color 120ms ease" }}
+              onClick={() => setSortSheetOpen((v) => !v)}
+            >
+              <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4" stroke="#334155" strokeWidth="1.8" strokeLinecap="round" /></svg>
+              {sortActive && <span style={{ position: "absolute", top: 5, right: 5, width: 6, height: 6, borderRadius: "50%", background: "#4f7bff" }} />}
+            </button>
+            {sortSheetOpen && (
+              <SortMenu selected={sortOption} onSelect={onSortChange} onClose={() => setSortSheetOpen(false)} triggerRef={sortTriggerRef} />
+            )}
+          </div>
         </div>
       </div>
 
@@ -1711,9 +1879,6 @@ function FormsAIScreen({ activeTab, onTabChange, sortOption, onSortChange, scrol
       </div>
     </main>
 
-    {sortSheetOpen && (
-      <SortBottomSheet selected={sortOption} onSelect={onSortChange} onClose={() => setSortSheetOpen(false)} />
-    )}
     </>
   );
 }
@@ -1773,68 +1938,93 @@ function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
 const SORT_OPTIONS = ["인기순", "최신순", "이름순"] as const;
 type SortOption = typeof SORT_OPTIONS[number];
 
-function SortBottomSheet({ selected, onSelect, onClose }: {
+/**
+ * 정렬 메뉴 — 인기순 / 최신순 / 이름순.
+ *
+ * 표현은 전 뷰포트가 같다: 체크 아이콘이 글자 왼쪽, 선택 항목도 같은 글자색
+ * (선택 표시는 체크 하나로 끝낸다), 섹션 레이블 없음, 항목 높이 48px.
+ * 담는 그릇만 폭에 따라 갈린다 — 600px 미만은 바텀시트(트리거가 화면 위쪽이라
+ * 한 손으로 닿지 않는다), 그 이상은 트리거에 앵커된 팝오버. 분기는 theme.css 의
+ * .sort-menu 미디어쿼리가 전부라 컴포넌트는 하나뿐이다.
+ *
+ * 트리거를 감싸는 요소가 position:relative 여야 팝오버가 그 아래에 붙는다.
+ */
+function SortMenu({ selected, onSelect, onClose, triggerRef }: {
   selected: SortOption;
   onSelect: (v: SortOption) => void;
   onClose: () => void;
+  /** 닫힐 때 포커스를 되돌릴 트리거 버튼 */
+  triggerRef: React.RefObject<HTMLButtonElement | null>;
 }) {
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  const close = React.useCallback((returnFocus: boolean) => {
+    onClose();
+    if (returnFocus) triggerRef.current?.focus();
+  }, [onClose, triggerRef]);
+
+  // 열리면 첫 항목으로 포커스를 옮긴다 — 방향키 이동의 시작점.
+  React.useEffect(() => {
+    menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitemradio"]')?.focus();
+  }, []);
+
+  // Esc로 닫고 포커스는 트리거로 돌려보낸다.
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(true); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [close]);
+
+  /** 방향키(↑↓·Home·End) 이동. Tab 으로 벗어나면 닫는다. */
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Tab") { onClose(); return; }
+    const items = Array.from(
+      menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? [],
+    );
+    if (!items.length) return;
+    const at = items.indexOf(document.activeElement as HTMLButtonElement);
+    const to =
+      e.key === "ArrowDown" ? (at + 1) % items.length
+        : e.key === "ArrowUp" ? (at - 1 + items.length) % items.length
+          : e.key === "Home" ? 0
+            : e.key === "End" ? items.length - 1
+              : -1;
+    if (to < 0) return;
+    e.preventDefault();
+    items[to].focus();
+  };
+
   return (
     <>
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: "fixed", inset: 0, zIndex: 50,
-          background: "rgba(0,0,0,0.35)",
-          animation: "fadeIn 180ms ease",
-        }}
-      />
-      {/* Sheet */}
-      <div
-        style={{
-          position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 51,
-          background: "white",
-          borderRadius: "20px 20px 0 0",
-          paddingBottom: "env(safe-area-inset-bottom, 16px)",
-          boxShadow: "0px -4px 24px rgba(0,0,0,0.1)",
-          animation: "slideUp 220ms cubic-bezier(0.32,0.72,0,1)",
-        }}
-      >
-        {/* 드래그 핸들 */}
-        <div className="flex justify-center pt-3 pb-1">
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: "#dfe6ed" }} />
-        </div>
-        {/* 정렬 라벨 */}
-        <div style={{ padding: "14px 20px 6px" }}>
-          <span style={{ ...f, fontWeight: 600, fontSize: 13, color: "#90a1b9", letterSpacing: "-0.3px" }}>정렬</span>
-        </div>
-        {/* 옵션 목록 */}
+      <div className="sort-menu-backdrop" onClick={() => close(false)} />
+      <div ref={menuRef} role="menu" aria-label="정렬" onKeyDown={onKeyDown} className="sort-menu">
+        {/* 바텀시트일 때만 보이는 손잡이 */}
+        <div className="sort-menu-handle" />
         {SORT_OPTIONS.map((opt) => {
           const active = opt === selected;
           return (
             <button
               key={opt}
-              onClick={() => { onSelect(opt); onClose(); }}
-              className="w-full flex items-center justify-between"
-              style={{ padding: "15px 20px" }}
+              type="button"
+              role="menuitemradio"
+              aria-checked={active}
+              onClick={() => { onSelect(opt); close(true); }}
+              className="sort-menu-item"
             >
-              <span style={{ ...f, fontWeight: active ? 600 : 500, fontSize: 16, color: active ? "#4f7bff" : "#1e293b", letterSpacing: "-0.4px" }}>
+              <span className="sort-menu-check">
+                {active && (
+                  <svg width="18" height="18" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 12l5 5L19 7" stroke="#1e293b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </span>
+              <span className="sort-menu-label" style={{ ...f, fontWeight: active ? 600 : 500 }}>
                 {opt}
               </span>
-              {active && (
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-                  <path d="M5 12l5 5L19 7" stroke="#4f7bff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
             </button>
           );
         })}
-        <div style={{ height: 16 }} />
       </div>
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes slideUp { from { transform: translateY(100%) } to { transform: translateY(0) } }
-      `}</style>
     </>
   );
 }
@@ -1858,6 +2048,7 @@ function AIAgentScreen({ title, category, desc, filterTabs, cards, cardRatio = "
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const sentinelRef = React.useRef<HTMLDivElement>(null);
+  const sortTriggerRef = React.useRef<HTMLButtonElement>(null);
 
   const sortActive = sortOption !== "인기순";
   const q = query.trim();
@@ -1970,20 +2161,31 @@ function AIAgentScreen({ title, category, desc, filterTabs, cards, cardRatio = "
                   <path d="M20 20L16.5 16.5" stroke="#334155" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
               </button>
-              {/* 정렬 아이콘 (배지 포함) */}
-              <button className="flex items-center justify-center relative" style={{ width: 36, height: 36 }}
-                onClick={() => setSortSheetOpen(true)}>
-                <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-                  <path d="M4 6h16M7 12h10M10 18h4" stroke="#334155" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-                {sortActive && (
-                  <span style={{
-                    position: "absolute", top: 5, right: 5,
-                    width: 6, height: 6, borderRadius: "50%",
-                    background: "#4f7bff",
-                  }} />
+              {/* 정렬 아이콘 (배지 포함) — 팝오버가 이 래퍼 기준으로 아래에 붙는다 */}
+              <div style={{ position: "relative" }}>
+                <button
+                  ref={sortTriggerRef}
+                  aria-label="정렬"
+                  aria-haspopup="menu"
+                  aria-expanded={sortSheetOpen}
+                  className="flex items-center justify-center relative rounded-[10px]"
+                  style={{ width: 36, height: 36, background: sortSheetOpen ? "#e8edf3" : "transparent", transition: "background-color 120ms ease" }}
+                  onClick={() => setSortSheetOpen((v) => !v)}>
+                  <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+                    <path d="M4 6h16M7 12h10M10 18h4" stroke="#334155" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                  {sortActive && (
+                    <span style={{
+                      position: "absolute", top: 5, right: 5,
+                      width: 6, height: 6, borderRadius: "50%",
+                      background: "#4f7bff",
+                    }} />
+                  )}
+                </button>
+                {sortSheetOpen && (
+                  <SortMenu selected={sortOption} onSelect={setSortOption} onClose={() => setSortSheetOpen(false)} triggerRef={sortTriggerRef} />
                 )}
-              </button>
+              </div>
             </div>
           </>
         )}
@@ -2023,14 +2225,6 @@ function AIAgentScreen({ title, category, desc, filterTabs, cards, cardRatio = "
       )}
     </main>
 
-    {/* 정렬 바텀시트 */}
-    {sortSheetOpen && (
-      <SortBottomSheet
-        selected={sortOption}
-        onSelect={setSortOption}
-        onClose={() => setSortSheetOpen(false)}
-      />
-    )}
     </>
   );
 }
@@ -2116,12 +2310,12 @@ function CreditBottomSheet({ onClose, onHistoryClick }: { onClose: () => void; o
         <div className="flex justify-center pt-3 pb-1">
           <div style={{ width: 36, height: 4, borderRadius: 2, background: "#dfe6ed" }} />
         </div>
-        {/* 헤더 */}
-        <div className="flex items-center justify-between px-5 pt-2 pb-3">
+        {/* 헤더 — 바텀시트에는 닫기(X)를 두지 않는다.
+            위에 그랩 핸들이 있고 바깥(backdrop)을 눌러도 닫히므로 X 는 중복이고,
+            원형 면에 담긴 X 가 "크레딧 충전" 제목과 시각적 무게를 나눠 가진다.
+            (데스크톱 중앙 모달 CreditModal 의 X 는 그대로 둔다 — 그쪽은 스와이프가 없다) */}
+        <div className="flex items-center px-5 pt-2 pb-3">
           <span style={{ ...f, fontWeight: 700, fontSize: 18, color: "#0a0a0a", letterSpacing: "-0.5px" }}>크레딧 충전</span>
-          <button onClick={onClose} className="size-8 flex items-center justify-center rounded-full bg-[#f1f5f9]">
-            <IconClose />
-          </button>
         </div>
         {/* 현재 잔액 */}
         <div className="px-5 pb-4">
@@ -3454,12 +3648,19 @@ function FcTextarea({ value, onChange, placeholder, minHeight = 60 }: { value: s
   );
 }
 
-function FcInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+/**
+ * 단일 행 입력. filled 는 앞 단계에서 넘어와 이미 채워진 값을 뜻한다
+ * — 박스 규격(반경·테두리·높이·좌우 여백)은 빈 필드와 똑같이 두고,
+ * 면만 이 화면의 보조 배경(#F8F9FC)으로 한 단계 낮춰 "완료된 값"으로 읽히게 한다.
+ * 여전히 수정 가능한 입력이므로 읽기 전용 표시(회색 글자)는 쓰지 않는다.
+ */
+function FcInput({ value, onChange, placeholder, filled = false }: { value: string; onChange: (v: string) => void; placeholder?: string; filled?: boolean }) {
   return (
-    <div className="fc-single relative bg-white rounded-[14px] w-full min-h-[48px] flex items-center" style={{ border: "1px solid #E3E6EB" }}>
+    <div className={`fc-single relative rounded-[14px] w-full min-h-[48px] flex items-center ${filled ? "" : "bg-white"}`}
+      style={{ border: "1px solid #E3E6EB", background: filled ? "#F8F9FC" : undefined }}>
       <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
         className="w-full outline-none bg-transparent px-[17px] py-[15px]"
-        style={{ ...f, fontSize: 14.5, color: "#1B2440" }} />
+        style={{ ...f, fontSize: 14.5, fontWeight: filled ? 500 : undefined, color: "#1B2440" }} />
     </div>
   );
 }
@@ -3533,7 +3734,10 @@ const CARD_SHELL: React.CSSProperties = {
   boxShadow: "0px 1px 2px rgba(16,24,40,0.04), 0px 12px 32px rgba(16,24,40,0.06)",
   display: "flex", flexDirection: "column", overflow: "hidden",
   width: "100%", boxSizing: "border-box",
-  maxHeight: "calc(100dvh - 120px)",
+  // 화면에 실제로 보이는 채팅 영역 높이 — 호출부(워크스페이스)가 하단 입력창 높이를 재서 넣어 준다.
+  // 폴백은 상단바 56 + 입력창 약 146 + 여백 24. 이 값을 넘기면 CardBody 가 안에서 스크롤되고,
+  // 카드 하단(이전·생성 버튼)은 언제나 입력창 위에 남는다.
+  maxHeight: "var(--fc-card-max-h, calc(100dvh - 226px))",
 };
 // 부모가 세로 flex 컨테이너이므로 자식은 기본적으로 가로로 stretch된다.
 // min-w-0 은 긴 내용이 카드를 밀어 가로 스크롤을 만들지 않게 하는 안전장치.
@@ -3940,15 +4144,18 @@ function VideoFormCard({ onGenerate }: { onGenerate: () => void }) {
       <CardBody>
         <FcPreview open={prevOpen} onToggle={() => setPrevOpen(v=>!v)}><Preview /></FcPreview>
         <FcHelper text="주제에 맞춰 장면을 만들었어요. 확인하고 다듬은 뒤 생성하세요." />
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex flex-col gap-1 flex-1">
+        {/* 주제 — 앞 단계에서 넘어온 값이라 아래 필드들과 같은 박스를 쓰되 면만 옅게 깐다.
+            재생성은 1단계 주제의 FcToggleRow 와 같은 자리(라벨 행 우측)에 두어 이 필드의 동작임을 보인다. */}
+        <div className="flex flex-col gap-[10px]">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <FcLabel label="주제" />
-            <span style={{ ...f, fontSize:14, color:"#1B2440", fontWeight:500 }}>{s.topic || "여름철 자연재해 대비"}</span>
+            <button className="flex items-center gap-1.5 px-3 py-2 rounded-[10px]" style={{ border:"1.5px solid #E3E6EB", ...f, fontSize:12.5, fontWeight:600, color:"#4B5262", flexShrink:0 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              재생성
+            </button>
           </div>
-          <button className="flex items-center gap-1.5 px-3 py-2 rounded-[10px]" style={{ border:"1.5px solid #E3E6EB", ...f, fontSize:12.5, fontWeight:600, color:"#4B5262", flexShrink:0 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            재생성
-          </button>
+          {/* 목업 기본값 — 1단계를 건너뛰고 이 화면만 보는 경우를 위한 예시 문구 */}
+          <FcInput filled value={s.topic || "여름철 자연재해 대비"} onChange={v=>set("topic",v)} placeholder="영상 주제" />
         </div>
         {/* 분위기 */}
         <div className="flex flex-col gap-[10px]">
@@ -4284,11 +4491,18 @@ function PptSlidesPanel({ templateName }: { templateName: string }) {
 }
 
 /**
- * 결과물 버전 — 목업. 같은 워크스페이스에서 재생성할 때마다 쌓이는 버전 목록을 가정한다.
- * 데스크톱(1200px 이상) 결과물 뷰어의 다운로드 드롭다운이 이 값을 그대로 보여준다:
- * 현재 버전 = 마지막 항목, 전체 버전 개수 = 길이.
+ * 결과물을 이루는 파일 목록 — 목업. 한 번의 요청으로 결과물 2개가 나온 상황을 가정한다.
+ *
+ * 상단바 파일 드롭다운과 다운로드 메뉴의 "전체 파일 받기 (N개)"가 이 목록 하나를 함께 본다.
+ * 개수를 따로 넘기면 목록에는 1개인데 메뉴에는 2개라고 뜨는 식으로 어긋나므로,
+ * 출처를 목록 하나로 묶어 둔다.
  */
-const RESULT_VERSIONS = ["1.0", "2.0"];
+function resultFileNames(filename: string): string[] {
+  const dot = filename.lastIndexOf(".");
+  const base = dot > 0 ? filename.slice(0, dot) : filename;
+  const ext = dot > 0 ? filename.slice(dot) : "";
+  return [filename, `${base}_2${ext}`];
+}
 
 /** 필터 탭이 "전체"일 때 쓰는 카테고리별 기본 결과물 형식 */
 const CATEGORY_FILE_TYPE: Record<WorkspaceCategory, ViewerFileType> = {
@@ -4379,7 +4593,6 @@ function WsResult({ category, templateName, fileType }: {
   const filename = r.fixedName ?? fileNameFor(slug, fileType);
   const variant = FILE_TYPE_VARIANT[fileType];
   const [viewerOpen, setViewerOpen] = useState(false);
-  const versions = { version: RESULT_VERSIONS[RESULT_VERSIONS.length - 1], count: RESULT_VERSIONS.length };
 
   return (
     <div className="flex flex-col gap-3.5" style={{ animation: "wsFadeIn 450ms ease" }}>
@@ -4429,7 +4642,6 @@ function WsResult({ category, templateName, fileType }: {
           fileType={fileType}
           filename={filename}
           templateName={templateName}
-          versions={versions}
           onClose={() => setViewerOpen(false)}
         />
       )}
@@ -4478,16 +4690,16 @@ function useIsTabletRange() {
 // ─── 결과물 뷰어 (전체화면) ────────────────────────────────────────────────────
 // 상단바 구성은 파일 형식(fileType)이 정한다 — viewerChrome.ts의 VIEWER_CHROME.
 // 여기서는 형식에 맞는 뷰어 컴포넌트를 고르고, 편집(연필)이 열 편집기를 연결한다.
-function ResultViewer({ variant, fileType, filename, templateName, versions, onClose }: {
+function ResultViewer({ variant, fileType, filename, templateName, onClose }: {
   variant: ResultCardVariant; fileType: ViewerFileType;
   filename: string; templateName: string;
-  /** 다운로드 버전 드롭다운(1200px 이상)에 채울 값 */
-  versions?: ResultVersionInfo;
   onClose: () => void;
 }) {
   const isTabletUp = useIsTabletUp();
   // 뷰어에서 편집(연필)을 누르면 형식에 맞는 편집기로 넘어간다.
   const [editing, setEditing] = useState(false);
+  // 파일 드롭다운과 다운로드 메뉴가 함께 보는 결과물 파일 목록.
+  const files = React.useMemo(() => resultFileNames(filename), [filename]);
 
   const miniEditorMeta = {
     png: { ratio: "4 / 5", size: "1024 × 1280 px", pages: 1 },
@@ -4500,7 +4712,7 @@ function ResultViewer({ variant, fileType, filename, templateName, versions, onC
     // 영상 — 커스텀 컨트롤 플레이어 전용 뷰어
     if (fileType === "mp4") {
       return (
-        <TabletVideoResultViewer fileName={filename} versions={versions} onClose={onClose} />
+        <TabletVideoResultViewer fileName={filename} files={files} onClose={onClose} />
       );
     }
 
@@ -4554,7 +4766,7 @@ function ResultViewer({ variant, fileType, filename, templateName, versions, onC
       <TabletResultViewer
         fileType={fileType}
         fileName={filename}
-        versions={versions}
+        files={files}
         onEdit={() => setEditing(true)}
         onClose={onClose}
       >
@@ -4570,7 +4782,7 @@ function ResultViewer({ variant, fileType, filename, templateName, versions, onC
     return (
       <TabletVideoResultViewer
         fileName={filename}
-        versions={versions}
+        files={files}
         notice={<MobileEditorNotice />}
         onClose={onClose}
       />
@@ -4580,7 +4792,7 @@ function ResultViewer({ variant, fileType, filename, templateName, versions, onC
     <TabletResultViewer
       fileType={fileType}
       fileName={filename}
-      versions={versions}
+      files={files}
       notice={<MobileEditorNotice />}
       onClose={onClose}
     >
@@ -4783,7 +4995,23 @@ function WorkspaceScreen({ category, templateName, fileType, onBack, onCreditCli
   const [generated, setGenerated] = useState(false);
   const [stepsOpen, setStepsOpen] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const promptRef = useRef<HTMLDivElement>(null);
   const isDesktop = useIsDesktop();
+
+  // 하단 입력창은 fixed라 채팅 스크롤 위에 겹쳐 뜬다.
+  // 그 높이를 실제로 재서 (1) 스크롤 하단 여백과 (2) 폼 카드의 최대 높이에 쓴다.
+  // 예전에는 둘 다 상수(130px / 120px)로 잡혀 있었는데, 입력창이 그보다 높아지면
+  // 상세 프롬프트 카드가 화면에 보이는 높이보다 커져 카드 하단(이전·생성 버튼)이
+  // 입력창 뒤로 잘려 들어갔다.
+  const [promptH, setPromptH] = useState(130);
+  useEffect(() => {
+    const el = promptRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setPromptH(entry.contentRect.height));
+    ro.observe(el);
+    setPromptH(el.getBoundingClientRect().height);
+    return () => ro.disconnect();
+  }, []);
 
   const wsSteps: { type: "read" | "help"; text: string; file: boolean }[] = [
     { type: "read", text: "이미지 생성 스킬의 워크플로우를 확인하기 위해 SKILL.md 파일을 읽습니다.", file: true },
@@ -4805,7 +5033,12 @@ function WorkspaceScreen({ category, templateName, fileType, onBack, onCreditCli
   const promptBottom = "0px";
 
   return (
-    <div className="fixed inset-0 z-[90] bg-[#f8fafc] flex flex-col">
+    <div
+      className="fixed inset-0 z-[90] bg-[#f8fafc] flex flex-col"
+      /* 상단바(56px) + 하단 입력창 + 숨 쉴 여백을 뺀, 카드가 실제로 쓸 수 있는 높이.
+         CARD_SHELL 이 이 값을 max-height 로 받는다. */
+      style={{ "--fc-card-max-h": `calc(100dvh - ${56 + promptH + 24}px)` } as React.CSSProperties}
+    >
       <style>{`
         @keyframes wsFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes wsSlideRight { from { opacity:0; transform:translateX(-6px); } to { opacity:1; transform:translateX(0); } }
@@ -4828,7 +5061,7 @@ function WorkspaceScreen({ category, templateName, fileType, onBack, onCreditCli
       </header>
 
       {/* Chat scroll */}
-      <div ref={chatScrollRef} className="flex-1 overflow-y-auto pb-4" style={{ paddingBottom: `calc(${promptBottom === "0px" ? "130px" : promptBottom} + 80px)`, scrollbarWidth: "none" }}>
+      <div ref={chatScrollRef} className="flex-1 overflow-y-auto pb-4" style={{ paddingBottom: `${promptH + 80}px`, scrollbarWidth: "none" }}>
         {/* 채팅 정렬 축 — 말풍선·단계 아코디언·상세 프롬프트 카드·결과가 모두 이 래퍼 안에서 같은 좌우 끝선을 쓴다 */}
         <div className="mx-auto w-full max-w-[900px] px-4 md:px-6 flex flex-col gap-3.5" style={{ animation: "wsFadeIn 300ms ease" }}>
           {/* Template preview card — 사용자 메시지처럼 오른쪽 정렬 + 축소 */}
@@ -4907,7 +5140,7 @@ function WorkspaceScreen({ category, templateName, fileType, onBack, onCreditCli
       </div>
 
       {/* Fixed prompt input */}
-      <div className="fixed left-0 right-0 z-[89]" style={{ bottom: promptBottom }}>
+      <div ref={promptRef} className="fixed left-0 right-0 z-[89]" style={{ bottom: promptBottom }}>
         <WsChatInput onGenerate={handleGenerate} />
       </div>
     </div>

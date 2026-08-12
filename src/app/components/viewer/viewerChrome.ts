@@ -16,7 +16,9 @@ export type ViewerActionKey = "download" | "structure" | "share" | "edit" | "exp
 
 /**
  * 결과물 뷰어의 공통 아이콘 순서 — 형식과 무관하게 이 하나로 통일한다.
- * 다운로드(버전 드롭다운) · 공유 · 구분선 · 확대 · 닫기.
+ * 다운로드 · 공유 · 구분선 · 확대 · 닫기.
+ * 다운로드는 아이콘 하나가 전부다 — 셰브론도 분할 버튼도 없고,
+ * 받을 파일이 여러 개일 때만 눌러서 "이 파일 / 전체 파일" 메뉴를 연다.
  * 중앙 페이지네이션 유무는 통일 대상이 아니라 형식별 구성(VIEWER_CHROME)을 그대로 따른다.
  * 편집기(에디터)에는 적용하지 않는다 — fileType 을 넘기지 않으므로 자연히 제외된다.
  */
@@ -33,14 +35,6 @@ export const DESKTOP_MIN = 1200;
  */
 export function resultActions(isDesktop: boolean): (ViewerActionKey | "divider")[] {
   return isDesktop ? RESULT_ACTIONS : RESULT_ACTIONS.filter((a) => a !== "expand");
-}
-
-/** 다운로드 드롭다운에 표시할 결과물 버전 정보 */
-export interface ResultVersionInfo {
-  /** 현재 버전 표기 (예: "2.0") */
-  version: string;
-  /** 전체 버전 개수 — "전체 버전 (N개)" */
-  count: number;
 }
 
 export interface ViewerChromeSpec {

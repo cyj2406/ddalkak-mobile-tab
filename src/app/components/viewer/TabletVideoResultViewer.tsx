@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Film, Maximize2, Minimize2, Pause, Play, Volume2, VolumeX } from "lucide-react";
+import { Maximize2, Minimize2, Pause, Pencil, Play, Volume2, VolumeX } from "lucide-react";
 import TabletEditorShell from "@/app/components/viewer/TabletEditorShell";
-import { type ResultVersionInfo } from "@/app/components/viewer/viewerChrome";
+import OverlayButton from "@/app/components/viewer/OverlayButton";
 
 /**
  * 태블릿(768~1024px, 터치) 영상 결과 뷰어.
@@ -9,16 +9,13 @@ import { type ResultVersionInfo } from "@/app/components/viewer/viewerChrome";
  *
  * - 상단바는 fileType="mp4" 구성(VIEWER_CHROME) — 페이지네이션 없음,
  *   우측은 다운로드(버전 드롭다운)·공유·구분선·확대·닫기
- * - 상단바 아래는 곧바로 플레이어다. 회색 띠 없이 "편집기 열기"만 영상 위 우상단에 띄운다
- *   (768px 미만에서는 이 버튼을 감춘다).
+ * - 상단바 아래는 곧바로 플레이어다. 회색 띠 없이 "편집기 열기"(브랜드 블루)만
+ *   영상 위 우상단에 띄운다 (768px 미만에서는 감춘다).
+ * - 상단바에는 편집(연필)을 두지 않는다. 편집기 입구는 이 파란 버튼 하나뿐이라
+ *   헤더 아이콘(다운로드·공유·전체화면·닫기)과 역할이 겹치지 않는다.
  * - 16:9 플레이어를 폭 100%로, 남는 공간의 상하 중앙에 배치
  * - 커스텀 컨트롤(재생/일시정지 · 진행바 · 시간 · 음소거 · 전체화면)
  */
-
-const C = {
-  card: "#FFFFFF",
-  text: "#1A1D29",
-} as const;
 
 const font = { fontFamily: "'Pretendard Variable', Pretendard, sans-serif" };
 
@@ -41,8 +38,8 @@ export interface TabletVideoResultViewerProps {
   src?: string;
   poster?: string;
   duration?: number;
-  /** 다운로드 버튼에 붙는 버전 드롭다운 값 (데스크톱·태블릿 공통) */
-  versions?: ResultVersionInfo;
+  /** 결과물을 이루는 파일 개수 — 다운로드 메뉴의 "전체 파일 받기 (N개)". 1이면 메뉴 없이 즉시 다운로드. */
+  downloadFileCount?: number;
   onBack?: () => void;
   onDownload?: () => void;
   onShare?: () => void;
@@ -53,34 +50,14 @@ export interface TabletVideoResultViewerProps {
   notice?: React.ReactNode;
 }
 
-/**
- * 플레이어 위에 얹는 알약 버튼 — 편집기 열기.
- * 검은 영상 위에 바로 놓이므로 옅은 테두리 대신 짙은 그림자로 경계를 만든다.
- */
-function OverlayButton({
-  label, icon, onClick,
-}: { label: string; icon: React.ReactNode; onClick?: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="shrink-0 h-10 px-3.5 rounded-[10px] flex items-center gap-2 transition-colors active:bg-[#EDF0F5] hover:bg-[#F2F4F8]"
-      style={{ background: C.card, boxShadow: "0px 4px 16px rgba(0,0,0,0.32)" }}
-    >
-      <span className="shrink-0" style={{ color: C.text, display: "flex" }}>{icon}</span>
-      <span style={{ fontSize: 13.5, fontWeight: 600, color: C.text, whiteSpace: "nowrap" }}>{label}</span>
-    </button>
-  );
-}
-
 export default function TabletVideoResultViewer({
   fileName = MOCK.fileName,
   files,
   src,
   poster,
   duration: durationProp = MOCK.duration,
-  versions,
   onBack,
+  downloadFileCount,
   onDownload,
   onShare,
   onClose,
@@ -179,18 +156,19 @@ export default function TabletVideoResultViewer({
 
   const pct = duration > 0 ? Math.min(100, (current / duration) * 100) : 0;
 
+  // onEdit 은 셸에 넘기지 않는다 — 결과물 상단바(RESULT_ACTIONS)에는 연필이 없고,
+  // 편집기 입구는 본문의 파란 "편집기 열기" 하나로만 둔다.
   return (
     <TabletEditorShell
       fileType="mp4"
       fileName={fileName}
       files={files ?? [fileName]}
-      versions={versions}
       bleed
       onBack={onBack}
+      downloadFileCount={downloadFileCount}
       onDownload={onDownload}
       onShare={onShare}
       onClose={onClose}
-      onEdit={onEdit}
       toolbar={notice}
     >
       <div className="h-full flex flex-col" style={font}>
@@ -220,11 +198,17 @@ export default function TabletVideoResultViewer({
             </div>
           )}
 
-          {/* 편집기 열기 — 영상 위 우상단. 태블릿(768px) 이상에서만 노출한다
+          {/* 편집기 열기 — 영상 위 우상단의 단독 액션. 태블릿(768px) 이상에서만 노출한다
               (모바일은 편집기로 들어가지 않고 "PC 에디터" 안내만 띄운다).
-              가운데 재생 버튼이 inset-0 로 화면 전체를 덮으므로 z-20 으로 그 위에 올린다 */}
+              우측 16px 은 상단바 아이콘 글리프가 서는 선과 맞춰 세로 정렬을 이룬다.
+              가운데 재생 버튼이 inset-0 로 화면 전체를 덮으므로 z-20 으로 그 위에 올린다. */}
           <div className="hidden md:block absolute right-4 top-4 z-20">
-            <OverlayButton label="편집기 열기" icon={<Film size={16} strokeWidth={1.8} />} onClick={onEdit} />
+            <OverlayButton
+              label="편집기 열기"
+              variant="primary"
+              icon={<Pencil size={16} strokeWidth={1.8} />}
+              onClick={onEdit}
+            />
           </div>
 
           {/* 가운데 큰 재생 버튼 — 정지 상태에서만 */}

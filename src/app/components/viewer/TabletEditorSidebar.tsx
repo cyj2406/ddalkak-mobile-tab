@@ -4,6 +4,8 @@ import {
   Heading, Image as ImageIcon, Lock, MousePointer2, RotateCcw, RotateCw, Square, Trash2, Type, Upload,
 } from "lucide-react";
 
+import { IconTooltip } from "./IconTooltip";
+
 /**
  * 미니 에디터 우측 사이드바 — 디자인 / 레이어 / 테마.
  *
@@ -281,29 +283,31 @@ function MiniIcon({
   label, danger = false, children,
 }: { label: string; danger?: boolean; children: React.ReactNode }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      className="shrink-0 w-8 h-8 rounded-[8px] flex items-center justify-center transition-colors hover:bg-[#F2F4F8] active:bg-[#EDF0F5]"
-      style={{ color: danger ? "#E5484D" : C.sub }}
-    >
-      {children}
-    </button>
+    <IconTooltip label={label}>
+      <button
+        type="button"
+        aria-label={label}
+        className="shrink-0 w-8 h-8 rounded-[8px] flex items-center justify-center transition-colors hover:bg-[#F2F4F8] active:bg-[#EDF0F5]"
+        style={{ color: danger ? "#E5484D" : C.sub }}
+      >
+        {children}
+      </button>
+    </IconTooltip>
   );
 }
 
 function TransformButton({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      className="h-10 rounded-[10px] flex items-center justify-center transition-colors hover:bg-[#F5F7FA] active:bg-[#EDF0F5]"
-      style={{ border: `1px solid ${C.line}`, color: C.text }}
-    >
-      {children}
-    </button>
+    <IconTooltip label={label}>
+      <button
+        type="button"
+        aria-label={label}
+        className="h-10 rounded-[10px] flex items-center justify-center transition-colors hover:bg-[#F5F7FA] active:bg-[#EDF0F5]"
+        style={{ border: `1px solid ${C.line}`, color: C.text }}
+      >
+        {children}
+      </button>
+    </IconTooltip>
   );
 }
 
