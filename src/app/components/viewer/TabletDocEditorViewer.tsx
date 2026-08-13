@@ -59,6 +59,8 @@ export interface TabletDocEditorViewerProps {
   onDownload?: () => void;
   onShare?: () => void;
   onClose?: () => void;
+  /** 2단 구성(좌측 채팅 + 우측 에디터)의 오른쪽 열 안에서 렌더될 때 true. */
+  embedded?: boolean;
   /** 편집 영역(#editor-root) 안에 렌더할 문서. 비우면 회색 플레이스홀더(iframe 자리). */
   children?: React.ReactNode;
 }
@@ -94,6 +96,7 @@ export default function TabletDocEditorViewer({
   onDownload,
   onShare,
   onClose,
+  embedded,
   children,
 }: TabletDocEditorViewerProps) {
   const [bold, setBold] = useState(false);
@@ -209,6 +212,7 @@ export default function TabletDocEditorViewer({
 
   return (
     <TabletEditorShell
+      embedded={embedded}
       fileName={fileName}
       files={[fileName, "2026 사업계획 발표자료.pptx", "교통사고 합의서_최종.docx"]}
       toolbar={toolbar}

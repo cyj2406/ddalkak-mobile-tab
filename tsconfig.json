@@ -1,0 +1,33 @@
+{
+  // 빌드는 vite(esbuild)가 하고, 이 설정은 검사 전용이다(noEmit).
+  // esbuild 는 타입도 식별자도 확인하지 않아서, 정의되지 않은 컴포넌트를 참조해도
+  // 빌드가 그대로 통과하고 실행할 때 터진다. `npm run typecheck` 가 그 구멍을 막는다.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // vite.config.ts 의 alias 와 같은 매핑 — 둘이 어긋나면 검사만 실패한다.
+    // (TypeScript 7 에서 baseUrl 이 없어져, paths 는 이 파일 위치를 기준으로 푼다)
+    "paths": { "@/*": ["./src/*"] },
+
+    // 지금 목표는 "없는 것을 참조하는 실수"를 잡는 것이다. strict 를 켜면 기존 코드에서
+    // 수백 개가 쏟아져 나와 새 오류가 묻히므로, 우선 이 수준에서 깨끗하게 유지한다.
+    // 코드가 정리되는 대로 strict / noImplicitAny 를 순서대로 올리면 된다.
+    "strict": false,
+    "noImplicitAny": false
+  },
+  "include": ["src"],
+  // Figma 에서 그대로 내려받은 자산·자리표시 파일들은 검사 대상이 아니다.
+  "exclude": ["node_modules", "dist", "src/imports"]
+}

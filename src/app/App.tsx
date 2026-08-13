@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, type ReactNode } from "react";
+import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo, type ReactNode } from "react";
 import { HelpCircle, Settings as SettingsIcon, Users, Mail, LogOut, Palette, Bell, Brain, Coins, Monitor, Sun, Moon, RefreshCw, FileText, FileVideo, FileSpreadsheet, FileType2, Compass, Image as ImageIcon, X as XIcon, Play, Volume2, Maximize2, Minimize2, BookOpen, Search, Plus, Upload, Check } from "lucide-react";
 
 // ── 공통 에셋 ──────────────────────────────────────────────────────────────────
@@ -13,6 +13,9 @@ import TabletVideoResultViewer from "@/app/components/viewer/TabletVideoResultVi
 import TabletDocEditorViewer from "@/app/components/viewer/TabletDocEditorViewer";
 import TabletMiniEditor from "@/app/components/viewer/TabletMiniEditor";
 import TabletResultViewer from "@/app/components/viewer/TabletResultViewer";
+import {
+  CHAT_COL_BASIS, EDITOR_MIN_W, SPLIT_ANIM_MS, SPLIT_EASE, SplitViewContext,
+} from "@/app/components/viewer/splitView";
 import {
   FILE_TYPE_META, fileNameFor, resolveFileType,
   type ViewerFileType,
@@ -894,23 +897,33 @@ function SettingsModal({ onClose, onCreditHistory }: { onClose: () => void; onCr
 
 // ─── SidebarDrawer ────────────────────────────────────────────────────────────
 
+/** 도킹 사이드바가 펼쳐졌을 때 / 접혔을 때(아이콘 레일)의 폭 */
+const SIDEBAR_W = 280;
+const SIDEBAR_RAIL_W = 76;
+
 /**
  * 좌측 사이드바. 두 가지 배치를 한 컴포넌트로 처리한다.
  *
- * - variant="drawer" (기본): 지금까지의 오버레이 드로어. 백드롭 + translateX 슬라이드.
- * - variant="docked": 서식 채우기처럼 상시 노출되는 레이아웃용. 백드롭·슬라이드 없이
- *   in-flow 컬럼으로 자리를 차지한다. 닫을 오버레이가 없으므로 X 버튼도 숨긴다.
+ * - variant="drawer" (기본): 오버레이 드로어. 백드롭 + translateX 슬라이드.
+ *   데스크톱보다 좁은 화면에서 쓴다 — 상시 노출할 가로 폭이 없기 때문이다.
+ * - variant="docked": 상시 노출되는 in-flow 컬럼. 백드롭·슬라이드가 없고,
+ *   닫는 대신 collapsed 로 아이콘 레일(76px)까지만 접힌다.
+ *
+ * 도킹 상태에서 "닫기"를 두지 않는 이유: 사이드바가 레이아웃의 한 컬럼이라
+ * 완전히 사라지면 본문이 통째로 밀린다. 대신 레일로 접어 이동 수단은 남긴다.
  *
  * recentForms 를 넘기면 "최근 서식"이 클릭 가능한 목록으로 바뀌고 currentFormId 가
- * 활성 표시된다. 안 넘기면 기존처럼 recentTemplates 를 정적으로 렌더한다
- * — 기존 화면들은 prop 을 주지 않으므로 동작·모양이 그대로다.
+ * 활성 표시된다. 안 넘기면 기존처럼 recentTemplates 를 정적으로 렌더한다.
  */
-function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpen, onStartTutorial, variant = "drawer", recentForms, currentFormId, onSelectForm }: {
+function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpen, onStartTutorial, variant = "drawer", collapsed = false, onToggleCollapsed, recentForms, currentFormId, onSelectForm }: {
   open: boolean; onClose: () => void;
   currentScreen: Screen; onNavigate: (s: Screen) => void;
   onSettingsOpen: () => void;
   onStartTutorial: () => void;
   variant?: "drawer" | "docked";
+  /** 도킹일 때만 의미가 있다 — 아이콘 레일로 접힌 상태 */
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
   recentForms?: { id: string; title: string }[];
   currentFormId?: string;
   onSelectForm?: (id: string, title: string) => void;
@@ -921,6 +934,11 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
   const isHomeVariant = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai"].includes(currentScreen);
   const active = (s: Screen) => s === currentScreen || (isHomeVariant && s === "home");
   const docked = variant === "docked";
+  // 접기는 도킹 컬럼에서만 일어난다. 오버레이 드로어는 열림/닫힘만 있다.
+  const railed = docked && collapsed;
+
+  // 접는 순간 열려 있던 프로필 팝업은 닫는다 — 폭이 줄면서 팝업만 허공에 뜬 것처럼 남는다.
+  useEffect(() => { if (railed) setProfileMenuOpen(false); }, [railed]);
 
   return (
     <>
@@ -929,14 +947,21 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
           style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }} />
       )}
       <div className={docked
-        ? "h-full w-[280px] shrink-0 bg-white border-r border-[#dfe6ed] flex flex-col"
-        : "fixed top-0 left-0 h-full z-50 w-[280px] bg-white border-r border-[#dfe6ed] flex flex-col transition-transform duration-300"}
-        style={docked ? undefined : { transform: open ? "translateX(0)" : "translateX(-100%)" }}>
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 h-[60px] shrink-0">
-          <img alt="딸깍.net" className="h-6 w-auto object-contain" src={imgImageNet} />
-          {!docked && (
-            <button onClick={onClose} className="flex items-center justify-center size-9 rounded-[10px]"><IconClose /></button>
+        ? "h-full shrink-0 bg-white border-r border-[#dfe6ed] flex flex-col transition-[width] duration-300"
+        : "fixed top-0 left-0 h-full z-50 bg-white border-r border-[#dfe6ed] flex flex-col transition-transform duration-300"}
+        style={docked
+          ? { width: railed ? SIDEBAR_RAIL_W : SIDEBAR_W }
+          : { width: SIDEBAR_W, transform: open ? "translateX(0)" : "translateX(-100%)" }}>
+        {/* Header — 로고 + 토글. 접힌 레일에는 토글만 남는다(로고가 들어갈 폭이 없다). */}
+        <div className={`flex items-center h-[60px] shrink-0 ${railed ? "justify-center px-0" : "justify-between px-4"}`}>
+          {!railed && <img alt="딸깍.net" className="h-6 w-auto object-contain" src={imgImageNet} />}
+          {docked ? (
+            <button onClick={onToggleCollapsed}
+              aria-label={railed ? "사이드바 펼치기" : "사이드바 접기"}
+              aria-expanded={!railed}
+              className="flex items-center justify-center size-9 rounded-[10px] opacity-80"><IconMenu /></button>
+          ) : (
+            <button onClick={onClose} aria-label="사이드바 닫기" className="flex items-center justify-center size-9 rounded-[10px]"><IconClose /></button>
           )}
         </div>
         {/* Nav */}
@@ -948,17 +973,22 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
           ].map(({ s, icon, label }) => (
             <button key={s} onClick={() => nav(s)}
               aria-current={active(s) ? "page" : undefined}
-              className={`dk-nav-item h-11 rounded-[14px] flex items-center gap-3 px-3 w-full ${active(s) ? "is-active" : ""}`}>
+              aria-label={railed ? label : undefined}
+              title={railed ? label : undefined}
+              className={`dk-nav-item h-11 rounded-[14px] flex items-center w-full ${railed ? "justify-center" : "gap-3 px-3"} ${active(s) ? "is-active" : ""}`}>
               {/* 아이콘·라벨 색 모두 CSS 가 담당한다(인라인 style 은 :hover 를 이긴다).
                   아이콘은 currentColor 라 버튼의 color 를 따라간다. */}
               {icon}
-              <span className="dk-nav-item__label" style={{ ...f, fontWeight: active(s) ? 600 : 500, fontSize: 14, letterSpacing: "-0.35px" }}>
-                {label}
-              </span>
+              {!railed && (
+                <span className="dk-nav-item__label" style={{ ...f, fontWeight: active(s) ? 600 : 500, fontSize: 14, letterSpacing: "-0.35px" }}>
+                  {label}
+                </span>
+              )}
             </button>
           ))}
         </div>
-        {/* Scrollable */}
+        {/* Scrollable — 레일에서는 목록을 접고 빈 공간만 남긴다(제목·파일명이 76px 에 들어가지 않는다) */}
+        {railed ? <div className="flex-1" /> : (
         <div className="flex-1 overflow-y-auto mt-1" style={{ scrollbarWidth: "none" }}>
           <div className="px-2 pt-1">
             <div className="h-8 flex items-center px-2">
@@ -999,13 +1029,15 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
             </div>
           </div>
         </div>
+        )}
         {/* User */}
         <div className="shrink-0 border-t border-[#dfe6ed] p-2 relative">
           {/* 프로필 팝업 */}
           {profileMenuOpen && (
             <>
               <div onClick={() => setProfileMenuOpen(false)} className="fixed inset-0 z-[60]" />
-              <div className="absolute left-2 right-2 z-[61] bg-white rounded-[20px] border border-[#e2e8f0] overflow-hidden"
+              {/* 레일에서는 right-2 로 폭을 잡으면 76px 안에 갇혀 읽을 수 없다 — 컬럼 밖으로 넘겨 편다 */}
+              <div className={`absolute z-[61] bg-white rounded-[20px] border border-[#e2e8f0] overflow-hidden ${railed ? "left-2 w-[260px]" : "left-2 right-2"}`}
                 style={{ bottom: "calc(100% - 8px)", boxShadow: "0px 8px 32px rgba(0,0,0,0.14)", animation: "slideUp 180ms cubic-bezier(0.32,0.72,0,1)" }}>
                 {/* 프로필 헤더 */}
                 <div className="px-5 pt-5 pb-4">
@@ -1043,19 +1075,25 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
               </div>
             </>
           )}
-          {/* 프로필 바 */}
-          <button className="w-full h-[50px] rounded-[18px] flex items-center gap-2.5 px-2"
+          {/* 프로필 바 — 레일에서는 아바타만 남고, 이름·메일·점 세 개는 접힌다 */}
+          <button className={`w-full h-[50px] rounded-[18px] flex items-center ${railed ? "justify-center px-0" : "gap-2.5 px-2"}`}
+            aria-label={railed ? "최유정 계정 메뉴" : undefined}
+            title={railed ? "최유정" : undefined}
             onClick={() => setProfileMenuOpen((v) => !v)}>
             <div className="bg-[#e0e7ff] border border-[#c7d2fe] rounded-full size-8 overflow-hidden shrink-0">
               <img alt="최유정" className="size-full object-cover" src={imgUserAvatar} />
             </div>
-            <div className="flex-1 min-w-0 text-left">
-              <div className="truncate" style={{ ...f, fontWeight: 600, fontSize: 13, color: "#0a0a0a", lineHeight: "18.6px" }}>최유정</div>
-              <div className="truncate" style={{ ...f, fontWeight: 400, fontSize: 11, color: "#737373", lineHeight: "15.7px" }}>cyj2406@gmail.com</div>
-            </div>
-            <div className="shrink-0 flex flex-col gap-[3px] items-center justify-center size-6">
-              {[0,1,2].map(i => <div key={i} className="size-[3.5px] rounded-full bg-[#9ca3af]" />)}
-            </div>
+            {!railed && (
+              <>
+                <div className="flex-1 min-w-0 text-left">
+                  <div className="truncate" style={{ ...f, fontWeight: 600, fontSize: 13, color: "#0a0a0a", lineHeight: "18.6px" }}>최유정</div>
+                  <div className="truncate" style={{ ...f, fontWeight: 400, fontSize: 11, color: "#737373", lineHeight: "15.7px" }}>cyj2406@gmail.com</div>
+                </div>
+                <div className="shrink-0 flex flex-col gap-[3px] items-center justify-center size-6">
+                  {[0,1,2].map(i => <div key={i} className="size-[3.5px] rounded-full bg-[#9ca3af]" />)}
+                </div>
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -1104,20 +1142,26 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
   );
 }
 
-function TopBar({ onMenuOpen, onBack, showBack, onCreditClick, onBellClick, bellRef }: {
+function TopBar({ onMenuOpen, onBack, showBack, onCreditClick, onBellClick, bellRef, brand = true }: {
   onMenuOpen: () => void; onBack?: () => void; showBack?: boolean;
   onCreditClick?: () => void; onBellClick?: () => void;
   bellRef?: React.RefObject<HTMLButtonElement | null>;
+  /**
+   * 좌측의 햄버거 + 로고를 그릴지. 사이드바가 도킹된 데스크톱에서는 false —
+   * 브랜드와 여닫기 토글을 사이드바가 이미 갖고 있어 나란히 두면 둘 다 중복이다.
+   * 뒤로가기는 화면 맥락이라 brand 와 무관하게 showBack 이 정한다.
+   */
+  brand?: boolean;
 }) {
   return (
     <header className="h-14 flex items-center justify-between px-4 shrink-0 bg-[#f8fafc]">
       <div className="flex items-center gap-2">
         {showBack && onBack ? (
           <button onClick={onBack} className="flex items-center justify-center size-9 rounded-[10px]"><IconChevronLeft /></button>
-        ) : (
+        ) : brand ? (
           <button onClick={onMenuOpen} className="flex items-center justify-center size-9 rounded-[10px] opacity-80"><IconMenu /></button>
-        )}
-        <img alt="딸깍.net" className="h-[22px] w-auto object-contain" src={imgImageNet} />
+        ) : null}
+        {brand && <img alt="딸깍.net" className="h-[22px] w-auto object-contain" src={imgImageNet} />}
       </div>
       <div className="flex items-center gap-2">
         <CreditBadge amount={CREDIT_BALANCE} onClick={onCreditClick} />
@@ -2922,57 +2966,6 @@ function CreditHistoryScreen({ onCharge }: { onCharge: () => void }) {
 
 // ─── 워크스페이스 ────────────────────────────────────────────────────────────
 
-function WorkspaceDrawer({ open, onClose, onGoHome }: { open: boolean; onClose: () => void; onGoHome: () => void }) {
-  return (
-    <>
-      <div onClick={onClose} className="fixed inset-0 z-[92] bg-black/30 transition-opacity duration-300"
-        style={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }} />
-      <div className="fixed top-0 left-0 h-full z-[93] w-[280px] bg-white border-r border-[#dfe6ed] flex flex-col transition-transform duration-300"
-        style={{ transform: open ? "translateX(0)" : "translateX(-100%)" }}>
-        <div className="flex items-center justify-between px-4 h-[60px] shrink-0">
-          <img alt="딸깍.net" className="h-6 w-auto object-contain" src={imgImageNet} />
-          <button onClick={onClose} className="size-9 rounded-[10px] flex items-center justify-center"><IconClose /></button>
-        </div>
-        <div className="flex flex-col gap-1 px-2 shrink-0">
-          {[
-            // currentColor 아이콘이라 여기서는 기존 색(#1E293B)을 명시해 그대로 유지한다.
-            { icon: <span style={{ color: "#1E293B", display: "inline-flex" }}><IconHome /></span>, label: "홈", onClick: () => { onGoHome(); onClose(); } },
-            { icon: <span style={{ color: "#1E293B", display: "inline-flex" }}><IconWork /></span>, label: "내 작업", onClick: onClose },
-            { icon: <span style={{ color: "#1E293B", display: "inline-flex" }}><IconStar /></span>, label: "즐겨찾기", onClick: onClose },
-          ].map(({ icon, label, onClick }) => (
-            <button key={label} onClick={onClick} className="h-11 rounded-[14px] flex items-center gap-3 px-3 w-full">
-              {icon}
-              <span style={{ ...f, fontWeight: 500, fontSize: 14, color: "#1e293b", letterSpacing: "-0.35px" }}>{label}</span>
-            </button>
-          ))}
-        </div>
-        <div className="flex-1 overflow-y-auto mt-1 px-2" style={{ scrollbarWidth: "none" }}>
-          <div className="h-8 flex items-center px-2"><span style={{ ...f, fontWeight: 600, fontSize: 11, color: "#90a1b9", letterSpacing: "0.275px" }}>최근 대화</span></div>
-          <div className="h-9 rounded-[12px] bg-[#f1f5f9] flex items-center pl-3 pr-4 mb-1">
-            <span className="truncate" style={{ ...f, fontWeight: 600, fontSize: 13, color: "#155dfc" }}>주택임대차 표준계약서 작성 안내</span>
-          </div>
-          {recentChats.slice(0, 8).map((c) => (
-            <div key={c} className="h-8 rounded-[14px] flex items-center pl-3 pr-4">
-              <span className="truncate" style={{ ...f, fontWeight: 500, fontSize: 13, color: "#45556c" }}>{c}</span>
-            </div>
-          ))}
-        </div>
-        <div className="shrink-0 border-t border-[#dfe6ed] p-2">
-          <button className="w-full h-[50px] rounded-[18px] flex items-center gap-2.5 px-2">
-            <div className="bg-[#e0e7ff] border border-[#c7d2fe] rounded-full size-8 overflow-hidden shrink-0">
-              <img alt="최유정" className="size-full object-cover" src={imgUserAvatar} />
-            </div>
-            <div className="flex-1 min-w-0 text-left">
-              <div className="truncate" style={{ ...f, fontWeight: 600, fontSize: 13, color: "#0a0a0a" }}>최유정</div>
-              <div className="truncate" style={{ ...f, fontWeight: 400, fontSize: 11, color: "#737373" }}>cyj2406@gmail.com</div>
-            </div>
-          </button>
-        </div>
-      </div>
-    </>
-  );
-}
-
 function WsChatInput({ onGenerate }: { onGenerate: () => void }) {
   const [expanded, setExpanded] = useState(false);
   return (
@@ -3715,16 +3708,6 @@ function FcSecondaryBtn({ label, onClick, minHeight }: { label: string; onClick:
 }
 
 // ─── Image Form Card ──────────────────────────────────────────────────────────
-interface ImageFormState {
-  topic: string;
-  autoPrompt: boolean;
-  origText: boolean;
-  card1: string;
-  card2: string;
-  banner: string;
-  font: string;
-  color: string;
-}
 
 // ── 공통 카드 Shell ───────────────────────────────────────────────────────────
 // 폭 상한 없이 부모 콘텐츠 영역을 그대로 채운다(모든 화면 크기 공통).
@@ -4521,6 +4504,12 @@ const RESULT_CONFIG: Record<WorkspaceCategory, {
   summary: (t: ViewerFileType) => [string, string][];
   /** 템플릿명과 무관하게 이름이 고정된 결과물(웹 페이지·슬라이드 덱) */
   fixedName?: string;
+  /**
+   * 슬라이드형 결과물이면 장수. 확장자가 .html 이어도 내용은 여러 장짜리 덱이라,
+   * 한 장짜리 웹 문서와 달리 세로로 이어 스크롤해서 본다.
+   * 값이 없으면(기본) 지금까지처럼 한 장짜리 웹 페이지로 다룬다.
+   */
+  deckPages?: number;
   credit: number;
   agent: string;
 }> = {
@@ -4584,6 +4573,23 @@ const RESULT_CONFIG: Record<WorkspaceCategory, {
   },
 };
 
+/**
+ * "결과 확인하기"가 여는 결과물 — 채팅 안이 아니라 화면(WorkspaceScreen)이 렌더한다.
+ *
+ * 데스크톱에서는 결과물 뷰어·편집기가 채팅의 형제 열로 서야 하는데, 채팅 스크롤 안쪽
+ * 카드가 직접 렌더하면 그 자리를 잡을 수 없다. 그래서 카드는 "이걸 열어 달라"고
+ * 요청만 하고, 실제 렌더는 두 열을 모두 쥐고 있는 화면이 맡는다.
+ */
+interface ResultViewerRequest {
+  variant: ResultCardVariant;
+  fileType: ViewerFileType;
+  filename: string;
+  templateName: string;
+  /** 슬라이드형 결과물의 장수. 없으면 한 장짜리다. */
+  deckPages?: number;
+}
+const OpenResultViewerContext = React.createContext<((r: ResultViewerRequest) => void) | null>(null);
+
 function WsResult({ category, templateName, fileType }: {
   category: WorkspaceCategory; templateName: string; fileType: ViewerFileType;
 }) {
@@ -4592,7 +4598,7 @@ function WsResult({ category, templateName, fileType }: {
   // 파일명 확장자는 진입한 카테고리(필터 탭)가 정한 결과물 형식을 따른다.
   const filename = r.fixedName ?? fileNameFor(slug, fileType);
   const variant = FILE_TYPE_VARIANT[fileType];
-  const [viewerOpen, setViewerOpen] = useState(false);
+  const openViewer = React.useContext(OpenResultViewerContext);
 
   return (
     <div className="flex flex-col gap-3.5" style={{ animation: "wsFadeIn 450ms ease" }}>
@@ -4624,7 +4630,12 @@ function WsResult({ category, templateName, fileType }: {
       {category === "ppt" && <PptSlidesPanel templateName={templateName} />}
 
       {/* 결과물 카드 (카테고리별) */}
-      <WsResultCard variant={variant} fileType={fileType} filename={filename} onOpen={() => setViewerOpen(true)} />
+      <WsResultCard
+        variant={variant}
+        fileType={fileType}
+        filename={filename}
+        onOpen={() => openViewer?.({ variant, fileType, filename, templateName, deckPages: r.deckPages })}
+      />
 
       {/* 사용 크레딧 배지 — 맨 아래 */}
       <div className="flex items-center gap-2 px-1">
@@ -4634,17 +4645,6 @@ function WsResult({ category, templateName, fileType }: {
         </span>
         <span style={{ ...f, fontWeight: 600, fontSize: 12.5, color: "#94a3b8" }}>{r.agent}</span>
       </div>
-
-      {/* 결과 확인하기 → 전체화면 뷰어 */}
-      {viewerOpen && (
-        <ResultViewer
-          variant={variant}
-          fileType={fileType}
-          filename={filename}
-          templateName={templateName}
-          onClose={() => setViewerOpen(false)}
-        />
-      )}
     </div>
   );
 }
@@ -4690,9 +4690,13 @@ function useIsTabletRange() {
 // ─── 결과물 뷰어 (전체화면) ────────────────────────────────────────────────────
 // 상단바 구성은 파일 형식(fileType)이 정한다 — viewerChrome.ts의 VIEWER_CHROME.
 // 여기서는 형식에 맞는 뷰어 컴포넌트를 고르고, 편집(연필)이 열 편집기를 연결한다.
-function ResultViewer({ variant, fileType, filename, templateName, onClose }: {
+function ResultViewer({ variant, fileType, filename, templateName, deckPages, embedded = false, onClose }: {
   variant: ResultCardVariant; fileType: ViewerFileType;
   filename: string; templateName: string;
+  /** 슬라이드형 결과물의 장수 — 있으면 폭과 무관하게 세로 스크롤 미리보기로 연다 */
+  deckPages?: number;
+  /** 데스크톱 2단 구성의 오른쪽 열 안에서 렌더될 때 true — 화면을 덮지 않고 열을 채운다. */
+  embedded?: boolean;
   onClose: () => void;
 }) {
   const isTabletUp = useIsTabletUp();
@@ -4700,6 +4704,9 @@ function ResultViewer({ variant, fileType, filename, templateName, onClose }: {
   const [editing, setEditing] = useState(false);
   // 파일 드롭다운과 다운로드 메뉴가 함께 보는 결과물 파일 목록.
   const files = React.useMemo(() => resultFileNames(filename), [filename]);
+
+  // 슬라이드형 결과물인지 — 확장자가 아니라 결과물 구성(RESULT_CONFIG.deckPages)이 정한다.
+  const isDeck = (deckPages ?? 0) > 1;
 
   const miniEditorMeta = {
     png: { ratio: "4 / 5", size: "1024 × 1280 px", pages: 1 },
@@ -4712,12 +4719,14 @@ function ResultViewer({ variant, fileType, filename, templateName, onClose }: {
     // 영상 — 커스텀 컨트롤 플레이어 전용 뷰어
     if (fileType === "mp4") {
       return (
-        <TabletVideoResultViewer fileName={filename} files={files} onClose={onClose} />
+        <TabletVideoResultViewer fileName={filename} files={files} embedded={embedded} onClose={onClose} />
       );
     }
 
-    // 이미지 · 랜딩페이지 — 편집이 곧 결과 확인이라 미니 에디터로 바로 연다
-    if (fileType === "png" || fileType === "html") {
+    /* 이미지 · 웹 페이지 — 편집이 곧 결과 확인이라 미니 에디터로 바로 연다.
+       단, 슬라이드형 html(덱)은 예외다. 여러 장을 이어 훑어보는 것이 먼저라
+       아래 결과물 뷰어로 내려보내 세로 스크롤 미리보기를 쓴다. */
+    if (fileType === "png" || (fileType === "html" && !isDeck)) {
       const meta = miniEditorMeta[variant as keyof typeof miniEditorMeta];
       return (
         <TabletMiniEditor
@@ -4725,6 +4734,7 @@ function ResultViewer({ variant, fileType, filename, templateName, onClose }: {
           ratio={meta.ratio}
           canvasSize={meta.size}
           pages={meta.pages}
+          embedded={embedded}
           onClose={onClose}
         >
           <div className="w-full h-full flex flex-col">
@@ -4743,6 +4753,7 @@ function ResultViewer({ variant, fileType, filename, templateName, onClose }: {
           ratio={meta.ratio}
           canvasSize={meta.size}
           pages={meta.pages}
+          embedded={embedded}
           onClose={() => setEditing(false)}
         >
           <div className="w-full h-full flex flex-col">
@@ -4755,22 +4766,25 @@ function ResultViewer({ variant, fileType, filename, templateName, onClose }: {
     // 문서 계열(docx·hwpx·xlsx·pdf) — 편집은 문서 편집기로 이어진다
     if (editing) {
       return (
-        <TabletDocEditorViewer fileName={filename} onBack={() => setEditing(false)} onClose={onClose}>
+        <TabletDocEditorViewer fileName={filename} embedded={embedded} onBack={() => setEditing(false)} onClose={onClose}>
           <ResultPreview variant={variant} templateName={templateName} />
         </TabletDocEditorViewer>
       );
     }
 
-    // 문서 계열 · 프레젠테이션 — 형식별 상단바를 가진 결과물 뷰어
+    // 문서 계열 · 프레젠테이션 · 슬라이드형 html — 형식별 상단바를 가진 결과물 뷰어
     return (
       <TabletResultViewer
         fileType={fileType}
         fileName={filename}
         files={files}
-        onEdit={() => setEditing(true)}
+        deckPages={deckPages}
+        embedded={embedded}
+        /* html 덱은 편집기가 없어 편집 진입을 주지 않는다. pptx 는 편집기가 있으므로 그대로 둔다. */
+        onEdit={isDeck && fileType !== "pptx" ? undefined : () => setEditing(true)}
         onClose={onClose}
       >
-        <ResultPreview variant={variant} templateName={templateName} />
+        <ResultPreview variant={isDeck ? "slides" : variant} templateName={templateName} />
       </TabletResultViewer>
     );
   }
@@ -4793,10 +4807,14 @@ function ResultViewer({ variant, fileType, filename, templateName, onClose }: {
       fileType={fileType}
       fileName={filename}
       files={files}
-      notice={<MobileEditorNotice />}
+      /* HTML 은 모바일에서 안내 스트립을 걷는다 — 화면 폭을 꽉 쓰는 결과물 위에
+         고정 띠가 얹히면 좁은 화면이 더 좁아진다. 편집은 어차피 PC 에서만 된다는 사실은
+         편집 진입점이 없는 것으로 이미 드러난다. */
+      notice={fileType === "html" ? undefined : <MobileEditorNotice />}
+      deckPages={deckPages}
       onClose={onClose}
     >
-      <ResultPreview variant={variant} templateName={templateName} />
+      <ResultPreview variant={isDeck ? "slides" : variant} templateName={templateName} />
     </TabletResultViewer>
   );
 }
@@ -4935,68 +4953,113 @@ function ResultPreview({ variant, templateName }: { variant: ResultCardVariant; 
       {variant === "word" && <DocumentPagePreview templateName={templateName} />}
 
       {/* ── 슬라이드 ── */}
+      {/* 슬라이드 한 장 — 담기는 틀(덱의 16:9 칸, 편집기의 아트보드)을 그대로 채운다.
+          예전에는 검은 매트 위에 16:9 카드를 스스로 얹었는데, 이미 16:9 인 틀 안에 들어가면
+          매트가 이중으로 겹쳐 슬라이드 주위가 넓게 비어 보였다. */}
       {variant === "slides" && (
-        <div className="flex-1 bg-[#0f1216] flex flex-col items-center justify-center p-4 gap-5">
-          <div className="w-full rounded-[10px] overflow-hidden relative" style={{ aspectRatio: "16/9", background: "radial-gradient(120% 120% at 25% 20%, #24304c 0%, #0a0e18 70%)" }}>
-            <div className="absolute inset-0 p-5 flex flex-col justify-end">
-              <div className="h-2.5 rounded-full mb-3" style={{ width: "38%", background: "rgba(236,72,153,0.85)" }} />
-              <div className="h-4 rounded bg-white/85 mb-2.5" style={{ width: "72%" }} />
-              <div className="h-2 rounded bg-white/40" style={{ width: "56%" }} />
-            </div>
-          </div>
-          <div className="flex items-center gap-5">
-            <button className="size-9 rounded-full bg-white/10 flex items-center justify-center">
-              <svg width="16" height="16" fill="none" viewBox="0 0 16 16"><path d="M10 3L5 8l5 5" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            </button>
-            <span style={{ ...f, fontWeight: 600, fontSize: 12.5, color: "white" }}>1 / 7</span>
-            <button className="size-9 rounded-full bg-white/10 flex items-center justify-center">
-              <svg width="16" height="16" fill="none" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            </button>
+        <div
+          className="flex-1 min-h-0 relative overflow-hidden"
+          style={{ background: "radial-gradient(120% 120% at 25% 20%, #24304c 0%, #0a0e18 70%)" }}
+        >
+          <div className="absolute inset-0 p-5 flex flex-col justify-end">
+            <div className="h-2.5 rounded-full mb-3" style={{ width: "38%", background: "rgba(236,72,153,0.85)" }} />
+            <div className="h-4 rounded bg-white/85 mb-2.5" style={{ width: "72%" }} />
+            <div className="h-2 rounded bg-white/40" style={{ width: "56%" }} />
           </div>
         </div>
       )}
 
       {/* ── 웹 페이지 (랜딩/상세) ── */}
-      {variant === "html" && (
-        <div className="flex-1 bg-[#f1f5f9] p-4">
-          <div className="mx-auto bg-white rounded-[14px] overflow-hidden border border-[#e2e8f0]" style={{ maxWidth: 480, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}>
-            <div className="relative" style={{ aspectRatio: "16/11", background: "linear-gradient(135deg,#1e293b 0%,#0f172a 100%)" }}>
-              <div className="absolute inset-0 p-6 flex flex-col justify-center gap-2.5">
-                <div className="h-2 rounded bg-white/45" style={{ width: "28%" }} />
-                <div className="h-5 rounded bg-white/85" style={{ width: "74%" }} />
-                <div className="h-2.5 rounded bg-white/40" style={{ width: "58%" }} />
-                <div className="h-7 rounded-full mt-2" style={{ width: "40%", background: "#4f7bff" }} />
-              </div>
-            </div>
-            <div className="p-6 flex flex-col gap-5">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="flex flex-col gap-2">
-                  <div className="h-3 rounded bg-[#cbd5e1]" style={{ width: "45%" }} />
-                  <div className="h-2 rounded bg-[#e2e8f0]" style={{ width: "92%" }} />
-                  <div className="h-2 rounded bg-[#e2e8f0]" style={{ width: "80%" }} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {variant === "html" && <HtmlPagePreview />}
     </>
   );
 }
 
+/**
+ * 웹 페이지 결과물 미리보기.
+ *
+ * 태블릿 이상에서는 흰 카드를 회색 바탕 위에 올려 "브라우저 안의 페이지"처럼 보여 주고,
+ * 모바일에서는 그 껍데기를 전부 걷어낸다 — 웹 페이지는 원래 화면 폭을 그대로 쓰는 것이고,
+ * 좁은 화면에서 좌우 여백 + 테두리 + 라운드까지 얹으면 볼 수 있는 폭만 줄어든다.
+ *
+ * 본문이 짧아도 흰 면이 아래까지 이어지도록 flex-1 을 준다. 그러지 않으면 콘텐츠가
+ * 위쪽에만 몰리고 그 아래로 회색 바탕이 넓게 남아, 결과물이 잘린 것처럼 보인다.
+ */
+function HtmlPagePreview() {
+  const isTabletUp = useIsTabletUp();
+
+  const body = (
+    <>
+      <div className="relative shrink-0" style={{ aspectRatio: "16/11", background: "linear-gradient(135deg,#1e293b 0%,#0f172a 100%)" }}>
+        <div className="absolute inset-0 p-6 flex flex-col justify-center gap-2.5">
+          <div className="h-2 rounded bg-white/45" style={{ width: "28%" }} />
+          <div className="h-5 rounded bg-white/85" style={{ width: "74%" }} />
+          <div className="h-2.5 rounded bg-white/40" style={{ width: "58%" }} />
+          <div className="h-7 rounded-full mt-2" style={{ width: "40%", background: "#4f7bff" }} />
+        </div>
+      </div>
+      <div className="flex-1 p-6 flex flex-col gap-5">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex flex-col gap-2">
+            <div className="h-3 rounded bg-[#cbd5e1]" style={{ width: "45%" }} />
+            <div className="h-2 rounded bg-[#e2e8f0]" style={{ width: "92%" }} />
+            <div className="h-2 rounded bg-[#e2e8f0]" style={{ width: "80%" }} />
+          </div>
+        ))}
+      </div>
+    </>
+  );
+
+  if (!isTabletUp) {
+    // 모바일 — full-bleed. 감싸는 카드 없이 결과물이 곧 화면이다.
+    return <div className="flex-1 flex flex-col bg-white">{body}</div>;
+  }
+
+  return (
+    <div className="flex-1 bg-[#f1f5f9] p-4">
+      <div
+        className="mx-auto bg-white rounded-[14px] overflow-hidden border border-[#e2e8f0] flex flex-col"
+        style={{ maxWidth: 480, boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}
+      >
+        {body}
+      </div>
+    </div>
+  );
+}
+
 // ─── Workspace ────────────────────────────────────────────────────────────────
+
 function WorkspaceScreen({ category, templateName, fileType, onBack, onCreditClick, onBellClick }: {
   category: WorkspaceCategory; templateName: string;
   /** 진입한 카테고리(필터 탭)가 정한 결과물 형식 — 확장자와 뷰어 상단바를 함께 결정한다 */
   fileType: ViewerFileType;
   onBack: () => void; onCreditClick: () => void; onBellClick: () => void;
 }) {
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [generated, setGenerated] = useState(false);
   const [stepsOpen, setStepsOpen] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLDivElement>(null);
   const isDesktop = useIsDesktop();
+
+  // ── 결과물 뷰어·에디터 ────────────────────────────────────────────────────
+  // "결과 확인하기"가 여는 대상. 데스크톱에서는 채팅의 형제 열로, 그보다 좁은 화면에서는
+  // 지금처럼 화면을 덮는 오버레이로 렌더한다.
+  const [viewerReq, setViewerReq] = useState<ResultViewerRequest | null>(null);
+  const openViewer = useCallback((r: ResultViewerRequest) => setViewerReq(r), []);
+  const closeViewer = useCallback(() => setViewerReq(null), []);
+
+  // 2단 구성일 때의 접기 상태 — 경계 토글과 에디터 상단바의 전체화면 버튼이 함께 본다.
+  const [chatCollapsed, setChatCollapsed] = useState(false);
+  const split = useMemo(
+    () => ({ chatCollapsed, toggle: () => setChatCollapsed((v) => !v) }),
+    [chatCollapsed],
+  );
+  // 결과물을 닫으면 다음 번에 다시 2단으로 열리도록 접기 상태를 되돌린다.
+  useEffect(() => { if (!viewerReq) setChatCollapsed(false); }, [viewerReq]);
+
+  const splitActive = isDesktop && !!viewerReq;
+  // 2단 구성이 아닐 때(오버레이로 열린 뒤 창을 줄인 경우 등)는 접기 상태를 무시한다.
+  const chatHidden = splitActive && chatCollapsed;
 
   // 하단 입력창은 fixed라 채팅 스크롤 위에 겹쳐 뜬다.
   // 그 높이를 실제로 재서 (1) 스크롤 하단 여백과 (2) 폼 카드의 최대 높이에 쓴다.
@@ -5033,8 +5096,11 @@ function WorkspaceScreen({ category, templateName, fileType, onBack, onCreditCli
   const promptBottom = "0px";
 
   return (
+    <OpenResultViewerContext.Provider value={openViewer}>
     <div
-      className="fixed inset-0 z-[90] bg-[#f8fafc] flex flex-col"
+      /* 본문 컬럼 안에서만 덮는다 — 왼쪽 도킹 사이드바는 가리지 않는다.
+         (화면 전체를 덮던 fixed 시절에는 워크스페이스 전용 드로어가 따로 필요했다) */
+      className="absolute inset-0 z-[90] bg-[#f8fafc] flex"
       /* 상단바(56px) + 하단 입력창 + 숨 쉴 여백을 뺀, 카드가 실제로 쓸 수 있는 높이.
          CARD_SHELL 이 이 값을 max-height 로 받는다. */
       style={{ "--fc-card-max-h": `calc(100dvh - ${56 + promptH + 24}px)` } as React.CSSProperties}
@@ -5044,17 +5110,31 @@ function WorkspaceScreen({ category, templateName, fileType, onBack, onCreditCli
         @keyframes wsSlideRight { from { opacity:0; transform:translateX(-6px); } to { opacity:1; transform:translateX(0); } }
         @keyframes wsDot { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-4px); } }
       `}</style>
-      {/* 드로어는 데스크톱에서만 쓴다. 좁은 화면에서는 좌상단이 뒤로가기라 열 진입점이 없다. */}
-      {isDesktop && <WorkspaceDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} onGoHome={onBack} />}
-
+      {/* ── 채팅 열 ─────────────────────────────────────────────────────────
+          결과물이 열리지 않았을 때는 화면 전체를, 2단 구성에서는 왼쪽 40% 를 쓴다.
+          폭은 두 상태(40% · 0%)만 오가고 중간값은 없다 — 드래그 리사이즈를 두지 않는 이유는
+          splitView.ts 주석 참고. 오른쪽 열의 min-width 때문에 창이 좁으면 이 열이 먼저 양보한다. */}
+      <div
+        className="relative min-h-0 flex flex-col overflow-hidden"
+        style={{
+          flex: splitActive ? `0 1 ${chatHidden ? "0px" : CHAT_COL_BASIS}` : "1 1 100%",
+          minWidth: 0,
+          borderRight: splitActive && !chatHidden ? "1px solid #e5e9ef" : undefined,
+          /* 접히는 동안에는 보이다가, 폭이 0이 된 뒤에야 숨는다.
+             visibility 로 감춰야 접힌 패널의 버튼이 탭 순서와 스크린리더에서도 함께 빠진다. */
+          visibility: chatHidden ? "hidden" : "visible",
+          transition:
+            `flex-basis ${SPLIT_ANIM_MS}ms ${SPLIT_EASE}, ` +
+            `visibility 0s linear ${chatHidden ? SPLIT_ANIM_MS : 0}ms`,
+        }}
+      >
       {/* TopBar */}
       <header className="h-14 flex items-center gap-3 px-4 shrink-0 bg-[#f8fafc] z-10">
-        {/* 좁은 화면에서는 사이드바 대신 직전 화면으로 돌아가는 ←.
+        {/* 좁은 화면에서만 직전 화면으로 돌아가는 ←. 데스크톱에서는 옆에 도킹된
+            사이드바가 이동을 맡으므로 이 자리를 비운다.
             히스토리(back)가 아니라 onBack 을 쓴다 — 이 앱은 라우터가 없어
             화면 전환이 히스토리에 쌓이지 않으므로 history.back() 은 앱 밖으로 나간다. */}
-        {isDesktop ? (
-          <button onClick={() => setDrawerOpen(true)} aria-label="메뉴 열기" className="flex items-center justify-center size-9 rounded-[10px] opacity-80 shrink-0"><IconMenu /></button>
-        ) : (
+        {!isDesktop && (
           <button onClick={onBack} aria-label="뒤로 가기" className="flex items-center justify-center size-9 rounded-[10px] shrink-0"><IconChevronLeft /></button>
         )}
         <p className="flex-1 truncate" style={{ ...f, fontWeight: 600, fontSize: 15, color: "#0a0a0a", letterSpacing: "-0.4px" }}>{templateName}</p>
@@ -5139,11 +5219,62 @@ function WorkspaceScreen({ category, templateName, fileType, onBack, onCreditCli
         </div>
       </div>
 
-      {/* Fixed prompt input */}
-      <div ref={promptRef} className="fixed left-0 right-0 z-[89]" style={{ bottom: promptBottom }}>
+      {/* 하단 입력창 — 채팅 열 안쪽에 고정된다(2단 구성에서 에디터 열까지 넘어가지 않도록 absolute) */}
+      <div ref={promptRef} className="absolute left-0 right-0 z-[89]" style={{ bottom: promptBottom }}>
         <WsChatInput onGenerate={handleGenerate} />
       </div>
+      </div>
+
+      {/* ── 에디터 열 ───────────────────────────────────────────────────────
+          채팅과 형제로 폭을 나눠 갖는다(오버레이 아님).
+          min-width 로 상단바가 깨지는 폭 아래로는 절대 내려가지 않게 못박는다. */}
+      {splitActive && (
+        <div
+          className="relative min-h-0 flex"
+          style={{ flex: "1 1 auto", minWidth: EDITOR_MIN_W }}
+        >
+          {/* 접혔을 때 토글이 설 자리.
+              펼쳐져 있으면 토글은 채팅과의 경계에 반쯤 걸쳐 서므로 자리가 필요 없지만,
+              접히면 걸칠 경계가 없어 이 홈이 대신 자리를 내준다 — 이게 없으면
+              토글이 에디터의 좌측 도구 레일 위에 그대로 얹힌다. */}
+          <div
+            className="shrink-0"
+            style={{
+              width: chatHidden ? 14 : 0,
+              background: "#f8fafc",
+              transition: `width ${SPLIT_ANIM_MS}ms ${SPLIT_EASE}`,
+            }}
+          />
+
+          <div className="relative flex-1 min-w-0">
+            <SplitViewContext.Provider value={split}>
+              <ResultViewer
+                variant={viewerReq!.variant}
+                fileType={viewerReq!.fileType}
+                filename={viewerReq!.filename}
+                templateName={viewerReq!.templateName}
+                deckPages={viewerReq!.deckPages}
+                embedded
+                onClose={closeViewer}
+              />
+            </SplitViewContext.Provider>
+          </div>
+        </div>
+      )}
+
+      {/* 데스크톱보다 좁은 화면 — 결과물은 지금처럼 화면을 덮는 전체화면으로 연다 */}
+      {viewerReq && !isDesktop && (
+        <ResultViewer
+          variant={viewerReq.variant}
+          fileType={viewerReq.fileType}
+          filename={viewerReq.filename}
+          templateName={viewerReq.templateName}
+          deckPages={viewerReq.deckPages}
+          onClose={closeViewer}
+        />
+      )}
     </div>
+    </OpenResultViewerContext.Provider>
   );
 }
 
@@ -5176,6 +5307,9 @@ export default function App() {
   if (FORMFILL_DEV) return <FormFillPlayground />; // [formfill 임시] 이 줄과 위 2줄, import 1줄만 지우면 원상 복구
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // 데스크톱의 도킹 사이드바가 아이콘 레일로 접혀 있는지. 오버레이 드로어(좁은 화면)와는
+  // 별개의 상태다 — 창을 줄였다 늘려도 접기 선택이 그대로 남는다.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [screen, setScreen] = useState<Screen>("home");
   const [creditOpen, setCreditOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -5205,6 +5339,26 @@ export default function App() {
   const isTabletRange = useIsTabletRange();
   // 768px 이상에서는 알림·크레딧을 팝오버/모달로 바꿔 렌더한다(컴포넌트 자체를 교체 — CSS 숨김 아님)
   const isTabletUp = useIsTabletUp();
+  // 1200px 이상 — 사이드바가 오버레이 드로어가 아니라 도킹 컬럼이 된다.
+  const isDesktop = useIsDesktop();
+
+  /**
+   * 사이드바 이동. 워크스페이스는 screen 과 별개의 상태로 본문을 덮고 있어,
+   * 함께 지우지 않으면 "홈"을 눌러도 워크스페이스가 그대로 남는다.
+   * (예전에는 워크스페이스 전용 드로어가 onGoHome 으로 같은 일을 했다.)
+   */
+  const navigate = (s: Screen) => { setWorkspace(null); setScreen(s); };
+
+  /**
+   * 워크스페이스에 들어가면 사이드바를 아이콘 레일로 접고, 나오면 다시 편다.
+   * 워크스페이스는 채팅 열과 에디터 열이 가로 폭을 나눠 쓰는 화면이라 280px 을
+   * 이동 메뉴에 내주기 아깝다 — 다른 화면에서는 펼친 쪽이 기본이다.
+   *
+   * "들어갈 때/나올 때" 한 번씩만 건드리므로, 그 사이에 사용자가 직접 펴거나 접은
+   * 선택은 그대로 남는다.
+   */
+  const inWorkspace = !!workspace;
+  useEffect(() => { setSidebarCollapsed(inWorkspace); }, [inWorkspace]);
 
   const isSubScreen = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai", "credit-history", "notifications-all"].includes(screen);
 
@@ -5264,12 +5418,27 @@ export default function App() {
   ];
 
   return (
-    <div className="bg-[#f8fafc] h-[100dvh] w-full flex flex-col overflow-hidden" style={f}>
-      <SidebarDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} currentScreen={screen} onNavigate={setScreen} onSettingsOpen={() => setSettingsOpen(true)} onStartTutorial={startTutorial} />
+    /* 데스크톱은 가로 2단 — 도킹 사이드바 + 본문 컬럼. 그보다 좁으면 사이드바가
+       오버레이 드로어라 자리를 차지하지 않고, 본문 컬럼 혼자 폭을 전부 쓴다. */
+    <div className="bg-[#f8fafc] h-[100dvh] w-full flex overflow-hidden" style={f}>
+      <SidebarDrawer
+        variant={isDesktop ? "docked" : "drawer"}
+        open={isDesktop || drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
+        currentScreen={screen}
+        onNavigate={navigate}
+        onSettingsOpen={() => setSettingsOpen(true)}
+        onStartTutorial={startTutorial}
+      />
+      {/* 본문 컬럼 — 워크스페이스가 이 안에서 absolute 로 덮으므로 relative 가 필요하다 */}
+      <div className="flex-1 min-w-0 relative flex flex-col overflow-hidden">
       <TopBar
         onMenuOpen={() => setDrawerOpen(true)}
         onBack={() => setScreen("home")}
         showBack={isSubScreen}
+        brand={!isDesktop}
         onCreditClick={() => setCreditOpen(true)}
         onBellClick={() => setNotifOpen((v) => !v)}
         bellRef={bellRef}
@@ -5360,6 +5529,19 @@ export default function App() {
       {screen === "credit-history" && (
         <CreditHistoryScreen onCharge={() => { setScreen("home"); setCreditOpen(true); }} />
       )}
+      {/* 워크스페이스 — 본문 컬럼만 덮는다(사이드바는 옆에 그대로 남는다).
+          TopBar 까지 덮는 것은 지금과 같다. */}
+      {workspace && (
+        <WorkspaceScreen
+          category={workspace.category}
+          templateName={workspace.templateName}
+          fileType={workspace.fileType}
+          onBack={() => setWorkspace(null)}
+          onCreditClick={() => setCreditOpen(true)}
+          onBellClick={() => setNotifOpen(true)}
+        />
+      )}
+      </div>
       {notifOpen && (isTabletUp ? (
         <NotificationsPopover anchorRef={bellRef} onClose={() => setNotifOpen(false)} onViewAll={() => { setNotifOpen(false); setScreen("notifications-all"); }} />
       ) : (
@@ -5390,8 +5572,10 @@ export default function App() {
               variant="docked"
               open
               onClose={() => {}}
+              collapsed={sidebarCollapsed}
+              onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
               currentScreen={screen}
-              onNavigate={setScreen}
+              onNavigate={navigate}
               onSettingsOpen={() => setSettingsOpen(true)}
               onStartTutorial={startTutorial}
               recentForms={formsCards.slice(0, 4).map((c) => ({ id: c.id, title: c.title }))}
@@ -5399,16 +5583,6 @@ export default function App() {
               onSelectForm={(id, title) => setFillTarget({ id, title })}
             />
           }
-        />
-      )}
-      {workspace && (
-        <WorkspaceScreen
-          category={workspace.category}
-          templateName={workspace.templateName}
-          fileType={workspace.fileType}
-          onBack={() => setWorkspace(null)}
-          onCreditClick={() => setCreditOpen(true)}
-          onBellClick={() => setNotifOpen(true)}
         />
       )}
     </div>

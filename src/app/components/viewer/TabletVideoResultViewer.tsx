@@ -44,6 +44,8 @@ export interface TabletVideoResultViewerProps {
   onDownload?: () => void;
   onShare?: () => void;
   onClose?: () => void;
+  /** 2단 구성(좌측 채팅 + 우측 에디터)의 오른쪽 열 안에서 렌더될 때 true. */
+  embedded?: boolean;
   /** 본문 "편집기 열기" — 프로덕션의 "수정 요청" 자리. 상단바에는 편집 아이콘을 두지 않는다. */
   onEdit?: () => void;
   /** 상단바 바로 아래 full-bleed 슬롯. 모바일의 "PC 에디터" 안내 스트립이 여기 들어간다. */
@@ -61,6 +63,7 @@ export default function TabletVideoResultViewer({
   onDownload,
   onShare,
   onClose,
+  embedded,
   onEdit,
   notice,
 }: TabletVideoResultViewerProps) {
@@ -160,6 +163,7 @@ export default function TabletVideoResultViewer({
   // 편집기 입구는 본문의 파란 "편집기 열기" 하나로만 둔다.
   return (
     <TabletEditorShell
+      embedded={embedded}
       fileType="mp4"
       fileName={fileName}
       files={files ?? [fileName]}

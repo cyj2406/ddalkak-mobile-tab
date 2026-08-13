@@ -588,54 +588,50 @@ function FormFillDesktopBody({
             {formTitle}
           </span>
 
-          {/* 1200px 이상은 기존 구성 유지 — 크레딧 + 저장(텍스트) + PDF(텍스트) */}
-          {isDesktop ? (
-            <>
-              <CreditBadge amount={credits} />
-              <button type="button" onClick={doSave} style={{ ...softBtn, height: 36 }}>
-                <Save size={15} strokeWidth={2} />
-                저장
-              </button>
-              <button type="button" onClick={onDownload} style={{ ...primaryBtn, height: 36 }}>
-                <Download size={15} strokeWidth={2} />
-                PDF 다운로드
-              </button>
-            </>
-          ) : (
-            /* 1199px 이하 — 저장 아이콘 하나만. PDF·초기화는 ⋯ 로 내린다.
-               평소에는 배경·테두리 없이 ⋯ 버튼과 같은 형태이고,
-               저장 결과일 때만 원형 배경이 잠깐 들어온다. */
-            <button
-              type="button"
-              aria-label="저장"
-              onClick={doSave}
-              style={{
-                ...iconBtn44,
-                borderRadius: 999,
-                background:
-                  saveState === "saved"
-                    ? "var(--ff-ok-bg)"
-                    : saveState === "error"
-                      ? "var(--ff-err-bg)"
-                      : "transparent",
-                color:
-                  saveState === "saved"
-                    ? "var(--ff-success)"
-                    : saveState === "error"
-                      ? "var(--ff-err)"
-                      : "var(--ff-icon)",
-                transition: reduceMotion ? "none" : "background 140ms ease, color 140ms ease",
-              }}
-            >
-              {saveState === "saving" ? (
-                <span className={reduceMotion ? "ff-spinner ff-spinner--static" : "ff-spinner"} />
-              ) : saveState === "saved" ? (
-                <Check size={20} strokeWidth={2.4} />
-              ) : saveState === "error" ? (
-                <AlertCircle size={20} strokeWidth={2.2} />
-              ) : (
-                <Save size={20} strokeWidth={2} />
-              )}
+          {isDesktop && <CreditBadge amount={credits} />}
+
+          {/* 저장 — 에디터 상단바와 같은 방식이다.
+              폭에 상관없이 아이콘 하나이고(예전에는 1200px 이상에서만 "저장" 글자가 붙어
+              같은 버튼이 창 크기에 따라 다른 모양으로 읽혔다), 면도 테두리도 없다.
+              눌린 결과는 아이콘 자체가 말한다 — 저장 중 스피너 → 완료 체크 → 원복.
+              완료 때 원형 색면을 깔지 않는 것도 에디터와 같다: 잠깐 뜨는 색면은
+              옆 아이콘들 사이에서 저 혼자 버튼처럼 도드라진다. */}
+          <button
+            type="button"
+            aria-label="저장"
+            title="저장"
+            aria-busy={saveState === "saving"}
+            disabled={saveState === "saving"}
+            onClick={doSave}
+            style={{
+              ...iconBtn44,
+              color:
+                saveState === "saved"
+                  ? "var(--ff-success)"
+                  : saveState === "error"
+                    ? "var(--ff-err)"
+                    : "var(--ff-icon)",
+              cursor: saveState === "saving" ? "default" : "pointer",
+              transition: reduceMotion ? "none" : "color 140ms ease",
+            }}
+          >
+            {saveState === "saving" ? (
+              <span className={reduceMotion ? "ff-spinner ff-spinner--static" : "ff-spinner"} />
+            ) : saveState === "saved" ? (
+              <Check size={20} strokeWidth={2.4} />
+            ) : saveState === "error" ? (
+              /* 서식 화면에는 에디터의 실패 토스트가 없어, 실패는 이 아이콘이 계속 들고 있는다.
+                 저절로 사라지지 않고 다시 누르면 재시도한다. */
+              <AlertCircle size={20} strokeWidth={2.2} />
+            ) : (
+              <Save size={20} strokeWidth={2} />
+            )}
+          </button>
+
+          {isDesktop && (
+            <button type="button" onClick={onDownload} style={{ ...primaryBtn, height: 36 }}>
+              <Download size={15} strokeWidth={2} />
+              PDF 다운로드
             </button>
           )}
 

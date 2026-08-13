@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Check, Download, Eye,
-  Maximize2, Package, Pencil, Share2, X,
+  Maximize2, Minimize2, Package, Pencil, Share2, X,
 } from "lucide-react";
 import {
   DESKTOP_MIN, resultActions, VIEWER_CHROME,
@@ -9,6 +9,7 @@ import {
 } from "./viewerChrome";
 import { useShareToast, ViewerToast } from "./ShareToast";
 import { IconTooltip } from "./IconTooltip";
+import { useSplitView } from "./splitView";
 
 /**
  * 태블릿(768~1024px, 터치) 전용 전체화면 에디터 셸.
@@ -39,6 +40,7 @@ import { IconTooltip } from "./IconTooltip";
 
 const C = {
   primary: "#3B5BFF",
+  primarySoft: "#EEF1FF",
   bg: "#F5F7FA",
   card: "#FFFFFF",
   text: "#1A1D29",
@@ -70,13 +72,27 @@ export interface TabletEditorShellProps {
   onEdit?: () => void;
   /** 구조보기(문서 구조 패널). fileType 구성에 structure가 있을 때만 렌더된다. */
   onStructure?: () => void;
-  /** 확대(전체화면). fileType 구성에 expand가 있을 때만 렌더된다. */
+  /**
+   * 확대(전체화면). fileType 구성에 expand가 있을 때만 렌더된다.
+   * 2단 구성 안에서는 넘기지 않아도 채팅 열 접기/펴기로 동작한다.
+   */
   onExpand?: () => void;
+  /**
+   * 2단 구성(좌측 채팅 + 우측 에디터)의 오른쪽 열 안에서 렌더될 때 true.
+   * 화면 전체를 덮는 오버레이(fixed)가 아니라 열을 채우는 absolute 로 바뀐다.
+   */
+  embedded?: boolean;
   /**
    * 결과물 파일 형식. 주면 VIEWER_CHROME[fileType] 구성으로 상단바를 그린다.
    * 주지 않으면 기존 구성(편집·다운로드·공유·닫기 + 가운데 파일명)을 유지한다.
    */
   fileType?: ViewerFileType;
+  /**
+   * 중앙 페이지네이션을 강제로 숨긴다.
+   * 모바일에서 여러 장을 세로로 이어 스크롤할 때 쓴다 — 스크롤로 오가는 화면에
+   * 이전/다음 버튼이 함께 있으면 이동 수단이 둘로 갈린다.
+   */
+  hidePageNav?: boolean;
   /** 중앙 페이지네이션 상태. fileType 구성이 paginated일 때만 쓰인다. */
   page?: number;
   totalPages?: number;
@@ -143,8 +159,8 @@ function useMinWidth(px: number) {
 
 /**
  * 상단바 아이콘 버튼 — 크기는 .viewer-action-btn 이 정한다.
- * 손가락으로 누르는 환경(pointer: coarse — 모바일·태블릿)은 44×44,
- * 마우스 환경은 34×34. 폭이 아니라 입력 방식으로 갈리므로 브레이크포인트를 쓰지 않는다.
+ * 입력 방식·폭과 무관하게 44×44 하나를 쓴다. 탭 타깃을 버튼 크기로만 확보하므로
+ * 묶음의 gap 이 0 이어도 아이콘 중심 간 거리가 44px 로 유지된다.
  *
  * 면(배경·테두리) 없는 맨 아이콘이 기본이다 — 다운로드만 강조하지 않는다.
  * 라벨이 보이지 않는 버튼이므로 hover 시 같은 문구를 툴팁으로 띄우고,
@@ -155,6 +171,7 @@ function IconButton({
   onClick,
   disabled = false,
   inactive = false,
+  pressed,
   children,
 }: {
   label: string;
@@ -165,6 +182,8 @@ function IconButton({
    * 페이지 이동처럼 "끝에 닿았다"를 알려야 하는 버튼에 쓴다.
    */
   inactive?: boolean;
+  /** 켜짐/꺼짐이 있는 버튼(전체화면)에만 준다 — 켜져 있으면 옅은 액센트 면이 남는다. */
+  pressed?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -173,14 +192,64 @@ function IconButton({
         type="button"
         aria-label={label}
         aria-disabled={inactive || undefined}
+        aria-pressed={pressed}
         onClick={inactive ? undefined : onClick}
         disabled={disabled}
         className="viewer-action-btn viewer-focus shrink-0 flex items-center justify-center transition-colors disabled:opacity-35 active:bg-[#EDF0F5] hover:bg-[#F2F4F8]"
-        style={{ color: C.text, opacity: inactive ? 0.35 : undefined }}
+        style={{
+          color: pressed ? C.primary : C.text,
+          background: pressed ? C.primarySoft : undefined,
+          opacity: inactive ? 0.35 : undefined,
+        }}
       >
         {children}
       </button>
     </IconTooltip>
+  );
+}
+
+/**
+ * 상단바 가운데 세그먼트 토글.
+ *
+ * 원래 엑셀의 "미리보기 / 편집"에만 인라인으로 있던 것을 그대로 꺼내 공용으로 만들었다.
+ * HTML 의 "미리보기 / 코드"도 같은 것을 쓴다 — 같은 자리에서 같은 일(보는 방식 전환)을
+ * 하는 컨트롤이 형식마다 다른 모양이면, 사용자는 매번 새로 배워야 한다.
+ * 스타일·크기·위치는 손대지 않았다. 바뀌는 것은 항목의 아이콘과 라벨뿐이다.
+ */
+export function ViewerSegmentedToggle({
+  value, onChange, options,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+  options: { id: string; label: string; icon: React.ReactNode }[];
+}) {
+  return (
+    <div
+      className="shrink-0 flex items-center gap-0.5 ml-1 p-0.5 rounded-[12px]"
+      style={{ background: C.bg, border: `1px solid ${C.line}` }}
+    >
+      {options.map((o) => {
+        const active = value === o.id;
+        return (
+          <IconTooltip key={o.id} label={o.label}>
+            <button
+              type="button"
+              aria-label={o.label}
+              aria-pressed={active}
+              onClick={() => onChange(o.id)}
+              className="w-10 h-9 rounded-[10px] flex items-center justify-center transition-colors"
+              style={{
+                background: active ? C.card : "transparent",
+                color: active ? C.text : C.sub,
+                boxShadow: active ? "0px 1px 3px rgba(16,24,40,0.12)" : "none",
+              }}
+            >
+              {o.icon}
+            </button>
+          </IconTooltip>
+        );
+      })}
+    </div>
   );
 }
 
@@ -195,10 +264,12 @@ export default function TabletEditorShell({
   onEdit,
   onStructure,
   onExpand,
+  embedded = false,
   fileType,
   page = 1,
   totalPages = 1,
   onPageChange,
+  hidePageNav = false,
   viewMode = "preview",
   onViewModeChange,
   downloadFileCount,
@@ -223,10 +294,12 @@ export default function TabletEditorShell({
   const dlMenuRef = useRef<HTMLDivElement>(null);
   const dlTriggerRef = useRef<HTMLButtonElement>(null);
   const contentWrapRef = useRef<HTMLDivElement>(null);
-  const [scrolling, setScrolling] = useState(false);
   const isDesktop = useMinWidth(DESKTOP_MIN);
   // 600px 이하 — 상단바에 페이지 네비까지 넣으면 파일명이 통째로 사라진다.
   const isCompact = !useMinWidth(601);
+  // 2단 구성의 접기 상태 — 상단바 전체화면 버튼과 경계 토글이 이 하나를 함께 본다.
+  const split = useSplitView();
+  const chatCollapsed = !!split?.chatCollapsed;
   // 공유 — 링크를 복사하고 편집기와 같은 안내 문구를 띄운다.
   const { message: shareMessage, share } = useShareToast();
 
@@ -312,12 +385,14 @@ export default function TabletEditorShell({
     structure: <Package size={20} strokeWidth={1.8} />,
     share: <Share2 size={20} strokeWidth={1.8} />,
     edit: <Pencil size={19} strokeWidth={1.8} />,
-    expand: <Maximize2 size={19} strokeWidth={1.8} />,
+    expand: chatCollapsed
+      ? <Minimize2 size={19} strokeWidth={1.8} />
+      : <Maximize2 size={19} strokeWidth={1.8} />,
     close: <X size={22} strokeWidth={1.8} />,
   };
   const ACTION_LABEL: Record<ViewerActionKey, string> = {
     download: "다운로드", structure: "구조보기", share: "공유",
-    edit: "편집", expand: "전체화면", close: "닫기",
+    edit: "편집", expand: chatCollapsed ? "전체화면 해제" : "전체화면", close: "닫기",
   };
   const ACTION_HANDLER: Record<ViewerActionKey, (() => void) | undefined> = {
     download: onDownload,
@@ -325,7 +400,8 @@ export default function TabletEditorShell({
     // 호출부 동작이 있으면 함께 실행하고, 안내 문구는 항상 띄운다.
     share: () => { onShare?.(); void share(); },
     edit: onEdit,
-    expand: onExpand,
+    // 2단 구성에서는 채팅 열 접기/펴기가 곧 전체화면이다.
+    expand: split ? split.toggle : onExpand,
     close: onClose,
   };
 
@@ -334,7 +410,7 @@ export default function TabletEditorShell({
   // 페이지 네비게이션 — 상단바와 상단바 아래 줄이 같은 것을 쓴다.
   // 페이지가 하나뿐이면 고를 것이 없으므로 아예 만들지 않는다(빈 줄도 남지 않는다).
   // 페이지가 하나뿐이면 고를 것이 없으므로 네비 자체를 만들지 않는다(빈 줄·빈 pill 도 남지 않는다).
-  const hasPageNav = !!spec?.paginated && totalPages > 1;
+  const hasPageNav = !!spec?.paginated && totalPages > 1 && !hidePageNav;
   const pageNav = hasPageNav ? (
     <div className="shrink-0 flex items-center gap-0.5">
       <IconButton label="이전 페이지" onClick={() => goPage(page - 1)} inactive={page <= 1}>
@@ -352,32 +428,10 @@ export default function TabletEditorShell({
       </IconButton>
     </div>
   ) : null;
-  const compactPageNav = isCompact ? pageNav : null;
-
-  // 플로팅 pill 은 스크롤 중에 흐려진다.
-  // 실제로 스크롤되는 요소는 본문 슬롯 안쪽(호출부가 만든 스크롤러)일 수 있어,
-  // 래퍼에서 캡처 단계로 듣는다 — scroll 은 버블링하지 않지만 캡처는 내려간다.
-  //
-  // 의존성은 반드시 boolean 이어야 한다. pageNav(JSX 엘리먼트)를 넣으면 매 렌더마다
-  // 새 객체라 effect 가 재구독되고, 그때마다 cleanup 이 "멈춤" 타이머를 지워
-  // 한 번 흐려진 pill 이 다시 나타나지 못한다.
-  const showPagePill = isCompact && hasPageNav;
-  useEffect(() => {
-    const el = contentWrapRef.current;
-    if (!el || !showPagePill) return;
-    let idle: ReturnType<typeof setTimeout>;
-    const onScroll = () => {
-      setScrolling(true);
-      clearTimeout(idle);
-      idle = setTimeout(() => setScrolling(false), 280);
-    };
-    el.addEventListener("scroll", onScroll, true);
-    return () => { el.removeEventListener("scroll", onScroll, true); clearTimeout(idle); };
-  }, [showPagePill]);
 
   return (
     <div
-      className="tablet-editor-shell fixed inset-0 z-[95] flex flex-col"
+      className={`tablet-editor-shell ${embedded ? "absolute" : "fixed"} inset-0 z-[95] flex flex-col`}
       style={{ ...font, background: C.bg, color: C.text, fontSize: 15 }}
     >
       <style>{`
@@ -395,30 +449,26 @@ export default function TabletEditorShell({
         }
         .tablet-editor-menu { animation: tabletShellMenuIn 160ms ease-out; }
 
-        /* 상단바 컨트롤 공통 —
-           탭 타깃은 폭이 아니라 입력 방식으로 갈린다. 손가락(모바일·태블릿)은 44,
-           마우스는 34. 면·테두리는 어느 쪽에도 없고 hover 에서만 옅은 틴트가 생긴다. */
-        .viewer-action-btn { width: 34px; height: 34px; border-radius: 10px; }
-        .viewer-title-btn  { height: 34px; border-radius: 10px; }
-        @media (pointer: coarse) {
-          .viewer-action-btn { width: 44px; height: 44px; border-radius: 12px; }
-          .viewer-title-btn  { height: 44px; border-radius: 12px; }
-        }
+        /* 상단바 컨트롤 공통 — 탭 타깃 44px 을 입력 방식과 무관하게 하나로 쓴다.
+           44px 은 간격이 아니라 버튼 자신의 크기(= 글리프 주변 패딩)로만 확보한다.
+           그래야 묶음의 gap 을 0 으로 두고도 아이콘 중심 간 거리가 정확히 44px 이 된다.
+           면·테두리는 없고 hover 에서만 옅은 틴트가 생긴다. */
+        .viewer-action-btn { width: 44px; height: 44px; border-radius: 12px; }
+        .viewer-title-btn  { height: 44px; border-radius: 12px; }
         .viewer-focus:focus-visible {
           outline: 2px solid ${C.primary};
           outline-offset: 2px;
         }
 
-        /* 우측 액션 묶음 — 버튼 사이 간격은 입력 방식으로 갈린다(마우스 8px / 손가락 12px).
-           44px 탭 타깃은 간격이 아니라 .viewer-action-btn 의 크기(= 글리프 주변 패딩)로 확보한다.
-           아이콘 사이를 벌려서 타깃을 만들면 버튼들이 흩어져 그룹으로 읽히지 않는다.
+        /* 우측 액션 묶음 — gap 을 두지 않는다.
+           44px 버튼의 패딩끼리 맞닿아 글리프 사이는 이미 20px 넘게 벌어져 있다.
+           여기에 gap 을 더하면 버튼들이 흩어져 하나의 그룹으로 읽히지 않는다. */
+        .viewer-actions { gap: 0; }
 
-           구분선에는 따로 여백을 주지 않는다. gap 위에 margin 을 더하면 묶음 안 간격이
-           12 / 18 / 18 로 어긋나 리듬이 깨진다 — 구분선은 선 하나로 충분히 갈린다. */
-        .viewer-actions { gap: 8px; }
-        @media (pointer: coarse) {
-          .viewer-actions { gap: 12px; }
-        }
+        /* 구분선은 폭을 차지하지 않는다 — 1px 을 음수 마진으로 되돌려
+           두 버튼이 맞닿는 이음매(= 두 아이콘 중심의 한가운데) 위에 선만 얹는다.
+           이래야 다운로드·공유·닫기의 중심 간 거리가 모두 44px 로 같아진다. */
+        .viewer-divider { margin-inline: -0.5px; }
 
         /* 파일명 — 모바일에서만 말줄임하고, 그 위로는 전체를 드러낸다.
            모바일에서는 최소 폭을 박아 둔다. 이게 없으면 상단바가 비좁을 때
@@ -434,34 +484,6 @@ export default function TabletEditorShell({
           }
           /* 좁은 폭에서는 파일명 버튼의 좌우 패딩을 줄여 그만큼을 이름에 돌린다 */
           .viewer-title-btn { padding-inline: 8px; }
-        }
-
-        /* 페이지 네비 pill — 본문 위에 떠서 화면 하단 가운데에 선다.
-           safe-area(홈 인디케이터) 위로 16px 을 띄우고, 뒤 콘텐츠가 비치도록 반투명 + blur.
-           스크롤하는 동안에는 흐려져 읽기를 방해하지 않는다. */
-        .viewer-page-pill {
-          position: absolute;
-          left: 50%;
-          bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-          transform: translateX(-50%);
-          z-index: 20;
-          display: flex;
-          align-items: center;
-          padding: 2px 6px;
-          border-radius: 999px;
-          background: rgba(255, 255, 255, 0.72);
-          -webkit-backdrop-filter: blur(14px) saturate(1.5);
-          backdrop-filter: blur(14px) saturate(1.5);
-          border: 1px solid rgba(16, 24, 40, 0.08);
-          box-shadow: 0 6px 20px rgba(16, 24, 40, 0.14);
-          transition: opacity 200ms ease;
-        }
-        .viewer-page-pill[data-scrolling] {
-          opacity: 0;
-          pointer-events: none;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .viewer-page-pill { transition: none; }
         }
 
         /* 다운로드 메뉴 — 전 뷰포트 동일하게 트리거(다운로드 아이콘) 아래 우측 정렬 드롭다운.
@@ -543,40 +565,21 @@ export default function TabletEditorShell({
         {/* 페이지네이션 — 600px 초과에서만 상단바 가운데에 선다.
             같은 크기의 스페이서로 좌우를 밀어 가운데에 세운다. 파일명이 길어 자리가 모자라면
             스페이서가 먼저 0으로 줄어들고, 그다음에야 파일명이 줄어든다.
-            600px 이하에서는 여기서 빠지고 상단바 아래 줄로 내려간다(아래 pageNavRow). */}
+            600px 이하에서는 상단바에 자리가 없어 아예 나오지 않는다. */}
         {pageNav && !isCompact && <div className="flex-1 min-w-0" />}
         {pageNav && !isCompact && pageNav}
         {pageNav && !isCompact && <div className="flex-1 min-w-0" />}
 
         {/* 미리보기·편집 토글 — 엑셀 전용 */}
         {spec?.viewToggle && (
-          <div
-            className="shrink-0 flex items-center gap-0.5 ml-1 p-0.5 rounded-[12px]"
-            style={{ background: C.bg, border: `1px solid ${C.line}` }}
-          >
-            {(["preview", "edit"] as const).map((mode) => {
-              const active = viewMode === mode;
-              const modeLabel = mode === "preview" ? "미리보기" : "편집";
-              return (
-                <IconTooltip key={mode} label={modeLabel}>
-                  <button
-                    type="button"
-                    aria-label={modeLabel}
-                    aria-pressed={active}
-                    onClick={() => onViewModeChange?.(mode)}
-                    className="w-10 h-9 rounded-[10px] flex items-center justify-center transition-colors"
-                    style={{
-                      background: active ? C.card : "transparent",
-                      color: active ? C.text : C.sub,
-                      boxShadow: active ? "0px 1px 3px rgba(16,24,40,0.12)" : "none",
-                    }}
-                  >
-                    {mode === "preview" ? <Eye size={18} strokeWidth={1.9} /> : <Pencil size={17} strokeWidth={1.9} />}
-                  </button>
-                </IconTooltip>
-              );
-            })}
-          </div>
+          <ViewerSegmentedToggle
+            value={viewMode}
+            onChange={(v) => onViewModeChange?.(v as "preview" | "edit")}
+            options={[
+              { id: "preview", label: "미리보기", icon: <Eye size={18} strokeWidth={1.9} /> },
+              { id: "edit", label: "편집", icon: <Pencil size={17} strokeWidth={1.9} /> },
+            ]}
+          />
         )}
 
 
@@ -589,7 +592,14 @@ export default function TabletEditorShell({
           {extraActions}
           {actions.map((key, i) => {
             if (key === "divider") {
-              return <span key={`divider-${i}`} className="shrink-0 w-px h-6" style={{ background: C.line }} />;
+              return (
+                <span
+                  key={`divider-${i}`}
+                  aria-hidden="true"
+                  className="viewer-divider shrink-0 w-px h-6"
+                  style={{ background: C.line }}
+                />
+              );
             }
             // 다운로드 — 아이콘 하나가 곧 트리거다. 누르면 무조건 메뉴가 열리므로
             // 셰브론이 따로 알려줄 정보가 없고, 본체/화살표를 나눈 분할 버튼도 쓰지 않는다.
@@ -648,7 +658,13 @@ export default function TabletEditorShell({
               );
             }
             return (
-              <IconButton key={key} label={ACTION_LABEL[key]} onClick={ACTION_HANDLER[key]}>
+              <IconButton
+                key={key}
+                label={ACTION_LABEL[key]}
+                onClick={ACTION_HANDLER[key]}
+                // 전체화면만 켜짐/꺼짐이 있다 — 눌린 상태를 옅은 액센트 면으로 드러낸다.
+                pressed={key === "expand" && split ? chatCollapsed : undefined}
+              >
                 {ACTION_ICON[key]}
               </IconButton>
             );
@@ -721,14 +737,6 @@ export default function TabletEditorShell({
           )}
         </main>
 
-        {/* 페이지 네비 — 화면 하단 가운데에 뜨는 반투명 pill.
-            콘텐츠를 읽는 동안에는 방해가 되지 않도록 스크롤 중에는 흐려지고,
-            멈추면 다시 나타난다. 버튼·표기·동작은 상단바에 있을 때와 같은 것을 쓴다. */}
-        {compactPageNav && (
-          <div className="viewer-page-pill" data-scrolling={scrolling || undefined}>
-            {compactPageNav}
-          </div>
-        )}
       </div>
 
       {/* ── 하단 고정 바 슬롯 (safe-area 여백 포함) ─────────────── */}
