@@ -19,15 +19,18 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/app/components/ui/too
  */
 export function IconTooltip({
   label,
+  side = "bottom",
   children,
 }: {
   label: string;
+  /** 기본은 버튼 아래. 화면 왼쪽 끝에 붙은 도구 레일처럼 아래가 좁은 자리에서는 옆으로 편다. */
+  side?: "top" | "right" | "bottom" | "left";
   children: React.ReactNode;
 }) {
   return (
     <Tooltip delayDuration={400}>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side="bottom" align="center" sideOffset={6} collisionPadding={8} className="z-[120]">
+      <TooltipContent side={side} align="center" sideOffset={6} collisionPadding={8} className="z-[120]">
         {label}
       </TooltipContent>
     </Tooltip>

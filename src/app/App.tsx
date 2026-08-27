@@ -4708,10 +4708,12 @@ function ResultViewer({ variant, fileType, filename, templateName, deckPages, em
   // 슬라이드형 결과물인지 — 확장자가 아니라 결과물 구성(RESULT_CONFIG.deckPages)이 정한다.
   const isDeck = (deckPages ?? 0) > 1;
 
+  // png/html(단일) 은 카드뉴스형 목업 문서로 연다 — pages=4 가 textSplit.buildMockSlides 를
+  // 통해 "슬라이드 1장 = 이미지 1장" 카드 4장(표지·본문 1·본문 2·마무리)을 만든다.
   const miniEditorMeta = {
-    png: { ratio: "4 / 5", size: "1024 × 1280 px", pages: 1 },
-    html: { ratio: "3 / 4", size: "1440 × 1920 px", pages: 1 },
-    slides: { ratio: "16 / 9", size: "1536 × 1024 px", pages: 7 },
+    png: { ratio: "4 / 5", size: "1024 × 1280 px", pages: 4, unit: "슬라이드" },
+    html: { ratio: "3 / 4", size: "1440 × 1920 px", pages: 4, unit: "슬라이드" },
+    slides: { ratio: "16 / 9", size: "1536 × 1024 px", pages: 7, unit: "슬라이드" },
   } as const;
 
   // 태블릿 이상: 공통 태블릿 셸(56px 상단바 + safe-area)로 감싼다.
@@ -4725,7 +4727,10 @@ function ResultViewer({ variant, fileType, filename, templateName, deckPages, em
 
     /* 이미지 · 웹 페이지 — 편집이 곧 결과 확인이라 미니 에디터로 바로 연다.
        단, 슬라이드형 html(덱)은 예외다. 여러 장을 이어 훑어보는 것이 먼저라
-       아래 결과물 뷰어로 내려보내 세로 스크롤 미리보기를 쓴다. */
+       아래 결과물 뷰어로 내려보내 세로 스크롤 미리보기를 쓴다.
+       children 을 넘기지 않는다 — 넘기면 TabletMiniEditor 가 그 안의 실제 캔버스
+       (BoardImages)·텍스트 분리 패널 대신 늘 이 정적 미리보기(ResultPreview)만 그려서,
+       슬라이드마다 다른 이미지도 텍스트 분리 목록도 볼 기회가 없어진다. */
     if (fileType === "png" || (fileType === "html" && !isDeck)) {
       const meta = miniEditorMeta[variant as keyof typeof miniEditorMeta];
       return (
@@ -4734,13 +4739,10 @@ function ResultViewer({ variant, fileType, filename, templateName, deckPages, em
           ratio={meta.ratio}
           canvasSize={meta.size}
           pages={meta.pages}
+          unit={meta.unit}
           embedded={embedded}
           onClose={onClose}
-        >
-          <div className="w-full h-full flex flex-col">
-            <ResultPreview variant={variant} templateName={templateName} />
-          </div>
-        </TabletMiniEditor>
+        />
       );
     }
 
@@ -4753,6 +4755,7 @@ function ResultViewer({ variant, fileType, filename, templateName, deckPages, em
           ratio={meta.ratio}
           canvasSize={meta.size}
           pages={meta.pages}
+          unit={meta.unit}
           embedded={embedded}
           onClose={() => setEditing(false)}
         >
@@ -5303,8 +5306,37 @@ function Footer() {
 // [formfill 임시] 모듈 로드 시 1회만 판정 — 렌더 중에 값이 바뀌지 않아 훅 순서에 영향이 없다.
 const FORMFILL_DEV = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("formfill") === "1";
 
+/**
+ * ?textsplit=1 로 미니 에디터를 곧장 연다 (DEV_PANEL과 같은 방식).
+ *
+ * 지금 실제 화면(ResultViewer)의 두 진입점은 항상 children(정적 미리보기)을 넘겨
+ * TabletMiniEditor 에 꽂아서, 그 안의 실제 캔버스(BoardImages)·텍스트 분리 패널이
+ * 그려질 기회 자체가 없다 — 그 코드 경로를 보려면 이 길뿐이다. ?devpanel=1 을 더하면
+ * 문서 프리셋(A~F)·분리 결과 시나리오를 고르는 개발 패널도 함께 뜬다.
+ *
+ * ⚠ 서비스 오픈 전에 반드시 처리할 것 ⚠
+ * DEV_PANEL 과 똑같은 이유로 빌드 시점 조건이 일부러 없다 — 배포된 미리보기 링크로도
+ * 확인해야 해서 프로덕션 번들에도 그대로 들어간다. 즉 이 파일이 나간 곳이면 어디서든
+ * 주소에 ?textsplit=1 만 붙이면 누구나 이 진입로를 열 수 있다. 오픈 전에 둘 중 하나를 할 것:
+ *   1) `import.meta.env.DEV &&` 를 앞에 붙여 개발 빌드로 한정한다
+ *   2) 이 상수와 아래 if 블록, import 1줄을 함께 지운다
+ */
+const TEXTSPLIT_DEV = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("textsplit") === "1";
+
 export default function App() {
   if (FORMFILL_DEV) return <FormFillPlayground />; // [formfill 임시] 이 줄과 위 2줄, import 1줄만 지우면 원상 복구
+  if (TEXTSPLIT_DEV) {
+    return (
+      <TabletMiniEditor
+        fileName="텍스트 분리 개발 도구.png"
+        ratio="4 / 5"
+        canvasSize="1024 × 1280 px"
+        pages={4}
+        unit="슬라이드"
+        onClose={() => { window.location.href = window.location.pathname; }}
+      />
+    );
+  }
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   // 데스크톱의 도킹 사이드바가 아이콘 레일로 접혀 있는지. 오버레이 드로어(좁은 화면)와는

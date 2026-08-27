@@ -1,22 +1,28 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Download, Eraser, Fullscreen, History, Loader2,
-  Image as ImageIcon, Layers, LayoutTemplate, Maximize2, Minimize2, Minus, MousePointer2, Pencil, PenTool,
+  AlertTriangle, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Download, Eraser, Fullscreen, History, Loader2,
+  Image as ImageIcon, LayoutTemplate, Maximize2, Minimize2, Minus, MousePointer2, Pencil,
   Plus, Redo2, Save, Scissors, Search, Share2, Sparkles, Square, Type, Undo2, Wand2, X,
 } from "lucide-react";
 
 import TabletEditorSidebar, { type EditorTab } from "./TabletEditorSidebar";
+import { TextSplitModal, SPLIT_PANEL_W, type FocusRequest, type SplitOpenMode } from "./TextSplitModal";
+import {
+  START_BALANCE, type DocPreset, type EditorImage, type ImageStatus, type Slide, type SplitMockScenario,
+  type SplitToast, DOC_PRESETS, addMockImageLayer, buildMockSlides, buildPresetSlides, emptySlide,
+  removeImageLayer, statusOfMap, useTextSplit,
+} from "./textSplit";
 import { useShareToast, ViewerToast } from "./ShareToast";
 import { IconTooltip } from "./IconTooltip";
 import { useSplitView } from "./splitView";
 import {
-  CanvasLoadingOverlay, EditorSkeleton, LoadingAnnouncer, useDelayedLoading,
+  CanvasLoadingOverlay, EditorSkeleton, LoadingAnnouncer, SkeletonStyles, useDelayedLoading,
 } from "./LoadingState";
 
 /**
  * 미니 에디터 — 이미지·랜딩페이지·프레젠테이션 결과를 여는 편집 화면.
  *
- * 상단바(56px) · 좌측 도구 레일 · 눈금자 + 체커보드 캔버스 · 우측 사이드바 · 하단 페이지 바.
+ * 상단바(56px) · 좌측 도구 레일 · 눈금자 + 캔버스 · 우측 사이드바 · 하단 슬라이드 바.
  * 닫기(X)를 누르면 결과 화면을 벗어난다.
  *
  * 상단바는 왼쪽에 편집 조작(실행취소·다시실행 · 확대축소 · 화면에 맞추기),
@@ -119,27 +125,47 @@ const ICON = 19;
 
 type ToolId =
   | "select" | "text" | "shape" | "image" | "background" | "draw" | "eraser"
-  | "ai-create" | "ai-edit" | "remove-bg" | "vectorize";
+  | "ai-create" | "ai-edit" | "remove-bg" | "split-text";
 
-const TOOLS: { id: ToolId; label: string; icon: React.ReactNode; needsSelection?: boolean }[] = [
+/**
+ * 좌측 레일의 도구 목록.
+ *
+ * accent 가 붙은 셋(AI 생성·AI 수정·텍스트 분리)은 고르지 않아도 파란 글씨로 남는다
+ * — 캔버스를 직접 만지는 손도구가 아니라 "눌러서 결과를 만들어 내는" 도구라
+ * 성격이 달라서다. 선택된 도구만이 파란 면(알약)을 갖는다.
+ */
+const TOOLS: {
+  id: ToolId; label: string; icon: React.ReactNode;
+  needsSelection?: boolean; accent?: boolean;
+  /** hover 툴팁. 기능이 무엇인지만 적는다 — 크레딧 숫자는 넣지 않는다. */
+  tip?: string;
+}[] = [
   { id: "select", label: "선택", icon: <MousePointer2 size={19} strokeWidth={1.7} /> },
   { id: "text", label: "텍스트", icon: <Type size={19} strokeWidth={1.7} /> },
   { id: "shape", label: "도형", icon: <Square size={19} strokeWidth={1.7} /> },
   { id: "image", label: "이미지", icon: <ImageIcon size={19} strokeWidth={1.7} /> },
-  { id: "background", label: "배경", icon: <Layers size={19} strokeWidth={1.7} /> },
+  { id: "background", label: "배경", icon: <LayoutTemplate size={19} strokeWidth={1.7} /> },
   { id: "draw", label: "그리기", icon: <Pencil size={19} strokeWidth={1.7} />, needsSelection: true },
   { id: "eraser", label: "지우개", icon: <Eraser size={19} strokeWidth={1.7} />, needsSelection: true },
-  { id: "ai-create", label: "AI 생성", icon: <Wand2 size={19} strokeWidth={1.7} /> },
-  { id: "ai-edit", label: "AI 수정", icon: <Sparkles size={19} strokeWidth={1.7} /> },
+  { id: "ai-create", label: "AI 생성", icon: <Wand2 size={19} strokeWidth={1.7} />, accent: true },
+  { id: "ai-edit", label: "AI 수정", icon: <Sparkles size={19} strokeWidth={1.7} />, accent: true },
   { id: "remove-bg", label: "배경제거", icon: <Scissors size={19} strokeWidth={1.7} />, needsSelection: true },
-  { id: "vectorize", label: "벡터화", icon: <PenTool size={19} strokeWidth={1.7} /> },
+  {
+    id: "split-text",
+    // 아직 대상도 안 고른 자리라 라벨도 툴팁도 값 이야기를 하지 않는다 —
+    // 무엇을 할 수 있는지 알기도 전에 비용부터 각인되면 눌러 보지도 않게 된다.
+    label: "텍스트 분리",
+    icon: <Type size={19} strokeWidth={1.7} />,
+    accent: true,
+    tip: "이미지 속 텍스트를 편집 가능한 레이어로 분리해요",
+  },
 ];
 
 const ZOOM_MIN = 10;
 const ZOOM_MAX = 200;
 
-/** 눈금자 두께 — 위·왼쪽 공통 */
-const RULER = 24;
+/** 눈금자 두께 — 위·왼쪽 공통. 세로 눈금자에 "-1000" 이 가로로 들어가는 폭이다. */
+const RULER = 22;
 /** 캔버스가 아트보드 둘레에 남기는 최소 여백 */
 const CANVAS_PAD = 24;
 
@@ -161,11 +187,40 @@ const SIDEBAR_W = 300;
 const DL_FORMATS = ["PNG", "JPG", "PDF", "SVG"];
 const DL_SCALES = ["1배", "2배", "3배"];
 
-/** 좌측 도구 레일 폭 */
+/**
+ * 좌측 도구 레일 — 상단바에서 하단 슬라이드 바까지 이어지는 흰 기둥이다.
+ * 캔버스와는 오른쪽 경계선 하나로만 갈린다.
+ *
+ * 레일 폭(RAIL_W)에서 좌우 안여백(RAIL_INSET)을 빼면 한 칸이 쓰는 폭은 52px 이고,
+ * 선택된 도구의 파란 면도 딱 그만큼만 그려진다 — 면이 레일 끝까지 닿으면
+ * 기둥 전체가 파랗게 물든 것처럼 보여 "한 칸이 골라졌다"는 뜻이 흐려진다.
+ * 52px 는 "배경제거" 네 글자가 한 줄에 들어가는 최소치이기도 해서 라벨 크기를
+ * 여기에 맞춘다. "텍스트 분리"처럼 그보다 긴 이름은 띄어쓰기에서 두 줄로 접힌다.
+ */
 const RAIL_W = 76;
+const RAIL_INSET = 12;
+/** 도구 한 칸의 최소 높이 / 라벨 글자 크기 */
+const RAIL_ITEM_H = 52;
+const RAIL_LABEL = 10.5;
+/** 쓸 수 없는 도구의 글자·아이콘 색 (opacity 대신 색으로 낮춘다) */
+const RAIL_OFF = "#C2C7D2";
 
-/** 하단 페이지 바 높이 — 개발 패널이 이 위에 선다 */
-const PAGEBAR_H = 88;
+/**
+ * 캔버스 바탕 — 아트보드 뒤에 깔리는 면.
+ * 예전에는 투명 영역을 뜻하는 체커보드였는데, 이 편집기가 다루는 것은
+ * 슬라이드·문서·랜딩페이지라 배경이 뚫린 문서가 없다. 무늬만 어지러워서
+ * 아트보드 그림자를 읽기 어렵게 만들던 터라 민면으로 바꿨다.
+ */
+const CANVAS_BG = "#EFEFF2";
+/**
+ * 내용이 아직 없는 아트보드의 면 — 캔버스 바탕과 같은 색이다.
+ * 빈 아트보드는 경계를 그리지 않고 바탕에 잠기고, 가운데 점선 상자만 남는다.
+ * 내용이 들어오면 그 내용 자체가 아트보드의 윤곽을 만들고 그림자가 이를 띄운다.
+ */
+const BOARD_EMPTY = CANVAS_BG;
+
+/** 하단 슬라이드 바 높이 — 개발 패널이 이 위에 선다 */
+const PAGEBAR_H = 82;
 
 /**
  * [목업] 편집기 진입 로딩 시간 — 실제로는 편집기 번들과 문서를 받아 오는 구간이다.
@@ -207,6 +262,21 @@ const SAVE_DELAY_PRESETS: { label: string; ms: number }[] = [
  */
 const DEV_PANEL = typeof window !== "undefined"
   && new URLSearchParams(window.location.search).get("devpanel") === "1";
+
+/**
+ * 텍스트 분리 결과 시나리오·문서 프리셋 스위치 — DEV_PANEL(위)에 얹히는 하위 스위치라
+ * 같은 이유로 빌드 시점 가드를 두지 않는다. 배포된 미리보기 링크에서도 ?devpanel=1 로
+ * 확인해야 하기 때문이다. DEV_PANEL 의 "⚠ 서비스 오픈 전에 반드시 처리할 것" 이 이
+ * 상수에도 그대로 적용된다 — 오픈 전에 처리할 때 이 줄도 함께 지운다.
+ */
+const SPLIT_DEV_ON = DEV_PANEL;
+
+const SPLIT_MOCK_SCENARIOS: { id: SplitMockScenario; label: string }[] = [
+  { id: "success", label: "전체 성공" },
+  { id: "partial", label: "부분 실패" },
+  { id: "fail", label: "전체 실패" },
+  { id: "loading", label: "진행 중" },
+];
 
 /**
  * [목업] 개발 패널이 강제로 밀어 넣는 저장 상태.
@@ -262,7 +332,7 @@ const SAVE_SUMMARIES = [
   "텍스트 2개 수정됨",
   "도형 색상 변경",
   "레이아웃 정렬 변경",
-  "페이지 1개 추가",
+  "여백 조정됨",
   "배경 이미지 교체",
   "제목 텍스트 수정됨",
 ];
@@ -299,8 +369,20 @@ export interface TabletMiniEditorProps {
   ratio?: string;
   /** 아트보드 실제 크기 표기. 여기서 픽셀 크기를 읽어 배율 계산에 쓴다. */
   canvasSize?: string;
-  /** 페이지(슬라이드) 수 */
+  /** 낱장을 부르는 이름. 사용자에게 보이는 모든 곳이 이 말을 쓴다 —
+   * 텍스트 분리 모달·우측 패널·다운로드 팝오버·하단 낱장 바가 전부 이 값 하나를 본다.
+   * 한 화면 안에서 "전체 슬라이드 변환" 옆에 "페이지 추가"가 서는 일을 막는 것이 이 프롭의 몫이다.
+   *
+   * 기본값은 "슬라이드"다. 이 편집기는 이미지·웹 페이지도 열지만, 낱장을 늘어놓고
+   * 고르는 하단 바의 생김새가 셋 다 같아 부르는 이름도 하나로 맞춘다. */
+  unit?: string;
+  /** 슬라이드 수 */
   pages?: number;
+  /**
+   * 사용자의 크레딧 잔액. 텍스트 분리 모달이 "고액인지 / 모자라는지"를 이 값으로 판단한다.
+   * 잔액 자체는 모달에 적지 않는다(상단 헤더에 늘 떠 있어 중복이다) — 모자랄 때만 예외로 적는다.
+   */
+  creditBalance?: number;
   /** 아트보드 안에 렌더할 결과물 */
   children?: React.ReactNode;
   onClose?: () => void;
@@ -493,7 +575,8 @@ function Ruler({
   axis, origin, length, scale,
 }: { axis: "x" | "y"; origin: number; length: number; scale: number }) {
   if (length <= 0) return null;
-  const step = 100 * scale >= 46 ? 100 : 100 * scale >= 12 ? 500 : 1000;
+  // 눈금 간격이 38px 밑으로 좁아지면 한 단계 성기게 간다 — 이 아래부터 숫자가 서로 닿는다.
+  const step = 100 * scale >= 38 ? 100 : 100 * scale >= 12 ? 500 : 1000;
   const stepPx = step * scale;
   const first = Math.ceil((0 - origin) / stepPx) * stepPx + origin;
 
@@ -520,13 +603,12 @@ function Ruler({
               ? {
                 left: t.pos, top: 0, height: RULER, paddingLeft: 3,
                 borderLeft: `1px solid ${t.label === 0 ? C.primary : "#D9DEE7"}`,
-                fontSize: 9, lineHeight: `${RULER}px`, color: t.label === 0 ? C.primary : C.sub,
+                fontSize: 8.5, lineHeight: `${RULER}px`, color: t.label === 0 ? C.primary : C.sub,
               }
               : {
-                top: t.pos, left: 0, width: RULER, paddingTop: 2,
+                top: t.pos, left: 0, width: RULER, paddingTop: 2, paddingLeft: 2,
                 borderTop: `1px solid ${t.label === 0 ? C.primary : "#D9DEE7"}`,
-                fontSize: 9, lineHeight: "10px", color: t.label === 0 ? C.primary : C.sub,
-                writingMode: "vertical-rl" as const,
+                fontSize: 8.5, lineHeight: "10px", color: t.label === 0 ? C.primary : C.sub,
               }
           }
         >
@@ -832,6 +914,7 @@ function SaveErrorToast({ onRetry, onDismiss }: { onRetry: () => void; onDismiss
  */
 function SaveDevPanel({
   delay, onDelay, state, onState, historyCount, onHistoryCount,
+  splitScenario, onSplitScenario, docPreset, onDocPreset,
 }: {
   delay: number;
   onDelay: (ms: number) => void;
@@ -839,6 +922,11 @@ function SaveDevPanel({
   onState: (s: SaveState) => void;
   historyCount: number;
   onHistoryCount: (n: number) => void;
+  /** SPLIT_DEV_ON 일 때만 넘어온다 — 없으면 "분리 결과"/"문서 프리셋" 칩 그룹 자체를 그리지 않는다. */
+  splitScenario?: SplitMockScenario;
+  onSplitScenario?: (s: SplitMockScenario) => void;
+  docPreset?: DocPreset | null;
+  onDocPreset?: (p: DocPreset) => void;
 }) {
   const [open, setOpen] = useState(true);
 
@@ -915,8 +1003,281 @@ function SaveDevPanel({
               ))}
             </div>
           </div>
+
+          {onDocPreset && (
+            <div className="flex flex-col gap-1">
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#9AA2B4" }}>문서 프리셋</span>
+              <div className="flex flex-wrap gap-1">
+                {DOC_PRESETS.map((x) => (
+                  <button key={x.id} type="button" onClick={() => onDocPreset(x.id)} style={chip(docPreset === x.id)}>
+                    {x.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {onSplitScenario && (
+            <div className="flex flex-col gap-1">
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#9AA2B4" }}>분리 결과</span>
+              <div className="flex flex-wrap gap-1">
+                {SPLIT_MOCK_SCENARIOS.map((x) => (
+                  <button key={x.id} type="button" onClick={() => onSplitScenario(x.id)} style={chip(splitScenario === x.id)}>
+                    {x.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * 내용이 아직 없는 아트보드.
+ *
+ * 빈 흰 판을 그대로 두면 "아직 안 불러온 것"인지 "원래 비어 있는 것"인지 구분되지
+ * 않는다. 가운데 점선 상자 하나로 여기가 내용이 들어설 자리임을 알린다 —
+ * 안내 문구는 넣지 않는다. 배율이 낮아 아트보드가 작아지면 글자만 뭉개지고,
+ * 무엇을 하라는 말은 이미 우측 패널("요소를 선택해 보세요")이 하고 있어서다.
+ */
+function EmptyBoard() {
+  return (
+    <div className="w-full h-full flex items-center justify-center" style={{ background: BOARD_EMPTY }}>
+      <span
+        className="rounded-[10px]"
+        style={{ width: 124, height: 108, border: "1.5px dashed #C7CBD4" }}
+      />
+    </div>
+  );
+}
+
+/**
+ * 아트보드 위의 이미지들 — 텍스트 편집의 진행 상황이 여기서 그대로 보인다.
+ *
+ * 상태 표시를 캔버스 안에 두는 이유: 어떤 이미지가 처리 중이고 어떤 것이 실패했는지는
+ * 그 이미지 자리에서 말해야 한다. 목록이나 모달로 빼면 "몇 번째 것"인지 눈으로 짚어야 하고,
+ * 여러 장을 걸었을 때 그 짚는 일이 곧 부담이 된다.
+ *
+ * 처리 중인 것부터 하나씩 풀린다. 회차가 통째로 끝나기를 기다리지 않는다.
+ */
+function BoardImages({
+  images, status, highlightId, onSelect,
+}: {
+  images: EditorImage[];
+  status: Record<string, ImageStatus>;
+  /** 텍스트 분리 패널에서 호버 중인 이미지 — 이 자리에서만 primary 링으로 되비춘다 */
+  highlightId?: string | null;
+  /** 캔버스에서 이미지를 직접 클릭했을 때 — 패널이 열려 있으면 목록의 그 항목을 골라 준다 */
+  onSelect?: (id: string) => void;
+}) {
+  return (
+    <div className="absolute inset-0" style={{ background: BOARD_EMPTY }}>
+      <SkeletonStyles />
+      {images.map((img) => (
+        <BoardImage
+          key={img.id}
+          image={img}
+          status={statusOfMap(status, img.id)}
+          highlighted={highlightId === img.id}
+          onSelect={onSelect}
+        />
+      ))}
+    </div>
+  );
+}
+
+function BoardImage({
+  image, status, highlighted, onSelect,
+}: { image: EditorImage; status: ImageStatus; highlighted?: boolean; onSelect?: (id: string) => void }) {
+  const failed = status === "failed" || status === "exhausted";
+  const pos = {
+    left: `${image.rect.x * 100}%`,
+    top: `${image.rect.y * 100}%`,
+    width: `${image.rect.w * 100}%`,
+    height: `${image.rect.h * 100}%`,
+  } as const;
+
+  return (
+    <div
+      role={onSelect ? "button" : undefined}
+      tabIndex={onSelect ? 0 : undefined}
+      onClick={onSelect ? (e) => { e.stopPropagation(); onSelect(image.id); } : undefined}
+      className="absolute rounded-[3px] overflow-hidden"
+      style={{
+        ...pos,
+        background: status === "done" ? C.card : image.tone,
+        cursor: onSelect ? "pointer" : undefined,
+        // 실패는 danger 링, 텍스트 분리 패널에서 호버된 이미지는 primary 링 —
+        // 성공 자체에는 아무 표시도 붙이지 않는다(결과물이 바뀌어 있어서 굳이 알릴 것이 없다).
+        boxShadow: failed
+          ? `inset 0 0 0 2px ${C.danger}`
+          : highlighted ? `inset 0 0 0 2px ${C.primary}` : "none",
+      }}
+    >
+      {/* 처리 중 — 이미지 자리를 그대로 덮는 스켈레톤 */}
+      {/* position 을 인라인으로 못박는다 — .dk-skel 이 position:relative 를 들고 있고,
+          그 <style> 이 Tailwind 뒤에 심어져 utility 클래스(absolute)를 이긴다. */}
+      {status === "pending" && (
+        <div className="dk-skel" style={{ position: "absolute", inset: 0, borderRadius: 3 }} />
+      )}
+
+      {/* 완료 — 편집 가능한 텍스트 레이어로 바뀌었다는 것을 글줄 모양으로 보인다 */}
+      {status === "done" && (
+        <div className="absolute inset-0 flex flex-col justify-center gap-[6px] px-3">
+          <span style={{ height: 7, width: "72%", background: "#D3D8E2", borderRadius: 2 }} />
+          <span style={{ height: 7, width: "88%", background: "#E1E5EC", borderRadius: 2 }} />
+          <span style={{ height: 7, width: "54%", background: "#E1E5EC", borderRadius: 2 }} />
+        </div>
+      )}
+
+      {/* 실패 — 원본은 그대로 두고 경고만 얹는다. 사용자가 가진 것을 뺏지 않는다. */}
+      {failed && (
+        <>
+          <span
+            className="absolute flex items-center justify-center rounded-full"
+            style={{ right: 5, top: 5, width: 18, height: 18, background: C.danger }}
+          >
+            <AlertTriangle size={11} strokeWidth={2.4} color="#FFFFFF" />
+          </span>
+          {/* 재시도를 다 쓴 것만 이유를 남긴다. 아직 재시도가 남았으면 토스트의 버튼이 맡는다. */}
+          {status === "exhausted" && (
+            <span
+              // 잘라내지 않고 접는다. 로고처럼 작은 이미지에서는 한 줄에 못 담기는데,
+              // 말줄임으로 끝내면 "이 이미지는 텍스트를 …" 만 남아 이유가 사라진다.
+              title="이 이미지는 텍스트를 찾지 못했어요"
+              className="absolute left-0 right-0 bottom-0 px-1.5 py-1 text-center"
+              style={{
+                fontSize: 9.5, fontWeight: 600, lineHeight: 1.3, color: C.danger,
+                background: "rgba(255,255,255,0.92)", wordBreak: "keep-all",
+              }}
+            >
+              이 이미지는 텍스트를 찾지 못했어요
+            </span>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** 전체 성공 / 부분 실패 / 전체 실패 — 결과 토스트가 갈리는 세 상태. */
+type ToastKind = "success" | "partial" | "fail";
+
+function classifyToast(result: SplitToast): ToastKind {
+  if (result.failed === 0) return "success";
+  if (result.done === 0) return "fail";
+  return "partial";
+}
+
+/** 결과 상태별 아이콘 원 배경색. 부분 실패는 주황이다 — 절반은 성공했는데
+ *  전체 실패와 같은 빨강을 쓰면 과한 경고로 읽힌다. */
+const TOAST_ICON_BG: Record<ToastKind, string> = {
+  success: "#16A34A",
+  partial: "#F59E0B",
+  fail: C.danger,
+};
+
+/**
+ * 텍스트 편집 결과 토스트 — 저장 실패 토스트(SaveErrorToast)와 같은 껍데기를 쓴다.
+ *
+ * 실패가 섞이면(부분·전체 모두) "다시 시도"가 붙는다 — 늘 실패분만 대상으로 한다
+ * (retryIds). 크레딧을 새로 걷지 않는 것도 같은 이유다: 결과를 못 받은 요청에 값을
+ * 두 번 매기지 않는다. 완전 성공에는 되돌리는 수단을 두지 않는다 — 완료된 것은
+ * 되돌릴 수 없다(textSplit.ts 상단 doc 의 약속 4번)는 원칙이 여기도 그대로 적용된다.
+ *
+ * 자동으로 사라지는 것은 완전 성공뿐이다(textSplit.ts 의 SUCCESS_TOAST_MS).
+ * 실패가 하나라도 섞이면 사용자가 직접 조치하거나 닫을 때까지 남아 있는다.
+ */
+function TextSplitResultToast({
+  result, onRetry, onDismiss,
+}: {
+  result: SplitToast;
+  onRetry: () => void;
+  onDismiss: () => void;
+}) {
+  const kind = classifyToast(result);
+  const canRetry = result.retryIds.length > 0;
+
+  const title = kind === "success" ? `${result.done}장 분리 완료`
+    : kind === "partial" ? `${result.done}장 완료 · ${result.failed}장 실패`
+      : "분리하지 못했어요";
+
+  const subline = kind === "success" ? "원본 이미지는 그대로 보관돼 있어요"
+    : kind === "partial" ? `실패한 ${result.failed}장은 크레딧이 차감되지 않았어요`
+      // [목업] 실패 사유를 알려 줄 실제 네트워크·서버가 없어 대표적인 사유 하나로 고정한다.
+      : "네트워크 연결을 확인해주세요 · 크레딧은 차감되지 않았어요";
+
+  return (
+    <div
+      role="status"
+      className="viewer-toast absolute z-[98] flex items-start gap-3 rounded-[14px]"
+      style={{
+        top: BAR_H + 16,
+        left: "50%",
+        transform: "translateX(-50%)",
+        // width:auto 인 채로 두면(특히 뒤에 flex-1 스페이서가 있는 flex 컨테이너에서)
+        // absolute 요소가 내용에 맞춰 좁아지지 않고 max-width 까지 늘어나 버리는
+        // 브라우저가 있다 — 그러면 스페이서가 그 여백을 그대로 먹어 텍스트와 액션
+        // 사이가 벌어진다. width 를 내용 크기로 못박아 그 여지를 없앤다.
+        width: "max-content",
+        minHeight: 56,
+        maxWidth: 420,
+        padding: "12px 12px 12px 16px",
+        background: C.card,
+        boxShadow: "0px 10px 34px rgba(16,24,40,0.16)",
+        ...font,
+      }}
+    >
+      <span
+        className="shrink-0 flex items-center justify-center rounded-full"
+        aria-hidden="true"
+        style={{ width: 24, height: 24, marginTop: 2, background: TOAST_ICON_BG[kind] }}
+      >
+        {kind === "success"
+          ? <Check size={13} strokeWidth={3} color="#FFFFFF" />
+          : <AlertTriangle size={13} strokeWidth={2.6} color="#FFFFFF" />}
+      </span>
+
+      <div className="flex flex-col gap-0.5 min-w-0" style={{ paddingTop: 1 }}>
+        <span style={{ fontSize: 14.5, fontWeight: 700, color: C.text, whiteSpace: "nowrap" }}>{title}</span>
+        <span style={{ fontSize: 12.5, color: C.sub, lineHeight: 1.5 }}>{subline}</span>
+      </div>
+
+      <div className="flex-1 min-w-[8px]" />
+
+      {kind === "partial" && canRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="shrink-0 rounded-[6px] px-1 transition-opacity hover:opacity-70"
+          style={{ color: C.primary, fontSize: 14, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: 3, whiteSpace: "nowrap" }}
+        >
+          실패한 {result.failed}장 다시 시도
+        </button>
+      )}
+      {kind === "fail" && canRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="shrink-0 rounded-[6px] px-1 transition-opacity hover:opacity-70"
+          style={{ color: C.primary, fontSize: 14, fontWeight: 700, textDecoration: "underline", textUnderlineOffset: 3, whiteSpace: "nowrap" }}
+        >
+          다시 시도
+        </button>
+      )}
+
+      <button
+        type="button"
+        aria-label="닫기"
+        onClick={onDismiss}
+        className="shrink-0 w-8 h-8 rounded-[8px] flex items-center justify-center transition-colors hover:bg-[#F2F4F8]"
+        style={{ color: C.sub }}
+      >
+        <X size={16} strokeWidth={2.2} />
+      </button>
     </div>
   );
 }
@@ -958,7 +1319,9 @@ function SelectionHandles() {
 export default function TabletMiniEditor({
   ratio = "16 / 9",
   canvasSize = "1536 × 1024 px",
+  unit = "슬라이드",
   pages = 1,
+  creditBalance = START_BALANCE,
   children,
   onClose,
   embedded = false,
@@ -997,15 +1360,107 @@ export default function TabletMiniEditor({
   const revertTimerRef = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(revertTimerRef.current), []);
 
-  const [tool, setTool] = useState<ToolId>("image");
-  const [zoom, setZoom] = useState(24);
+  const [tool, setTool] = useState<ToolId>("select");
+  const [zoom, setZoom] = useState(40);
   const [page, setPage] = useState(1);
   const [master, setMaster] = useState(false);
+
+  // ── 이미지 텍스트 분리 ────────────────────────────────────────────────
+  /**
+   * 문서 — 슬라이드와 그 안의 이미지 레이어. 매 렌더 다시 만들어내는 파생값이 아니라
+   * 진짜 상태다. 열릴 때 pages 장으로 시작하고, 이후로는 addSlide·addImage·deleteImage가
+   * 직접 바꾼다 — 텍스트 분리 패널을 포함한 모든 화면이 이 하나를 그대로 읽는다.
+   */
+  const [slides, setSlides] = useState<Slide[]>(() => buildMockSlides(pages));
+  // 다른 결과물로 다시 열리는 등 pages 자체가 바뀌면 문서를 새로 시작한다.
+  useEffect(() => { setSlides(buildMockSlides(pages)); }, [pages]);
+
+  const slideBarRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * 슬라이드 추가 — 늘리고, 새 장으로 옮겨 가고, 그 장이 보이게 바를 끝까지 민다.
+   *
+   * 셋을 한꺼번에 하는 이유: 추가만 하면 새 장은 바 오른쪽 끝(대개 화면 밖)에 생기고
+   * 캔버스는 여전히 이전 장을 비춘다. 그러면 눌러도 아무 일도 안 일어난 것처럼 보인다.
+   * 마스터 보기를 빠져나오는 것도 같은 이유다 — 방금 만든 장을 봐야 만든 것이 된다.
+   */
+  const addSlide = useCallback(() => {
+    setSlides((prev) => {
+      const next = [...prev, emptySlide(prev.length + 1)];
+      setPage(next.length);
+      setMaster(false);
+      // 새 썸네일이 DOM 에 붙은 뒤에 밀어야 scrollWidth 가 그 장까지 포함한다.
+      requestAnimationFrame(() => {
+        const bar = slideBarRef.current;
+        bar?.scrollTo({ left: bar.scrollWidth, behavior: "smooth" });
+      });
+      return next;
+    });
+    markDirty();
+  }, [markDirty]);
+
+  // addMockImageLayer 가 붙이는 새 이미지 id 의 유일성을 보장하는 카운터.
+  const imageSeqRef = useRef(0);
+
+  /** 텍스트 분리 패널 — null 이면 닫힘, 값이 있으면 그 초기 상태(A/B/C)로 열린다 */
+  const [splitPick, setSplitPick] = useState<SplitOpenMode | null>(null);
+  /** 캔버스에서 직접 클릭한 이미지 — 패널을 열 때 상태 A(그 이미지만 체크)의 근거가 된다 */
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  /** 패널 목록 행에 호버 중인 이미지 — 지금 슬라이드에 속할 때만 캔버스에 되비춘다 */
+  const [hoverImageId, setHoverImageId] = useState<string | null>(null);
+  /** 패널이 열린 채로 캔버스 이미지를 클릭하면 이 값이 올라가고, 패널이 그 이미지로 스크롤한다 */
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
+  const focusNonceRef = useRef(0);
+  /** [개발용] ?devpanel=1 + 개발 빌드에서만 고를 수 있는 분리 결과 시나리오. 기본은 전체 성공. */
+  const [splitScenario, setSplitScenario] = useState<SplitMockScenario>("success");
+  /** [개발용] 지금 켜진 문서 프리셋 — 칩 강조 표시에만 쓴다. 직접 편집을 시작하면(추가·삭제)
+   *  더 이상 "그 프리셋 그대로"가 아니지만, 굳이 꺼서 혼란을 더할 필요는 없어 그대로 둔다. */
+  const [docPreset, setDocPreset] = useState<DocPreset | null>(null);
+
+  /** 페이지를 넘기면 이전 슬라이드에서 고른 이미지는 더 이상 의미가 없다 */
+  useEffect(() => { setSelectedImageId(null); }, [page]);
+
   const [sidebarTab, setSidebarTab] = useState<EditorTab>("design");
   // 캔버스 요소 선택 — 아직 요소 모델이 없어 아트보드 단위로만 다룬다.
-  const [selected, setSelected] = useState(true);
+  // 처음 열었을 때는 아무것도 고르지 않은 상태다. 우측 패널이 속성 편집이 아니라
+  // "요소를 선택해 보세요" 안내로 서고, 선택이 있어야 쓰는 도구(그리기·지우개·배경제거)는
+  // 꺼진 채로 시작한다.
+  const [selected, setSelected] = useState(false);
   // 선택된 요소가 있어야 쓸 수 있는 도구는 비활성 (데스크톱과 동일)
   const hasSelection = selected;
+
+  /** 디자인 탭의 "이미지 추가" — 지금 보고 있는 슬라이드에 이미지 레이어 하나를 더한다. */
+  const addImage = useCallback((slideNo: number) => {
+    setSlides((prev) => addMockImageLayer(prev, slideNo, ++imageSeqRef.current));
+    markDirty();
+  }, [markDirty]);
+  /** 속성 패널의 "삭제" — 선택된 이미지 레이어를 지운다. 지운 것이 선택 중이었다면 선택도 정리한다. */
+  const deleteImage = useCallback((imageId: string) => {
+    setSlides((prev) => removeImageLayer(prev, imageId));
+    setSelectedImageId((cur) => (cur === imageId ? null : cur));
+    setSelected(false);
+    markDirty();
+  }, [markDirty]);
+
+  const textSplit = useTextSplit(slides, page, creditBalance, SPLIT_DEV_ON ? splitScenario : undefined);
+
+  /**
+   * [개발용] 문서 프리셋 전환 — 슬라이드를 통째로 갈아 끼우고, 그 문서 기준으로 훅의
+   * status/toast/진행 상태도 다시 시딩한다(resetDocument). 이전 문서를 보던 흔적
+   * (패널·선택·호버·포커스 요청, 지금 보던 쪽번호)도 함께 정리해 새 문서를 1쪽부터 본다.
+   */
+  const loadPreset = useCallback((id: DocPreset) => {
+    const next = buildPresetSlides(id);
+    setSlides(next);
+    textSplit.resetDocument(next);
+    setSplitPick(null);
+    setSelectedImageId(null);
+    setHoverImageId(null);
+    setFocusRequest(null);
+    setPage(1);
+    setMaster(false);
+    setDocPreset(id);
+  }, [textSplit]);
 
   // 데스크톱(창 1200px 이상) — 우측 속성 패널이 접히지 않는 고정 컬럼이 된다.
   // 2단 구성이라 에디터 열이 좁아도 마찬가지다: 양보하는 쪽은 캔버스이지 패널이 아니다.
@@ -1017,7 +1472,70 @@ export default function TabletMiniEditor({
   const [panelOpen, setPanelOpen] = useState(false);
   const sidebarOpen = docked || panelOpen;
   // 속성 패널이 캔버스를 덮는 폭. 고정 컬럼(데스크톱)일 때는 캔버스가 실제로 줄어드니 0.
-  const coveredByPanel = docked ? 0 : panelOpen ? SIDEBAR_W : 0;
+  // 텍스트 분리 패널이 열려 있으면 그 폭이 우선한다 — 속성 패널보다 넓고, 캔버스가
+  // 그 패널에 가려지지 않아야 목록 호버 → 캔버스 하이라이트가 항상 보인다.
+  const coveredByPanel = splitPick ? SPLIT_PANEL_W : docked ? 0 : panelOpen ? SIDEBAR_W : 0;
+
+  /**
+   * 캔버스에서 이미지를 직접 클릭했을 때. 요소 선택(속성 패널)은 기존과 동일하게 열고,
+   * 텍스트 분리 패널이 이미 열려 있으면 그 목록에서 이 이미지를 골라 스크롤해 주는 것까지 더한다.
+   */
+  const selectCanvasImage = useCallback((id: string) => {
+    setSelected(true);
+    setSidebarTab("design");
+    if (!docked) setPanelOpen(true);
+    setSelectedImageId(id);
+    if (splitPick) setFocusRequest({ id, nonce: ++focusNonceRef.current });
+  }, [docked, splitPick]);
+
+  /**
+   * 텍스트 분리 진입.
+   *   0장  아무것도 열지 않는다. 우측 패널이 이유를 말한다.
+   *   1장+ 고르는 패널을 연다 — 패널이 곧 확인 단계다. 캔버스에서 이미지를 선택해
+   *        둔 채 들어왔으면 그 이미지만, 아니면 지금 슬라이드 전체를 체크한 채로 연다.
+   */
+  const startTextSplit = useCallback(() => {
+    if (textSplit.busy) return;
+    const imgs = textSplit.currentImages;
+    if (imgs.length === 0) return;
+    // 이미지가 몇 장이든 패널을 연다 — 패널이 곧 확인 단계이므로(고르고 나서 "정말요?"를
+    // 또 묻지 않는다) 1장짜리 슬라이드를 곧장 실행해 버리면 그 하나뿐인 확인 기회마저
+    // 건너뛰게 된다. 카드뉴스처럼 슬라이드마다 이미지가 늘 1장인 문서에서는 특히,
+    // 사이드바 버튼이 패널을 열지 않으면 "전체 선택" 흐름 자체에 닿을 길이 없어진다.
+    const focus = selectedImageId && imgs.some((i) => i.id === selectedImageId) ? selectedImageId : null;
+    setSplitPick(focus ? { kind: "focus", imageId: focus } : { kind: "current" });
+  }, [textSplit, selectedImageId]);
+
+  /**
+   * 레일에서 도구를 고를 때. 대부분은 도구만 바뀌지만, 텍스트 편집은 고르는 순간
+   * 진입 분기를 탄다 — 이 도구는 캔버스를 만지는 손도구가 아니라 실행 버튼에 가깝다.
+   */
+  const pickTool = useCallback((id: ToolId) => {
+    setTool(id);
+    markDirty();
+    if (id !== "split-text") return;
+    setSidebarTab("design");
+    if (!docked) setPanelOpen(true);
+    startTextSplit();
+  }, [docked, markDirty, startTextSplit]);
+
+  /** 텍스트 분리 도구가 켜져 있을 때만 우측 패널이 이 값을 받는다. */
+  const textEditPanel = useMemo(
+    () => (tool === "split-text"
+      ? {
+        unit,
+        imageCount: textSplit.currentImages.length,
+        slideCount: slides.length,
+        busy: textSplit.busy,
+        onStart: startTextSplit,
+        // 보조 링크는 같은 패널을 "전체 선택" 상태로 띄운다 — 범위를 묻는 창을
+        // 따로 세우지 않는 것이 이 기능의 요점이다.
+        onFullConvert: () => setSplitPick({ kind: "all" }),
+      }
+      : null),
+    [tool, unit, textSplit.currentImages.length, textSplit.busy, slides.length, startTextSplit],
+  );
+
 
   // 상단바 팝오버 — 찾기 / 다운로드 옵션. 저장은 메뉴 없이 바로 실행된다.
   const [findOpen, setFindOpen] = useState(false);
@@ -1222,9 +1740,9 @@ export default function TabletMiniEditor({
   const [dlScale, setDlScale] = useState(DL_SCALES[0]);
   const [dlPages, setDlPages] = useState("all");
 
-  const pageOptions = [`모든 페이지 (1~${pages})`, `현재 페이지 (${page})`];
+  const pageOptions = [`모든 ${unit} (1~${slides.length})`, `현재 ${unit} (${page})`];
   const dlPageLabel = dlPages === "all" ? pageOptions[0] : pageOptions[1];
-  const dlPageCount = dlPages === "all" ? pages : 1;
+  const dlPageCount = dlPages === "all" ? slides.length : 1;
 
   useEffect(() => {
     if (!findOpen && !dlOpen && !versionsOpen) return;
@@ -1332,16 +1850,7 @@ export default function TabletMiniEditor({
           .mini-editor { animation: none; }
           .editor-panel, .editor-panel-toggle { transition: none !important; }
         }
-        .mini-editor-canvas {
-          background-image:
-            linear-gradient(45deg, #d8dce4 25%, transparent 25%),
-            linear-gradient(-45deg, #d8dce4 25%, transparent 25%),
-            linear-gradient(45deg, transparent 75%, #d8dce4 75%),
-            linear-gradient(-45deg, transparent 75%, #d8dce4 75%);
-          background-size: 16px 16px;
-          background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
-          background-color: #c9ced8;
-        }
+        .mini-editor-canvas { background-color: ${CANVAS_BG}; }
         /* 클릭 영역 — 터치는 44px 표준, 데스크톱은 마우스 기준으로 줄여 56px 바 안에 여백을 남긴다.
            아이콘 글리프 크기는 두 경우 모두 같다. */
         .bar-icon, .bar-label, .bar-pill { height: ${BTN_TOUCH}px; }
@@ -1580,7 +2089,7 @@ export default function TabletMiniEditor({
             </span>
           </div>
 
-          {/* 다운로드 — 형식·크기·페이지 옵션 팝오버. 상단바에서 면을 가진 유일한 요소.
+          {/* 다운로드 — 형식·크기·범위 옵션 팝오버. 상단바에서 면을 가진 유일한 요소.
               찾기·공유·저장과 같은 문서 조작이라 간격도 같은 12px를 쓴다. */}
           <div className="relative shrink-0" style={{ marginLeft: GAP_IN }}>
             <BarButton
@@ -1608,14 +2117,14 @@ export default function TabletMiniEditor({
                   <DlField label="파일 형식" value={dlFormat} options={DL_FORMATS} onChange={setDlFormat} />
                   <DlField label="크기" value={dlScale} options={DL_SCALES} onChange={setDlScale} />
                   <DlField
-                    label="페이지 선택"
+                    label={`${unit} 선택`}
                     value={dlPageLabel}
                     options={pageOptions}
                     onChange={(v) => setDlPages(v === pageOptions[0] ? "all" : "current")}
                   />
 
                   <p style={{ fontSize: 12.5, color: C.sub }}>
-                    다운로드 정보 · {dlFormat} · {dlScale} · {dlPageCount}페이지
+                    다운로드 정보 · {dlFormat} · {dlScale} · {unit} {dlPageCount}장
                   </p>
 
                   <button
@@ -1666,31 +2175,59 @@ export default function TabletMiniEditor({
         <div className="flex-1 min-h-0 flex relative">
           {/* 도구 레일 */}
           <nav
-            className="shrink-0 overflow-y-auto py-2 flex flex-col items-center gap-0.5"
-            style={{ width: RAIL_W, background: C.card, borderRight: `1px solid ${C.line}`, scrollbarWidth: "none" }}
+            aria-label="도구"
+            className="shrink-0 overflow-y-auto flex flex-col items-stretch"
+            style={{
+              width: RAIL_W,
+              background: C.card,
+              borderRight: `1px solid ${C.line}`,
+              paddingBlock: 6,
+              paddingInline: RAIL_INSET,
+              gap: 2,
+              scrollbarWidth: "none",
+            }}
           >
             {TOOLS.map((t) => {
               const disabled = !!t.needsSelection && !hasSelection;
               const active = tool === t.id;
-              return (
+              // 색은 세 갈래뿐이다: 못 쓰는 것(회색) → 강조 도구·선택된 것(파랑) → 나머지(먹색).
+              const color = disabled ? RAIL_OFF : active || t.accent ? C.primary : "#5B6475";
+              const btn = (
                 <button
                   key={t.id}
                   type="button"
-                  onClick={() => { if (disabled) return; setTool(t.id); markDirty(); }}
+                  onClick={() => { if (disabled) return; pickTool(t.id); }}
                   disabled={disabled}
                   aria-pressed={active}
-                  className="w-16 min-h-[56px] rounded-[12px] flex flex-col items-center justify-center gap-1 disabled:opacity-35 transition-colors active:bg-[#EDF0F5] hover:bg-[#F5F7FA]"
+                  className="w-full rounded-[10px] flex flex-col items-center justify-center transition-colors enabled:hover:bg-[#F4F6FA] enabled:active:bg-[#E9EEF9] disabled:cursor-default"
                   style={{
-                    background: active ? C.primarySoft : "transparent",
-                    color: active ? C.primary : C.text,
+                    minHeight: RAIL_ITEM_H,
+                    paddingBlock: 6,
+                    gap: 5,
+                    // 선택됐을 때만 인라인으로 면을 칠한다. 나머지는 비워 둬야
+                    // hover 배경(클래스)이 인라인 값에 가려지지 않는다.
+                    background: active ? C.primarySoft : undefined,
+                    color,
                   }}
                 >
-                  {t.icon}
-                  <span style={{ fontSize: 11, fontWeight: active ? 700 : 500, color: active ? C.primary : C.sub, whiteSpace: "nowrap" }}>
+                  <span className="inline-flex items-center justify-center">{t.icon}</span>
+                  <span
+                    className="text-center"
+                    style={{
+                      fontSize: RAIL_LABEL,
+                      fontWeight: active || t.accent ? 700 : 500,
+                      lineHeight: 1.25,
+                      letterSpacing: "-0.2px",
+                      wordBreak: "keep-all",
+                    }}
+                  >
                     {t.label}
                   </span>
                 </button>
               );
+              return t.tip
+                ? <IconTooltip key={t.id} label={t.tip} side="right">{btn}</IconTooltip>
+                : btn;
             })}
           </nav>
 
@@ -1699,6 +2236,30 @@ export default function TabletMiniEditor({
             {/* 되돌리기 — 캔버스 영역만 덮는다. 레일·사이드바까지 덮으면
                 "지금 무엇이 바뀌는 중인지"가 흐려진다. */}
             {showRevertOverlay && <CanvasLoadingOverlay message="버전을 불러오고 있어요" />}
+
+            {/* 텍스트 분리 진행 배지 — 화면을 막지 않는다(pointer-events: none).
+                패널이 열려 있으면 패널 자체가 진행률을 보여주므로, 이 배지는 "백그라운드로
+                전환"한 뒤(패널이 닫힌 뒤)에만 뜬다. */}
+            {!splitPick && textSplit.runProgress && (
+              <div
+                className="absolute z-20 flex items-center gap-2 rounded-full"
+                style={{
+                  top: RULER + 12,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  padding: "7px 14px",
+                  background: C.card,
+                  border: `1px solid ${C.line}`,
+                  boxShadow: "0 4px 16px rgba(16,24,40,0.10)",
+                  pointerEvents: "none",
+                }}
+              >
+                <Loader2 size={14} strokeWidth={2.4} color={C.primary} className="animate-spin" />
+                <span className="tabular-nums" style={{ fontSize: 12.5, fontWeight: 600, color: C.text }}>
+                  텍스트 분리 중 — {textSplit.runProgress.doneCount}/{textSplit.runProgress.total}장
+                </span>
+              </div>
+            )}
 
             {/* 위 눈금자 (왼쪽 모서리 칸 포함) */}
             <div className="shrink-0 flex" style={{ height: RULER }}>
@@ -1733,6 +2294,7 @@ export default function TabletMiniEditor({
                 onScroll={measure}
                 onClick={() => {
                   setSelected(false);
+                  setSelectedImageId(null);
                   if (!docked) setPanelOpen(false);
                 }}
               >
@@ -1746,6 +2308,7 @@ export default function TabletMiniEditor({
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelected(true);
+                    setSelectedImageId(null);
                     setSidebarTab("design");
                     if (!docked) setPanelOpen(true);
                   }}
@@ -1754,11 +2317,22 @@ export default function TabletMiniEditor({
                     width: boardW,
                     height: boardH,
                     background: C.card,
-                    boxShadow: "0 10px 30px rgba(16,24,40,0.28)",
+                    boxShadow: "0 1px 2px rgba(16,24,40,0.04), 0 6px 16px rgba(16,24,40,0.05)",
                   }}
                 >
-                  <div className="w-full h-full overflow-hidden">
-                    {children ?? <div className="w-full h-full" style={{ background: "#E7EAF0" }} />}
+                  <div className="relative w-full h-full overflow-hidden">
+                    {children ?? (
+                      textSplit.currentImages.length === 0
+                        ? <EmptyBoard />
+                        : (
+                          <BoardImages
+                            images={textSplit.currentImages}
+                            status={textSplit.status}
+                            highlightId={hoverImageId}
+                            onSelect={selectCanvasImage}
+                          />
+                        )
+                    )}
                   </div>
                   {selected && <SelectionHandles />}
                 </div>
@@ -1775,6 +2349,10 @@ export default function TabletMiniEditor({
                 tab={sidebarTab}
                 onTabChange={setSidebarTab}
                 selected={selected}
+                selectedImageId={selectedImageId}
+                onAddImage={() => addImage(page)}
+                onDeleteSelectedImage={() => { if (selectedImageId) deleteImage(selectedImageId); }}
+                textEdit={textEditPanel}
               />
             </aside>
           ) : (
@@ -1822,14 +2400,42 @@ export default function TabletMiniEditor({
                 tab={sidebarTab}
                 onTabChange={setSidebarTab}
                 selected={selected}
+                selectedImageId={selectedImageId}
+                onAddImage={() => addImage(page)}
+                onDeleteSelectedImage={() => { if (selectedImageId) deleteImage(selectedImageId); }}
+                textEdit={textEditPanel}
               />
               </aside>
             </>
           )}
+
+          {/* ── 텍스트 분리 패널 ─────────────────────────────
+              캔버스와 같은 자리(이 relative 행)에 앵커해야 우측 슬라이드 패널이 상단바·
+              하단 슬라이드 바까지 덮지 않고, 캔버스가 늘 보이는 채로 남는다. 고를 때 한 번만
+              뜨고, 20장 이하는 실행하면 곧바로 닫힌다 — 그 뒤의 진행·완료·실패는 캔버스와
+              상단 배지·토스트가 이어받는다. */}
+          {splitPick && (
+            <TextSplitModal
+              slides={slides}
+              currentSlide={page}
+              balance={textSplit.balance}
+              unit={unit}
+              mode={splitPick}
+              status={textSplit.status}
+              runProgress={textSplit.runProgress}
+              hoverImageId={hoverImageId}
+              onHoverImage={setHoverImageId}
+              focusRequest={focusRequest}
+              onClose={() => setSplitPick(null)}
+              onStart={textSplit.run}
+              onRetry={textSplit.retry}
+            />
+          )}
         </div>
 
-        {/* ── 하단 페이지 바 ─────────────────────────────── */}
+        {/* ── 하단 슬라이드 바 ───────────────────────────── */}
         <div
+          ref={slideBarRef}
           className="shrink-0 flex items-center gap-2.5 px-3 overflow-x-auto"
           style={{
             height: PAGEBAR_H,
@@ -1854,32 +2460,51 @@ export default function TabletMiniEditor({
             <span style={{ fontSize: 11, fontWeight: 700 }}>마스터</span>
           </button>
 
-          {Array.from({ length: pages }, (_, i) => i + 1).map((n) => (
+          {slides.map(({ no: n }) => (
             <button
               key={n}
               type="button"
               onClick={() => { setPage(n); setMaster(false); }}
-              aria-label={`${n}페이지`}
+              aria-label={`${unit} ${n}`}
               aria-pressed={page === n && !master}
-              className="shrink-0 relative rounded-[10px] overflow-hidden"
+              className="shrink-0 relative rounded-[8px] overflow-hidden"
               style={{
                 width: 88,
-                height: 62,
-                background: C.bg,
+                height: 60,
+                background: C.card,
                 border: `2px solid ${page === n && !master ? C.primary : C.line}`,
               }}
             >
-              {/* 페이지 축소 미리보기 — 아트보드와 같은 비율의 자리표시 */}
-              <span className="absolute inset-0 flex items-center justify-center" style={{ background: "#E7EAF0" }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: page === n && !master ? C.primary : C.sub }}>{n}</span>
+              {/* 슬라이드 축소 미리보기 — 아트보드를 그대로 줄인 자리표시.
+                  쪽번호는 미리보기를 가리지 않게 왼쪽 위 모서리에 작게 얹는다
+                  (예전에는 회색 면 한가운데 큰 숫자였고, 그러면 미리보기가 들어설 자리가 없었다). */}
+              <span className="absolute inset-0" style={{ background: C.card }} />
+              <span
+                className="absolute tabular-nums"
+                style={{
+                  left: 4, top: 2, fontSize: 9, fontWeight: 600, lineHeight: 1,
+                  color: page === n && !master ? C.primary : C.sub,
+                }}
+              >
+                {n}
               </span>
+              {/* 지금 처리 중인 슬라이드. 상단 배지가 "2/8" 로 알려 주는 그 2가
+                  어느 장인지는 여기서만 알 수 있다 — 배지의 숫자만으로는 짚이지 않는다. */}
+              {textSplit.slidePending.has(n) && (
+                <span
+                  className="absolute inset-0 flex items-center justify-center"
+                  style={{ background: "rgba(255,255,255,0.72)" }}
+                >
+                  <Loader2 size={16} strokeWidth={2.4} color={C.primary} className="animate-spin" />
+                </span>
+              )}
             </button>
           ))}
 
           <button
             type="button"
-            aria-label="페이지 추가"
-            onClick={markDirty}
+            aria-label={`${unit} 추가`}
+            onClick={addSlide}
             className="shrink-0 w-[62px] h-[62px] rounded-[10px] flex items-center justify-center transition-colors hover:bg-[#F5F7FA]"
             style={{ border: `1.5px dashed #C9CFDA`, background: C.card }}
           >
@@ -1907,6 +2532,21 @@ export default function TabletMiniEditor({
       {/* ── 안내 문구 ─────────────────────────────────────── */}
       {toast && <ViewerToast message={toast} top={BAR_H + 16} />}
 
+      {/* 텍스트 분리 완료 토스트 — 패널이 열려 있는 동안은 패널 자신이 결과를 보여주므로
+          (20장 이하 성공은 바로 닫혀 여기로 넘어오고, 대량 실패는 패널의 요약 화면이 맡는다)
+          중복으로 뜨지 않게 패널이 닫혀 있을 때만 띄운다. */}
+      {textSplit.toast && !splitPick && (
+        <TextSplitResultToast
+          result={textSplit.toast}
+          onRetry={() => textSplit.retry(textSplit.toast!.retryIds)}
+          onDismiss={textSplit.dismissToast}
+        />
+      )}
+
+      {/* 진행·완료를 화면 밖으로도 알린다. 스켈레톤과 토스트는 눈으로 보는 표시라
+          이 한 줄이 없으면 화면을 못 보는 사용자에게는 아무 일도 일어나지 않은 것과 같다. */}
+      <span className="sr-only" role="status" aria-live="polite">{textSplit.liveMessage}</span>
+
       {/* ── [목업] 저장 상태 점검 패널 ─────────────────────── */}
       {DEV_PANEL && (
         <SaveDevPanel
@@ -1916,6 +2556,10 @@ export default function TabletMiniEditor({
           onState={setSaveState}
           historyCount={history.length}
           onHistoryCount={setHistoryCount}
+          splitScenario={SPLIT_DEV_ON ? splitScenario : undefined}
+          onSplitScenario={SPLIT_DEV_ON ? setSplitScenario : undefined}
+          docPreset={SPLIT_DEV_ON ? docPreset : undefined}
+          onDocPreset={SPLIT_DEV_ON ? loadPreset : undefined}
         />
       )}
 

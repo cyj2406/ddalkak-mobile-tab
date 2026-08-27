@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import {
-  ArrowDown, ArrowUp, Copy, Crop, Eye, FileText, FlipHorizontal2, FlipVertical2,
-  Heading, Image as ImageIcon, Lock, MousePointer2, RotateCcw, RotateCw, Square, Trash2, Type, Upload,
+  ArrowDown, ArrowUp, Circle, Copy, Crop, Eye, FileText, FlipHorizontal2, FlipVertical2,
+  Heading, Image as ImageIcon, ImageOff, Loader2, Lock, MousePointer2, RotateCcw, RotateCw,
+  Trash2, Type, Upload,
 } from "lucide-react";
 
 import { IconTooltip } from "./IconTooltip";
@@ -56,14 +57,41 @@ const LAYERS = [
 
 const PALETTE = ["#003366", "#333333", "#ffffff", "#0088cc"];
 
+/**
+ * 좌측 레일에서 "텍스트 편집" 도구가 켜져 있을 때 디자인 탭이 받는 값.
+ * null 이면 평소의 디자인 탭(요소 추가 / 속성 편집)이 그대로 선다.
+ */
+export interface TextEditPanelProps {
+  /** 낱장을 부르는 이름. 호출부(TabletMiniEditor)가 정한 값이 그대로 내려온다. */
+  unit: string;
+  /** 지금 슬라이드의 이미지 개수 — 0 이면 이 슬라이드에서 할 수 있는 일이 없다 */
+  imageCount: number;
+  /** 문서 전체 슬라이드 수 — 보조 링크에 그대로 적힌다 */
+  slideCount: number;
+  /** 처리 중인 이미지·슬라이드가 있는지 */
+  busy: boolean;
+  onStart: () => void;
+  onFullConvert: () => void;
+}
+
 export interface TabletEditorSidebarProps {
   tab: EditorTab;
   onTabChange: (t: EditorTab) => void;
   /** 캔버스에서 요소가 선택된 상태인지. 디자인 탭이 속성 편집으로 바뀐다. */
   selected: boolean;
+  /** 선택된 것이 특정 이미지 레이어일 때만 그 id — 삭제 버튼이 지울 실제 대상이다 */
+  selectedImageId?: string | null;
+  /** 디자인 탭의 "이미지 추가" — 지금 슬라이드에 이미지 레이어를 하나 더한다 */
+  onAddImage?: () => void;
+  /** 속성 탭의 "삭제" — selectedImageId 가 없으면 지울 대상이 없어 버튼이 비활성된다 */
+  onDeleteSelectedImage?: () => void;
+  /** 텍스트 편집 도구가 켜져 있을 때만 값이 있다 */
+  textEdit?: TextEditPanelProps | null;
 }
 
-export default function TabletEditorSidebar({ tab, onTabChange, selected }: TabletEditorSidebarProps) {
+export default function TabletEditorSidebar({
+  tab, onTabChange, selected, selectedImageId, onAddImage, onDeleteSelectedImage, textEdit,
+}: TabletEditorSidebarProps) {
   return (
     <div className="h-full flex flex-col" style={{ background: C.card }}>
       {/* 탭 */}
@@ -91,7 +119,15 @@ export default function TabletEditorSidebar({ tab, onTabChange, selected }: Tabl
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
-        {tab === "design" && (selected ? <PropertyPanel /> : <DesignPanel />)}
+        {/* 텍스트 편집 도구가 켜져 있으면 그 패널이 디자인 탭을 대신한다 —
+            도구를 골랐는데 패널이 그대로면 어디서 실행하는지 찾을 곳이 없다. */}
+        {tab === "design" && (
+          textEdit
+            ? <TextEditPanel {...textEdit} />
+            : selected
+              ? <PropertyPanel hasSelectedImage={!!selectedImageId} onDelete={onDeleteSelectedImage} />
+              : <DesignPanel onAddImage={onAddImage} />
+        )}
         {tab === "layers" && <LayersPanel />}
         {tab === "theme" && <ThemePanel />}
       </div>
@@ -99,10 +135,80 @@ export default function TabletEditorSidebar({ tab, onTabChange, selected }: Tabl
   );
 }
 
-/* ── 디자인 탭 — 선택된 요소가 없을 때 ───────────────────────────── */
-function DesignPanel() {
+/* ── 디자인 탭 — 텍스트 편집 도구 ─────────────────────────────────
+   주 버튼 하나와 그 아래 보조 링크 하나. 이 순서가 곧 위계다.
+   전체 슬라이드 변환은 예전에 좌측 레일에 따로 서 있었는데, 한 장씩 고르는 일과
+   문서 전체를 갈아엎는 일이 같은 크기로 나란히 놓여 있어 실수로 누르기 쉬웠다.
+   지금은 같은 맥락 안으로 들여와 텍스트 링크로 한 단 낮춰 두었다. */
+function TextEditPanel({ unit, imageCount, slideCount, busy, onStart, onFullConvert }: TextEditPanelProps) {
+  const empty = imageCount === 0;
   return (
-    <div className="p-4 flex flex-col gap-2.5">
+    <div className="p-4 flex flex-col gap-3">
+      <div className="flex flex-col gap-1.5">
+        <p style={{ fontSize: 14, fontWeight: 700, color: C.text }}>이미지 텍스트 분리</p>
+        <p style={{ fontSize: 12.5, color: C.sub, lineHeight: 1.6 }}>
+          AI가 이미지에서 텍스트를 감지하고 편집 가능한 레이어로 분리합니다
+        </p>
+      </div>
+
+      {empty ? (
+        /* 할 수 있는 일이 없을 때 — 버튼만 꺼 두면 왜 꺼졌는지 알 길이 없어 이유를 같이 적는다 */
+        <div
+          className="rounded-[12px] px-3.5 py-3 flex items-start gap-2.5"
+          style={{ background: "#F5F7FA" }}
+        >
+          <ImageOff size={15} strokeWidth={1.8} color={C.sub} className="shrink-0" style={{ marginTop: 1 }} />
+          <div className="flex flex-col gap-1">
+            <p style={{ fontSize: 12.5, fontWeight: 600, color: C.text }}>이 {unit}에 이미지가 없어요</p>
+            <p style={{ fontSize: 12, color: C.sub, lineHeight: 1.6, wordBreak: "keep-all" }}>
+              이미지를 추가하면 텍스트를 분리할 수 있어요.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <p style={{ fontSize: 12, color: C.sub }}>
+          이 {unit}의 이미지 {imageCount}장
+        </p>
+      )}
+
+      <button
+        type="button"
+        onClick={onStart}
+        disabled={empty || busy}
+        className="w-full h-11 rounded-[10px] flex items-center justify-center gap-2 transition-[filter,background-color] enabled:hover:brightness-[0.97] disabled:cursor-default"
+        style={{
+          background: empty || busy ? "#E7EAF0" : C.primary,
+          color: empty || busy ? C.sub : "#FFFFFF",
+        }}
+      >
+        {busy && <Loader2 size={15} strokeWidth={2.4} className="animate-spin" />}
+        <span style={{ fontSize: 13.5, fontWeight: 700 }}>
+          {busy ? "분리하는 중" : "텍스트 분리 시작"}
+        </span>
+      </button>
+
+      <div style={{ height: 1, background: C.line }} />
+
+      {/* 보조 액션 — 주 버튼과 같은 면을 쓰지 않는다. 링크 한 줄이 위계의 전부다.
+          이 슬라이드에 이미지가 없어도 늘 보인다: 여기가 비었다는 것과 문서 전체를
+          변환할 수 있다는 것은 서로 다른 이야기다. */}
+      <button
+        type="button"
+        onClick={onFullConvert}
+        disabled={busy}
+        className="self-start rounded-[8px] px-1 py-1 -mx-1 transition-colors enabled:hover:bg-[#F5F7FA] disabled:opacity-45 disabled:cursor-default"
+        style={{ fontSize: 12.5, fontWeight: 600, color: C.sub }}
+      >
+        전체 {unit} 분리 ({slideCount})
+      </button>
+    </div>
+  );
+}
+
+/* ── 디자인 탭 — 선택된 요소가 없을 때 ───────────────────────────── */
+function DesignPanel({ onAddImage }: { onAddImage?: () => void }) {
+  return (
+    <div className="p-4 flex flex-col gap-[7px]">
       <div className="flex flex-col items-center text-center py-6 gap-2">
         <span
           className="flex items-center justify-center rounded-[18px]"
@@ -118,25 +224,35 @@ function DesignPanel() {
         </p>
       </div>
 
-      <AddButton icon={<Type size={16} strokeWidth={1.8} />} label="텍스트 추가" />
-      <AddButton icon={<Square size={16} strokeWidth={1.8} />} label="도형 추가" />
-      <AddButton icon={<ImageIcon size={16} strokeWidth={1.8} />} label="이미지 추가" />
+      {/* 요소 추가 — 아이콘이 왼쪽 끝에 줄맞춰 서서 셋이 한 묶음으로 읽힌다.
+          텍스트·도형은 아직 실제 레이어 모델이 없어 장식으로 남겨 둔다 — 이미지만
+          텍스트 분리 목록이 읽는 문서 상태에 실제로 반영된다. */}
+      <AddButton icon={<Type size={15} strokeWidth={1.8} />} label="텍스트 추가" align="start" />
+      <AddButton icon={<Circle size={15} strokeWidth={1.8} />} label="도형 추가" align="start" />
+      <AddButton icon={<ImageIcon size={15} strokeWidth={1.8} />} label="이미지 추가" align="start" onClick={onAddImage} />
 
+      {/* 파일 업로드 — 하는 일이 달라 한 칸 띄우고, 가운데 정렬로 묶음을 갈라 놓는다. */}
       <div style={{ height: 6 }} />
-      <AddButton icon={<FileText size={16} strokeWidth={1.8} />} label="HTML 업로드" />
-      <AddButton icon={<FileText size={16} strokeWidth={1.8} />} label="PDF 업로드" />
+      <AddButton icon={<FileText size={15} strokeWidth={1.8} />} label="HTML 업로드" />
+      <AddButton icon={<FileText size={15} strokeWidth={1.8} />} label="PDF 업로드" />
     </div>
   );
 }
 
-function AddButton({ icon, label }: { icon: React.ReactNode; label: string }) {
+function AddButton({
+  icon, label, align = "center", onClick,
+}: { icon: React.ReactNode; label: string; align?: "start" | "center"; onClick?: () => void }) {
   return (
     <button
-      className="w-full h-12 rounded-[12px] flex items-center justify-center gap-2 active:bg-[#EDF0F5]"
+      type="button"
+      onClick={onClick}
+      className={`w-full h-[38px] rounded-[9px] flex items-center gap-2 transition-colors hover:bg-[#F7F9FC] active:bg-[#EDF0F5] ${
+        align === "start" ? "justify-start px-3" : "justify-center"
+      }`}
       style={{ border: `1px solid ${C.line}`, background: C.card, color: C.text }}
     >
-      <span style={{ color: C.sub, display: "inline-flex" }}>{icon}</span>
-      <span style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: "nowrap" }}>{label}</span>
+      <span className="shrink-0" style={{ color: C.sub, display: "inline-flex" }}>{icon}</span>
+      <span style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>{label}</span>
     </button>
   );
 }
@@ -144,7 +260,9 @@ function AddButton({ icon, label }: { icon: React.ReactNode; label: string }) {
 /* ── 디자인 탭 — 요소가 선택됐을 때의 속성 편집 ─────────────────────
    선택한 요소 종류(칩) → 크기/위치 → 회전 → 정렬 → 벡터화 → 변형 → 조정 순.
    섹션 사이는 얇은 구분선으로 나눈다. */
-function PropertyPanel() {
+function PropertyPanel({
+  hasSelectedImage, onDelete,
+}: { hasSelectedImage: boolean; onDelete?: () => void }) {
   const [rotation, setRotation] = useState(0);
   const [align, setAlign] = useState(4);
   const [adjust, setAdjust] = useState({ 밝기: 0, 대비: 0, 채도: 0 });
@@ -164,7 +282,11 @@ function PropertyPanel() {
         <MiniIcon label="앞으로 가져오기"><ArrowUp size={16} strokeWidth={1.9} /></MiniIcon>
         <MiniIcon label="뒤로 보내기"><ArrowDown size={16} strokeWidth={1.9} /></MiniIcon>
         <MiniIcon label="복제"><Copy size={15} strokeWidth={1.9} /></MiniIcon>
-        <MiniIcon label="삭제" danger><Trash2 size={15} strokeWidth={1.9} /></MiniIcon>
+        {/* 실제로 지울 이미지 레이어가 있을 때만 눌린다 — 보드 빈 곳을 눌러 통짜 선택만 된
+            상태(hasSelectedImage=false)에서는 지울 대상이 없어 꺼 둔다. */}
+        <MiniIcon label="삭제" danger disabled={!hasSelectedImage} onClick={onDelete}>
+          <Trash2 size={15} strokeWidth={1.9} />
+        </MiniIcon>
       </div>
 
       <Divider />
@@ -285,14 +407,18 @@ function Divider() {
 }
 
 function MiniIcon({
-  label, danger = false, children,
-}: { label: string; danger?: boolean; children: React.ReactNode }) {
+  label, danger = false, disabled = false, onClick, children,
+}: {
+  label: string; danger?: boolean; disabled?: boolean; onClick?: () => void; children: React.ReactNode;
+}) {
   return (
     <IconTooltip label={label}>
       <button
         type="button"
         aria-label={label}
-        className="shrink-0 w-8 h-8 rounded-[8px] flex items-center justify-center transition-colors hover:bg-[#F2F4F8] active:bg-[#EDF0F5]"
+        disabled={disabled}
+        onClick={onClick}
+        className="shrink-0 w-8 h-8 rounded-[8px] flex items-center justify-center transition-colors enabled:hover:bg-[#F2F4F8] enabled:active:bg-[#EDF0F5] disabled:opacity-35 disabled:cursor-default"
         style={{ color: danger ? "#E5484D" : C.sub }}
       >
         {children}
