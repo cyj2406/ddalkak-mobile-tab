@@ -1,10 +1,16 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { cn } from "@/app/components/ui/utils";
 
 const CHIP_FONT = { fontFamily: "'Pretendard Variable', sans-serif" } as const;
 
 type Variant = "solid" | "outline";
+
+/** 포커스 링 — Button.tsx와 같은 이유로 outline 대신 ring 을 쓴다(theme.css 전역
+ *  outline-ring/50 규칙과 Tailwind outline-none 이 캐스케이드 순서를 두고 충돌해
+ *  outline-style 이 항상 "none"으로 덮인다는 걸 확인했다). 선택 상태(파란 테두리/배경)와
+ *  겹쳐도 육안으로 구분되도록 offset 을 둔다. */
+const FOCUS_RING_CLASS = "outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#4f7bff]";
 
 export interface ScrollableChipsProps {
   items: string[];
@@ -26,10 +32,31 @@ export interface ScrollableChipsProps {
    */
   edgeClassName?: string;
   className?: string;
+  /**
+   * "tablist" 로 주면 콘텐츠 패널을 완전히 갈아 끼우는 진짜 탭으로 동작한다 —
+   * role="tablist"/"tab", aria-selected, roving tabIndex, 방향키·Home/End 이동을 추가한다.
+   * 생략(기본값)하면 지금까지의 필터 칩 그대로다(각 버튼이 독립적으로 Tab 순서에 들어가고
+   * 방향키 이동은 없음) — 크레딧 사용 내역의 "사용 내역/환불·충전 내역"처럼 같은 목록을
+   * 좁히는 필터에는 tab 역할을 강제하지 않는다.
+   *
+   * 시각적으로는 두 모드가 완전히 동일하다 — 접근성 트리와 키보드 동작만 갈린다.
+   */
+  role?: "tablist";
+  /**
+   * role="tablist" 일 때, 각 탭이 제어하는 패널의 id(선택 사항). 주면 각 탭 버튼에
+   * `aria-controls`를 붙이고, 탭 자신의 id는 `${panelIds[i]}-tab` 로 자동 생성해
+   * 패널 쪽 `aria-labelledby`와 연결할 수 있게 한다.
+   */
+  panelIds?: string[];
+}
+
+/** 탭 버튼 id — 패널 쪽 aria-labelledby 가 참조할 수 있는 안정적인 값. */
+export function tabIdFor(panelId: string) {
+  return `${panelId}-tab`;
 }
 
 /**
- * 한 줄 가로 스크롤 pill 칩 그룹 (크레딧 사용 내역 · 템플릿 목록 · 상세 프롬프트 섹션 공용).
+ * 한 줄 가로 스크롤 pill 칩 그룹 (크레딧 사용 내역 · 템플릿 목록 · 상세 프롬프트 섹션 · 요금제 탭 공용).
  * - 줄바꿈 없이 좌우 스크롤, 스크롤바 숨김, overscroll-x-contain으로 부모 스크롤 충돌 방지
  * - `-mx px` 엣지 블리드로 칩이 부모 안쪽 패딩이 아니라 좌우 끝선까지 흘러가 "더 있다"를 인지시킴
  * - py-1로 선택 칩의 테두리가 세로로 잘리지 않도록 여유 확보
@@ -43,9 +70,18 @@ export function ScrollableChips({
   centerActiveOnChange = false,
   edgeClassName = "-mx-4 px-4",
   className,
+  role,
+  panelIds,
 }: ScrollableChipsProps) {
+  const isTablist = role === "tablist";
   const activeRef = useRef<HTMLButtonElement>(null);
   const mounted = useRef(false);
+  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // 롤빙 tabIndex 는 "포커스"를 따라가지 "선택"을 따라가지 않는다(수동 활성화 패턴) —
+  // 방향키로 옮겨 다니는 동안은 선택이 바뀌지 않고, Enter/Space(네이티브 버튼 클릭)를
+  // 눌러야 실제로 onChange 가 불린다. 그래서 "포커스된 탭"과 "선택된 탭"이 다를 수 있고,
+  // 그 둘을 시각적으로 구분해야 한다(focus-visible 링 vs 선택 배경/테두리).
+  const [focusedIndex, setFocusedIndex] = useState(activeIndex);
 
   useEffect(() => {
     const el = activeRef.current;
@@ -59,8 +95,45 @@ export function ScrollableChips({
     mounted.current = true;
   }, [activeIndex, centerActiveOnChange]);
 
+  // 외부에서 activeIndex 가 바뀌면(예: 다른 진입점에서 특정 탭으로 바로 열기) 롤빙 포커스 기준도 맞춘다.
+  useEffect(() => { setFocusedIndex(activeIndex); }, [activeIndex]);
+
+  const moveFocus = (nextIndex: number) => {
+    const clamped = Math.max(0, Math.min(items.length - 1, nextIndex));
+    setFocusedIndex(clamped);
+    buttonRefs.current[clamped]?.focus();
+    if (centerActiveOnChange) {
+      buttonRefs.current[clamped]?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+    }
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
+    if (!isTablist) return;
+    switch (e.key) {
+      case "ArrowRight":
+        e.preventDefault();
+        moveFocus(i + 1);
+        break;
+      case "ArrowLeft":
+        e.preventDefault();
+        moveFocus(i - 1);
+        break;
+      case "Home":
+        e.preventDefault();
+        moveFocus(0);
+        break;
+      case "End":
+        e.preventDefault();
+        moveFocus(items.length - 1);
+        break;
+      // Enter/Space 는 <button> 네이티브 동작이 onClick(=onChange)을 그대로 불러 준다.
+    }
+  };
+
   return (
     <div
+      role={isTablist ? "tablist" : undefined}
+      aria-orientation={isTablist ? "horizontal" : undefined}
       className={cn(
         "flex items-center gap-2 py-1 overflow-x-auto overscroll-x-contain whitespace-nowrap [&::-webkit-scrollbar]:hidden",
         edgeClassName,
@@ -70,14 +143,29 @@ export function ScrollableChips({
     >
       {items.map((label, i) => {
         const selected = i === activeIndex;
+        const panelId = panelIds?.[i];
+        const tabProps = isTablist
+          ? {
+              role: "tab" as const,
+              "aria-selected": selected,
+              id: panelId ? tabIdFor(panelId) : undefined,
+              "aria-controls": panelId,
+              tabIndex: i === focusedIndex ? 0 : -1,
+              onKeyDown: (e: KeyboardEvent<HTMLButtonElement>) => onKeyDown(e, i),
+              onFocus: () => setFocusedIndex(i),
+            }
+          : {};
+
         if (variant === "outline") {
-          // 파란 테두리 pill — 기존 섹션 칩 값을 그대로 유지
           return (
             <button
               key={label}
-              ref={selected ? activeRef : undefined}
+              ref={(el) => {
+                buttonRefs.current[i] = el;
+                if (selected) activeRef.current = el;
+              }}
               onClick={() => onChange(i)}
-              className="h-9 px-3.5 rounded-full shrink-0"
+              className={cn("h-9 px-3.5 rounded-full shrink-0", FOCUS_RING_CLASS)}
               style={{
                 ...CHIP_FONT,
                 fontSize: 12.5,
@@ -86,6 +174,7 @@ export function ScrollableChips({
                 background: selected ? "#ECEFFE" : "white",
                 color: selected ? "#3B5BFE" : "#4B5262",
               }}
+              {...tabProps}
             >
               {label}
             </button>
@@ -94,15 +183,20 @@ export function ScrollableChips({
         return (
           <button
             key={label}
-            ref={selected ? activeRef : undefined}
+            ref={(el) => {
+              buttonRefs.current[i] = el;
+              if (selected) activeRef.current = el;
+            }}
             onClick={() => onChange(i)}
             style={CHIP_FONT}
             className={cn(
               "shrink-0 h-8 rounded-full px-4 text-[13px] font-semibold whitespace-nowrap",
+              FOCUS_RING_CLASS,
               selected
                 ? "bg-foreground text-background"
                 : "bg-background border border-border text-foreground",
             )}
+            {...tabProps}
           >
             {label}
           </button>

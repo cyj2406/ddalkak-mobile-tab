@@ -1,17 +1,23 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Download, Eraser, Fullscreen, History, Loader2,
+  AlertTriangle, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Coins, Download, Eraser, Fullscreen, History, Loader2,
   Image as ImageIcon, LayoutTemplate, Maximize2, Minimize2, Minus, MousePointer2, Pencil,
-  Plus, Redo2, Save, Scissors, Search, Share2, Sparkles, Square, Type, Undo2, Wand2, X,
+  Plus, Redo2, RotateCcw, Save, Search, Share2, Sparkles, Square, Type, TypeOutline, Undo2, X,
 } from "lucide-react";
 
 import TabletEditorSidebar, { type EditorTab } from "./TabletEditorSidebar";
 import { TextSplitModal, SPLIT_PANEL_W, type FocusRequest, type SplitOpenMode } from "./TextSplitModal";
+import { AIBar, type AITargetKind } from "./ContextToolbar";
 import {
-  START_BALANCE, type DocPreset, type EditorImage, type ImageStatus, type Slide, type SplitMockScenario,
+  AI_CREATE_KINDS, AI_REGION_EDIT_COST, useAIStudio, type AICreateKind, type EditRegion,
+} from "./aiStudio";
+import { usePageConvert, type PageConvertToast } from "./pageConvert";
+import {
+  type DocPreset, type EditorImage, type ImageStatus, type Slide, type SplitMockScenario,
   type SplitToast, DOC_PRESETS, addMockImageLayer, buildMockSlides, buildPresetSlides, emptySlide,
-  removeImageLayer, statusOfMap, useTextSplit,
+  formatCredit, formatCreditShort, removeImageLayer, statusOfMap, useTextSplit,
 } from "./textSplit";
+import { useCreditBalance } from "@/app/state/creditBalance";
 import { useShareToast, ViewerToast } from "./ShareToast";
 import { IconTooltip } from "./IconTooltip";
 import { useSplitView } from "./splitView";
@@ -125,18 +131,18 @@ const ICON = 19;
 
 type ToolId =
   | "select" | "text" | "shape" | "image" | "background" | "draw" | "eraser"
-  | "ai-create" | "ai-edit" | "remove-bg" | "split-text";
+  | "split-text";
 
 /**
- * 좌측 레일의 도구 목록.
- *
- * accent 가 붙은 셋(AI 생성·AI 수정·텍스트 분리)은 고르지 않아도 파란 글씨로 남는다
- * — 캔버스를 직접 만지는 손도구가 아니라 "눌러서 결과를 만들어 내는" 도구라
- * 성격이 달라서다. 선택된 도구만이 파란 면(알약)을 갖는다.
+ * 좌측 레일의 손도구 일곱(선택~지우개). 그 아래 구분선을 하나 두고, 작업 범위로 나눈
+ * 둘을 따로 렌더한다 — 이 배열이 아니라 JSX 에서 직접 그린다(RailButton 참고, 렌더 블록 근처).
+ *   AI          — 토글. 누르면 상단에 AI 바(AIBar)가 뜬다/사라진다. 생성·수정 전부
+ *                 이 바 하나로 통합돼 있어(대상 칩만 바뀐다), 레일에는 진입점 하나면 된다.
+ *   텍스트분리   — 문서(슬라이드 전체) 단위, 패널을 여는 지속 도구
  */
 const TOOLS: {
   id: ToolId; label: string; icon: React.ReactNode;
-  needsSelection?: boolean; accent?: boolean;
+  needsSelection?: boolean;
   /** hover 툴팁. 기능이 무엇인지만 적는다 — 크레딧 숫자는 넣지 않는다. */
   tip?: string;
 }[] = [
@@ -147,18 +153,6 @@ const TOOLS: {
   { id: "background", label: "배경", icon: <LayoutTemplate size={19} strokeWidth={1.7} /> },
   { id: "draw", label: "그리기", icon: <Pencil size={19} strokeWidth={1.7} />, needsSelection: true },
   { id: "eraser", label: "지우개", icon: <Eraser size={19} strokeWidth={1.7} />, needsSelection: true },
-  { id: "ai-create", label: "AI 생성", icon: <Wand2 size={19} strokeWidth={1.7} />, accent: true },
-  { id: "ai-edit", label: "AI 수정", icon: <Sparkles size={19} strokeWidth={1.7} />, accent: true },
-  { id: "remove-bg", label: "배경제거", icon: <Scissors size={19} strokeWidth={1.7} />, needsSelection: true },
-  {
-    id: "split-text",
-    // 아직 대상도 안 고른 자리라 라벨도 툴팁도 값 이야기를 하지 않는다 —
-    // 무엇을 할 수 있는지 알기도 전에 비용부터 각인되면 눌러 보지도 않게 된다.
-    label: "텍스트 분리",
-    icon: <Type size={19} strokeWidth={1.7} />,
-    accent: true,
-    tip: "이미지 속 텍스트를 편집 가능한 레이어로 분리해요",
-  },
 ];
 
 const ZOOM_MIN = 10;
@@ -191,13 +185,14 @@ const DL_SCALES = ["1배", "2배", "3배"];
  * 좌측 도구 레일 — 상단바에서 하단 슬라이드 바까지 이어지는 흰 기둥이다.
  * 캔버스와는 오른쪽 경계선 하나로만 갈린다.
  *
- * 레일 폭(RAIL_W)에서 좌우 안여백(RAIL_INSET)을 빼면 한 칸이 쓰는 폭은 52px 이고,
+ * 레일 폭(RAIL_W)에서 좌우 안여백(RAIL_INSET)을 빼면 한 칸이 쓰는 폭이고,
  * 선택된 도구의 파란 면도 딱 그만큼만 그려진다 — 면이 레일 끝까지 닿으면
  * 기둥 전체가 파랗게 물든 것처럼 보여 "한 칸이 골라졌다"는 뜻이 흐려진다.
- * 52px 는 "배경제거" 네 글자가 한 줄에 들어가는 최소치이기도 해서 라벨 크기를
- * 여기에 맞춘다. "텍스트 분리"처럼 그보다 긴 이름은 띄어쓰기에서 두 줄로 접힌다.
+ * 라벨은 모두 한 줄로 고정한다(wordBreak: keep-all 이라 어절 사이에서만 접히는데, 레일
+ * 라벨은 전부 붙여 쓴 한 단어라 접힐 자리 자체가 없다) — "텍스트분리"(다섯 글자)가
+ * 한 줄에 들어가는 최소치에 맞춰 폭을 잡는다.
  */
-const RAIL_W = 76;
+const RAIL_W = 84;
 const RAIL_INSET = 12;
 /** 도구 한 칸의 최소 높이 / 라벨 글자 크기 */
 const RAIL_ITEM_H = 52;
@@ -361,6 +356,22 @@ function useMinWidth(px: number) {
   return matches;
 }
 
+/** AI 바의 좁은 폭 압축 단계 판정에 쓴다 — 뷰포트가 아니라 "실제로 바를 담는
+ *  조상(캔버스 relative 컨테이너)"의 폭을 잰다. 바 자신을 재면 "내 압축 상태가
+ *  내 크기를 정하고, 그 크기가 다시 압축 상태를 정하는" 순환이 생긴다. */
+function useElementWidth(ref: React.RefObject<HTMLElement>) {
+  const [w, setW] = useState<number | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setW(entry.contentRect.width));
+    ro.observe(el);
+    setW(el.getBoundingClientRect().width);
+    return () => ro.disconnect();
+  }, [ref]);
+  return w;
+}
+
 export interface TabletMiniEditorProps {
   /** 호출부가 넘기는 현재 파일명. 편집 화면 상단바는 파일명을 두지 않으므로 표시에는 쓰지 않는다
       (파일명 + 드롭다운은 결과물 뷰어 상단바의 몫이다). */
@@ -378,11 +389,6 @@ export interface TabletMiniEditorProps {
   unit?: string;
   /** 슬라이드 수 */
   pages?: number;
-  /**
-   * 사용자의 크레딧 잔액. 텍스트 분리 모달이 "고액인지 / 모자라는지"를 이 값으로 판단한다.
-   * 잔액 자체는 모달에 적지 않는다(상단 헤더에 늘 떠 있어 중복이다) — 모자랄 때만 예외로 적는다.
-   */
-  creditBalance?: number;
   /** 아트보드 안에 렌더할 결과물 */
   children?: React.ReactNode;
   onClose?: () => void;
@@ -1064,7 +1070,7 @@ function EmptyBoard() {
  * 처리 중인 것부터 하나씩 풀린다. 회차가 통째로 끝나기를 기다리지 않는다.
  */
 function BoardImages({
-  images, status, highlightId, onSelect,
+  images, status, highlightId, onSelect, pickerActive,
 }: {
   images: EditorImage[];
   status: Record<string, ImageStatus>;
@@ -1072,6 +1078,9 @@ function BoardImages({
   highlightId?: string | null;
   /** 캔버스에서 이미지를 직접 클릭했을 때 — 패널이 열려 있으면 목록의 그 항목을 골라 준다 */
   onSelect?: (id: string) => void;
+  /** AI 바의 대상 드롭다운이 열려 있는 동안 — 모든 이미지에 은은한 외곽선을 띄워
+   *  "이걸 클릭하면 대상이 바뀐다"를 알린다. */
+  pickerActive?: boolean;
 }) {
   return (
     <div className="absolute inset-0" style={{ background: BOARD_EMPTY }}>
@@ -1082,6 +1091,7 @@ function BoardImages({
           image={img}
           status={statusOfMap(status, img.id)}
           highlighted={highlightId === img.id}
+          pickerHint={pickerActive}
           onSelect={onSelect}
         />
       ))}
@@ -1090,8 +1100,11 @@ function BoardImages({
 }
 
 function BoardImage({
-  image, status, highlighted, onSelect,
-}: { image: EditorImage; status: ImageStatus; highlighted?: boolean; onSelect?: (id: string) => void }) {
+  image, status, highlighted, pickerHint, onSelect,
+}: {
+  image: EditorImage; status: ImageStatus; highlighted?: boolean; pickerHint?: boolean;
+  onSelect?: (id: string) => void;
+}) {
   const failed = status === "failed" || status === "exhausted";
   const pos = {
     left: `${image.rect.x * 100}%`,
@@ -1105,16 +1118,26 @@ function BoardImage({
       role={onSelect ? "button" : undefined}
       tabIndex={onSelect ? 0 : undefined}
       onClick={onSelect ? (e) => { e.stopPropagation(); onSelect(image.id); } : undefined}
+      // AI 바의 레퍼런스 영역에 이 이미지를 끌어다 놓으면 그 톤을 그대로 레퍼런스로
+      // 쓴다 — 톤 색만 실어 보내면(대신 id 를 넘겨 다시 찾지 않아도) 받는 쪽에서
+      // 별도 조회 없이 바로 aiStudio.addReferenceTone 을 호출할 수 있다.
+      draggable={!!onSelect}
+      onDragStart={onSelect ? (e) => {
+        e.dataTransfer.setData("application/x-board-image-tone", image.tone);
+        e.dataTransfer.effectAllowed = "copy";
+      } : undefined}
       className="absolute rounded-[3px] overflow-hidden"
       style={{
         ...pos,
         background: status === "done" ? C.card : image.tone,
         cursor: onSelect ? "pointer" : undefined,
-        // 실패는 danger 링, 텍스트 분리 패널에서 호버된 이미지는 primary 링 —
+        // 실패는 danger 링, 텍스트 분리 패널에서 호버된 이미지는 primary 링, AI 바의
+        // 대상 드롭다운이 열려 있는 동안은 모든 이미지에 옅은 링(고를 수 있다는 신호) —
         // 성공 자체에는 아무 표시도 붙이지 않는다(결과물이 바뀌어 있어서 굳이 알릴 것이 없다).
         boxShadow: failed
           ? `inset 0 0 0 2px ${C.danger}`
-          : highlighted ? `inset 0 0 0 2px ${C.primary}` : "none",
+          : highlighted ? `inset 0 0 0 2px ${C.primary}`
+            : pickerHint ? "inset 0 0 0 1.5px rgba(59,91,255,0.45)" : "none",
       }}
     >
       {/* 처리 중 — 이미지 자리를 그대로 덮는 스켈레톤 */}
@@ -1282,6 +1305,168 @@ function TextSplitResultToast({
   );
 }
 
+/**
+ * 전체 변환 완료 토스트 — TextSplitResultToast 와 같은 껍데기를 쓰지만 훨씬 단순하다.
+ * 전체 변환은 늘 성공하므로(pageConvert.ts) 실패·재시도 분기가 아예 없다.
+ */
+function PageConvertResultToast({
+  result, onDismiss,
+}: {
+  result: PageConvertToast;
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      role="status"
+      className="viewer-toast absolute z-[98] flex items-start gap-3 rounded-[14px]"
+      style={{
+        top: BAR_H + 16,
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: "max-content",
+        minHeight: 56,
+        maxWidth: 420,
+        padding: "12px 12px 12px 16px",
+        background: C.card,
+        boxShadow: "0px 10px 34px rgba(16,24,40,0.16)",
+        ...font,
+      }}
+    >
+      <span
+        className="shrink-0 flex items-center justify-center rounded-full"
+        aria-hidden="true"
+        style={{ width: 24, height: 24, marginTop: 2, background: "#16A34A" }}
+      >
+        <Check size={13} strokeWidth={3} color="#FFFFFF" />
+      </span>
+
+      <div className="flex flex-col gap-0.5 min-w-0" style={{ paddingTop: 1 }}>
+        <span style={{ fontSize: 14.5, fontWeight: 700, color: C.text, whiteSpace: "nowrap" }}>
+          {result.done}장 변환 완료
+        </span>
+        <span style={{ fontSize: 12.5, color: C.sub, lineHeight: 1.5 }}>
+          편집 가능한 HTML로 다시 만들었어요
+        </span>
+      </div>
+
+      <div className="flex-1 min-w-[8px]" />
+
+      <button
+        type="button"
+        aria-label="닫기"
+        onClick={onDismiss}
+        className="shrink-0 w-8 h-8 rounded-[8px] flex items-center justify-center transition-colors hover:bg-[#F2F4F8]"
+        style={{ color: C.sub }}
+      >
+        <X size={16} strokeWidth={2.2} />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * AI 작업 완료 토스트 — 캔버스 컨텍스트 툴바가 좌측 도킹 패널을 대신하게 되면서
+ * (더 이상 결과를 대신 보여줄 패널이 없다) aiStudio.toast 는 늘 이 토스트 하나로만
+ * 안내된다. 생성(모달)·영역 편집·배경 지우기 전부 여기로 모인다.
+ * PageConvertResultToast 와 같은 껍데기 — 실패 분기가 없어 더 단순하다.
+ *
+ * 캔버스 하단 중앙에 뜬다 — 예전엔 페이지 상단(BAR_H 기준)에 떴는데, AI 바가 열려
+ * 있으면 그 바 바로 위/위에 겹쳐 CTA·되돌리기 링크까지 가렸다. 하단으로 옮기면
+ * 좌표계가 아예 달라 그 겹침 자체가 안 생긴다.
+ *
+ * 자동 소멸 타이밍은 이 컴포넌트가 스스로 든다(aiStudio.ts 는 더 이상 고정 시간을
+ * 두지 않는다) — 되돌리기가 실리는 토스트(이미지 전체·영역 수정)는 5초, 그 외(생성
+ * 커밋·배경 지우기)는 3초. hover 중엔 멈추고 벗어나면 남은 시간만큼 다시 잰다.
+ */
+function AIActionResultToast({
+  message, onDismiss, undo,
+}: {
+  message: string;
+  onDismiss: () => void;
+  /** 이미지 전체·영역 수정 완료 토스트에만 실린다 — 생성 커밋·배경 지우기는 결과
+   *  팝오버가 되돌리기 역할을 대신하므로 여기 안 붙는다(요청 스펙 §2 마지막 문단). */
+  undo?: { label: string; onUndo: () => void };
+}) {
+  const duration = undo ? 5000 : 3000;
+  const remainingRef = useRef(duration);
+  const startedAtRef = useRef(0);
+  const timerRef = useRef<number | null>(null);
+
+  const schedule = useCallback((ms: number) => {
+    startedAtRef.current = Date.now();
+    timerRef.current = window.setTimeout(onDismiss, ms);
+  }, [onDismiss]);
+
+  useEffect(() => {
+    remainingRef.current = duration;
+    schedule(duration);
+    return () => { if (timerRef.current) window.clearTimeout(timerRef.current); };
+    // message 가 바뀔 때마다(새 토스트가 뜰 때마다) 처음부터 다시 잰다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message]);
+
+  const pause = () => {
+    if (timerRef.current == null) return;
+    window.clearTimeout(timerRef.current);
+    timerRef.current = null;
+    remainingRef.current = Math.max(0, remainingRef.current - (Date.now() - startedAtRef.current));
+  };
+  const resume = () => { if (timerRef.current == null) schedule(remainingRef.current); };
+
+  return (
+    <div
+      role="status"
+      onMouseEnter={pause}
+      onMouseLeave={resume}
+      className="viewer-toast absolute z-[98] flex items-start gap-3 rounded-[14px]"
+      style={{
+        bottom: 16,
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: "max-content",
+        minHeight: 56,
+        maxWidth: 460,
+        padding: "12px 12px 12px 16px",
+        background: C.card,
+        boxShadow: "0px 10px 34px rgba(16,24,40,0.16)",
+        ...font,
+      }}
+    >
+      <span
+        className="shrink-0 flex items-center justify-center rounded-full"
+        aria-hidden="true"
+        style={{ width: 24, height: 24, marginTop: 2, background: "#16A34A" }}
+      >
+        <Check size={13} strokeWidth={3} color="#FFFFFF" />
+      </span>
+      <span style={{ fontSize: 14.5, fontWeight: 700, color: C.text, whiteSpace: "nowrap", paddingTop: 3 }}>
+        {message}
+      </span>
+      {undo && (
+        <button
+          type="button"
+          onClick={undo.onUndo}
+          className="shrink-0 flex items-center gap-1 rounded-[8px] px-2 h-7 transition-colors hover:bg-[#F2F4F8]"
+          style={{ marginTop: 1, color: C.primary, fontSize: 13, fontWeight: 500, whiteSpace: "nowrap" }}
+        >
+          <Undo2 size={13} strokeWidth={2.2} />
+          {undo.label}
+        </button>
+      )}
+      <div className="flex-1 min-w-[8px]" />
+      <button
+        type="button"
+        aria-label="닫기"
+        onClick={onDismiss}
+        className="shrink-0 w-8 h-8 rounded-[8px] flex items-center justify-center transition-colors hover:bg-[#F2F4F8]"
+        style={{ color: C.sub }}
+      >
+        <X size={16} strokeWidth={2.2} />
+      </button>
+    </div>
+  );
+}
+
 /** 선택 핸들 — 네 모서리 + 네 변 중앙 + 위쪽 회전 핸들 */
 function SelectionHandles() {
   const dot = (style: React.CSSProperties) => (
@@ -1316,12 +1501,443 @@ function SelectionHandles() {
   );
 }
 
+/**
+ * 좌측 레일의 버튼 한 칸 — 손도구 7개(TOOLS.map)와, 성격이 달라 배열로 데이터화하지
+ * 않은 "AI"·"텍스트분리" 두 항목이 전부 이 모양을 공유한다.
+ *
+ * "선택된 지속 도구"(active)와 "그냥 강조색"(accent)은 같은 파란 글씨를 쓰지만 뜻이
+ * 다르다 — active 는 지금 그 도구가 켜져 있다는 상태고, accent 는 도구 자체의 성격
+ * (눌러서 결과를 만들어 내는 도구)이 늘 파랗다는 뜻이다. "AI"는 토글이라 바가 떠 있는
+ * 동안(aiBarOpen) active 도 함께 켜진다.
+ */
+function RailButton({
+  active, disabled, accent, icon, label, tip, onClick,
+}: {
+  active?: boolean; disabled?: boolean; accent?: boolean;
+  icon: React.ReactNode; label: string; tip?: string; onClick: () => void;
+}) {
+  const color = disabled ? RAIL_OFF : active || accent ? C.primary : "#5B6475";
+  const btn = (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      className="w-full rounded-[10px] flex flex-col items-center justify-center transition-colors enabled:hover:bg-[#F4F6FA] enabled:active:bg-[#E9EEF9] disabled:cursor-default"
+      style={{
+        minHeight: RAIL_ITEM_H,
+        paddingBlock: 6,
+        gap: 5,
+        background: active ? C.primarySoft : undefined,
+        color,
+      }}
+    >
+      <span className="inline-flex items-center justify-center">{icon}</span>
+      <span
+        className="text-center"
+        style={{
+          fontSize: RAIL_LABEL,
+          fontWeight: active || accent ? 700 : 500,
+          lineHeight: 1.25,
+          letterSpacing: "-0.2px",
+          wordBreak: "keep-all",
+        }}
+      >
+        {label}
+      </span>
+    </button>
+  );
+  return tip ? <IconTooltip label={tip} side="right">{btn}</IconTooltip> : btn;
+}
+
+/**
+ * AI 수정 대상을 딤 + 마스크 punch-out 으로 캔버스에 직접 보여준다 — 대상 밖은
+ * 어둡게, 대상(구멍)만 원래 밝기 그대로. "이미지 전체" 대상이든 "영역 지정"
+ * 대상이든 같은 메커니즘 하나로 처리한다(구멍이 이미지 전체 하나냐, 지정한
+ * 영역 여러 개냐만 다르다).
+ *
+ * SVG `<mask>` 를 쓴다 — clip-path 는 분리된 구멍 여러 개를 하나의 폴리곤으로
+ * 표현하려면 자체교차 "터널" 경로가 필요해 영역이 늘수록 취약해지고, canvas
+ * 2D + destination-out 은 명령형으로 매번 다시 그려야 해 이 파일 전체의 선언적
+ * React 렌더링과 결이 다르다. SVG mask 는 흰 배경 위에 검은 사각형을 구멍 수만큼
+ * 얹으면 되고(rx 로 라운드 코너도 공짜), 이 파일이 이미 쓰는 0~1 비율 rect 를
+ * maskUnits="objectBoundingBox" 로 좌표 변환 없이 그대로 넣을 수 있다.
+ *
+ * 지오메트리(구멍 위치·크기) 자체에는 전환 애니메이션을 넣지 않는다 — 영역
+ * 추가·삭제는 사용자의 직접 조작이라 즉시 반영이 자연스럽고, SVG 속성은 CSS
+ * transition 대상이 아니라 애니메이션을 넣으려면 별도 보간 로직이 필요해진다.
+ */
+function DimMaskOverlay({ holes }: { holes: { x: number; y: number; w: number; h: number }[] }) {
+  const maskId = useId();
+  // viewBox 로 0~1 좌표계를 직접 못박는다 — maskUnits/maskContentUnits=
+  // objectBoundingBox 조합으로도 이론상 되지만(마스크 내용을 마스크가 칠해지는
+  // 엘리먼트의 바운딩박스에 맞춰 재스케일), 중첩된 객체 바운딩박스 계산이라
+  // 실제로는 신뢰하기 어려웠다(첫 구현에서 딤 사각형이 보드의 일부만 덮는
+  // 버그로 나타났다). viewBox + preserveAspectRatio="none" 로 1x1 사각형을
+  // 렌더된 CSS 박스 전체에 그대로 늘려 붙이면, 모든 rect 가 이미 이 파일 전체가
+  // 쓰는 것과 같은 0~1 비율 좌표를 직접 쓸 수 있어 훨씬 단순하고 예측 가능하다.
+  return (
+    <svg
+      className="absolute inset-0"
+      style={{ pointerEvents: "none" }}
+      viewBox="0 0 1 1"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <defs>
+        <mask id={maskId}>
+          <rect x={0} y={0} width={1} height={1} fill="white" />
+          {holes.map((h, i) => (
+            <rect key={i} x={h.x} y={h.y} width={h.w} height={h.h} rx={0.008} fill="black" />
+          ))}
+        </mask>
+      </defs>
+      <rect x={0} y={0} width={1} height={1} fill="rgba(16,24,40,0.55)" mask={`url(#${maskId})`} />
+    </svg>
+  );
+}
+
+/**
+ * 영역 편집 모드에서 캔버스에 뜨는 드래그 표면.
+ *
+ * 좌표는 BoardImage 가 이미 쓰는 것과 같은 방식(보드 기준 0~1 비율)이라, 확대·축소로
+ * 보드 크기가 바뀌어도 다시 계산할 필요가 없다 — % 로 그리기 때문이다. 드래그 중 window
+ * 에 mousemove/mouseup 을 붙이는 이유: 마우스가 보드 밖으로 나간 채로 버튼을 놓아도
+ * (흔한 일이다) 드래그가 붕 뜬 채로 남지 않게 하기 위함이다.
+ *
+ * 지시문은 이 인라인 말풍선 한 곳에서만 받는다 — 상단 AI 바는 "영역 지정" 대상일 때
+ * 프롬프트 입력을 아예 그리지 않는다(같은 내용을 두 군데서 받으면 헷갈린다). 영역마다
+ * 다른 지시를 내리는 게 이 기능의 본질이라 개별 입력이 기본이다.
+ */
+function RegionEditOverlay({
+  regions, hoverRegionId, onHoverRegion, onAddRegion, onChangeInstruction, onRemoveRegion,
+  onReopenRegion, editingRegionId, onSetEditingRegion, blinkRegionId,
+}: {
+  regions: EditRegion[];
+  hoverRegionId: string | null;
+  onHoverRegion: (id: string | null) => void;
+  onAddRegion: (rect: EditRegion["rect"]) => void;
+  onChangeInstruction: (regionId: string, v: string) => void;
+  onRemoveRegion: (regionId: string) => void;
+  /** 완료된 영역을 다시 손볼 수 있게 대기 상태로 되돌린다 — 뱃지의 "다시 수정하기"
+   *  메뉴와 박스 모서리의 되돌리기 버튼이 함께 쓴다. */
+  onReopenRegion: (regionId: string) => void;
+  /** 지금 말풍선이 펼쳐져 입력 중인 영역 — 한 번에 하나만 펼친다(아코디언). AI 바의
+   *  경고 캡션이 특정 영역의 말풍선을 열어 줄 수 있어야 해서 TabletMiniEditor 가 든다. */
+  editingRegionId: string | null;
+  onSetEditingRegion: React.Dispatch<React.SetStateAction<string | null>>;
+  /** 방금 "여기예요"를 알리는 중인 영역 — 뱃지가 1초간 깜빡인다. */
+  blinkRegionId: string | null;
+}) {
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const [drag, setDrag] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const prevIds = useRef<Set<string>>(new Set(regions.map((r) => r.id)));
+  /** 완료된 영역 뱃지를 눌렀을 때 뜨는 "다시 수정하기" 미니 메뉴 — 한 번에 하나만 연다. */
+  const [menuRegionId, setMenuRegionId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuRegionId) return;
+    const onDocDown = (e: MouseEvent) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setMenuRegionId(null);
+    };
+    document.addEventListener("mousedown", onDocDown);
+    return () => document.removeEventListener("mousedown", onDocDown);
+  }, [menuRegionId]);
+
+  // 새로 그린 영역은 말풍선이 자동으로 펼쳐지고 포커스가 들어간다 — 드래그를 끝내자마자
+  // 바로 타이핑할 수 있게. regions 배열에서 이전에 없던 id 가 나타나면 그게 방금 그린
+  // 영역이다(addRegion 이 id 를 훅 내부에서 만들어 반환하지 않으므로 이렇게 감지한다).
+  useEffect(() => {
+    const currentIds = new Set(regions.map((r) => r.id));
+    for (const id of currentIds) {
+      if (!prevIds.current.has(id)) { onSetEditingRegion(id); break; }
+    }
+    prevIds.current = currentIds;
+  }, [regions, onSetEditingRegion]);
+
+  const toPct = useCallback((clientX: number, clientY: number) => {
+    const el = surfaceRef.current;
+    if (!el) return { x: 0, y: 0 };
+    const r = el.getBoundingClientRect();
+    return {
+      x: Math.min(1, Math.max(0, (clientX - r.left) / r.width)),
+      y: Math.min(1, Math.max(0, (clientY - r.top) / r.height)),
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!drag) return;
+    const onMove = (e: MouseEvent) => {
+      const p = toPct(e.clientX, e.clientY);
+      setDrag((d) => (d ? { ...d, x1: p.x, y1: p.y } : d));
+    };
+    const onUp = (e: MouseEvent) => {
+      const p = toPct(e.clientX, e.clientY);
+      const x0 = drag.x0; const y0 = drag.y0;
+      const x = Math.min(x0, p.x); const y = Math.min(y0, p.y);
+      const w = Math.abs(p.x - x0); const h = Math.abs(p.y - y0);
+      // 너무 작은 드래그(실수로 눌렀다 뗀 클릭)는 영역으로 치지 않는다.
+      if (w > 0.02 && h > 0.02) onAddRegion({ x, y, w, h });
+      setDrag(null);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    // drag 가 바뀔 때마다 다시 구독해 onUp 이 최신 시작점을 보게 한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag, onAddRegion, toPct]);
+
+  const rectStyle = (r: { x: number; y: number; w: number; h: number }) => ({
+    left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%`,
+  });
+
+  return (
+    <div
+      ref={surfaceRef}
+      className="absolute inset-0"
+      style={{ cursor: "crosshair" }}
+      // 드래그가 끝나면 브라우저가 mousedown~mouseup 을 묶어 click 을 한 번 더 합성해
+      // 보드까지 bubble 된다 — 막지 않으면 보드의 onClick(요소 선택 해제)이 뒤이어
+      // 발동해 방금 고르던 이미지 선택 자체가 풀려 버린다.
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        const p = toPct(e.clientX, e.clientY);
+        setDrag({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
+      }}
+    >
+      {/* 번호 뱃지 점멸 — CSS 애니메이션 하나만 심어 두고 인라인 style 로 켜고 끈다. */}
+      <style>{"@keyframes region-badge-blink{0%,100%{opacity:1;transform:scale(1);}25%,75%{opacity:.35;transform:scale(1.2);}50%{opacity:1;transform:scale(1);}}"}</style>
+      {regions.map((region, i) => {
+        const done = region.status === "done";
+        const processing = region.status === "processing";
+        const hovered = hoverRegionId === region.id;
+        const filled = region.instruction.trim().length > 0;
+        // 테두리는 항상 실선 강조색이다 — "지정된 영역"이라는 신호를 점선보다 뚜렷하게
+        // 준다(이미지 전체를 감싸는 파란 선택 핸들이 "전체가 대상"처럼 더 강해 보이던
+        // 문제의 반대쪽 처방). 지시문 채움 여부는 이미 번호 배지 색(회색/파랑/초록)이
+        // 전달하므로 테두리에서까지 구분하지 않는다 — 완료만 초록으로 갈린다.
+        const borderStyle = "solid";
+        const borderColor = done ? "#16A34A" : C.primary;
+        // 말풍선이 캔버스 아래로 넘칠 만큼 박스가 하단에 가까우면 위로 뒤집는다.
+        // 픽셀 측정 없이 퍼센트 rect 만으로 판단하는 근사치다.
+        const flipUp = region.rect.y + region.rect.h > 0.82;
+        const connectorGap = 6;
+        return (
+          <div
+            key={region.id}
+            className="absolute rounded-[4px]"
+            onMouseEnter={() => onHoverRegion(region.id)}
+            onMouseLeave={() => onHoverRegion(null)}
+            style={{
+              ...rectStyle(region.rect),
+              border: `${hovered ? 3 : 2}px ${borderStyle} ${borderColor}`,
+              background: hovered ? "rgba(59,91,255,0.08)" : "transparent",
+              pointerEvents: "auto",
+            }}
+          >
+            {/* 박스↔말풍선 리더선 — 짧은 간격(6px 안팎)이라 곡선 없이 1px 실선으로
+                충분하다. 색은 박스 테두리와 같은 상태색을 따른다. */}
+            <span
+              aria-hidden="true"
+              className="absolute"
+              style={{
+                left: 14, width: 1, height: connectorGap, background: borderColor,
+                ...(flipUp ? { bottom: "100%" } : { top: "100%" }),
+              }}
+            />
+
+            {/* 번호 뱃지 — 지시문이 비어 있으면 회색, 채워지면 파란색이라 "아직 안 쓴
+                영역"이 한눈에 보인다. 완료는 초록 바탕에 체크, 처리 중은 스피너.
+                idle·processing 은 클릭하면 말풍선이 바로 열리고, done 은 클릭하면
+                "다시 수정하기" 미니 메뉴가 뜬다(바로 되돌리지 않는다 — 완료 결과를
+                실수로 무르는 걸 한 번 더 막는다). */}
+            <button
+              type="button"
+              aria-label={done ? `${i + 1}번 영역 다시 수정하기 메뉴` : `${i + 1}번 영역 편집`}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (done) setMenuRegionId((cur) => (cur === region.id ? null : region.id));
+                else onSetEditingRegion(region.id);
+              }}
+              className="absolute flex items-center justify-center rounded-full transition-transform hover:scale-110"
+              style={{
+                left: 4, top: 4, width: 18, height: 18, fontSize: 10, fontWeight: 500, color: "#FFFFFF",
+                background: done ? "#16A34A" : filled ? C.primary : "#94A3C4",
+                cursor: "pointer",
+                animation: blinkRegionId === region.id ? "region-badge-blink 1s ease-in-out" : undefined,
+              }}
+            >
+              {processing
+                ? <Loader2 size={11} strokeWidth={2.6} className="animate-spin" />
+                : done ? <Check size={11} strokeWidth={3} /> : i + 1}
+            </button>
+
+            {menuRegionId === region.id && (
+              <div
+                ref={menuRef}
+                className="absolute z-10 rounded-[8px] overflow-hidden"
+                onMouseDown={(e) => e.stopPropagation()}
+                style={{ left: 4, top: 26, background: "#FFFFFF", border: `1px solid ${C.line}`, boxShadow: "0 8px 20px rgba(16,24,40,0.16)" }}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onReopenRegion(region.id); setMenuRegionId(null); }}
+                  className="flex items-center gap-1.5 px-2.5 h-8 whitespace-nowrap transition-colors hover:bg-[#F5F7FA]"
+                  style={{ fontSize: 12.5, fontWeight: 400, color: C.text }}
+                >
+                  <RotateCcw size={13} strokeWidth={2.2} color={C.sub} />
+                  다시 수정하기
+                </button>
+              </div>
+            )}
+
+            {/* 삭제/되돌리기 — hover 중일 때만 박스 안쪽 우상단(8px 인셋)에 뜬다. 처리
+                중인 영역은 손댈 수 없다. idle 은 삭제, done 은 "결과 되돌리기"로
+                동작·아이콘·라벨이 갈린다(뱃지의 미니 메뉴와 같은 동작을 공유). */}
+            {hovered && !processing && (
+              <button
+                type="button"
+                aria-label={done ? "결과 되돌리기" : "영역 삭제"}
+                title={done ? "결과를 되돌리고 다시 수정할 수 있어요" : undefined}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (done) onReopenRegion(region.id);
+                  else onRemoveRegion(region.id);
+                }}
+                className="absolute flex items-center justify-center rounded-full transition-colors hover:bg-[#F5F7FA]"
+                style={{
+                  right: 8, top: 8, width: 20, height: 20, background: "#FFFFFF",
+                  border: `1px solid ${C.line}`, boxShadow: "0 2px 6px rgba(16,24,40,0.18)", color: "#5B6475",
+                }}
+              >
+                {done ? <RotateCcw size={11} strokeWidth={2.4} /> : <X size={12} strokeWidth={2.4} />}
+              </button>
+            )}
+
+            <RegionBubble
+              region={region}
+              editing={editingRegionId === region.id}
+              flipUp={flipUp}
+              onExpand={() => onSetEditingRegion(region.id)}
+              onCollapse={() => onSetEditingRegion((cur) => (cur === region.id ? null : cur))}
+              onChangeInstruction={(v) => onChangeInstruction(region.id, v)}
+              onHoverRegion={onHoverRegion}
+            />
+          </div>
+        );
+      })}
+      {drag && (
+        <div
+          className="absolute rounded-[4px]"
+          style={{
+            ...rectStyle({
+              x: Math.min(drag.x0, drag.x1),
+              y: Math.min(drag.y0, drag.y1),
+              w: Math.abs(drag.x1 - drag.x0),
+              h: Math.abs(drag.y1 - drag.y0),
+            }),
+            border: `2px dashed ${C.primary}`,
+            background: "rgba(59,91,255,0.10)",
+            pointerEvents: "none",
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * 영역 하나의 지시문 말풍선 — 두 형태를 오간다.
+ *   펼침(editing)  실제 입력. Enter/Esc 로 확정하고 접힌다(둘 다 "닫기"일 뿐, 이미
+ *                 onChange 로 실시간 저장돼 있어 되돌릴 초안이 따로 없다).
+ *   접힘           요약 칩. 지시문이 있으면 그 내용을, 없으면 안내 문구를 회색으로
+ *                 보여준다. 클릭하면 다시 펼쳐지고 포커스가 들어간다.
+ */
+function RegionBubble({
+  region, editing, flipUp, onExpand, onCollapse, onChangeInstruction, onHoverRegion,
+}: {
+  region: EditRegion;
+  editing: boolean;
+  /** true 면 박스 아래 대신 위에 뜬다(캔버스 하단에 가까운 박스용). */
+  flipUp: boolean;
+  onExpand: () => void;
+  onCollapse: () => void;
+  onChangeInstruction: (v: string) => void;
+  onHoverRegion: (id: string | null) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const idle = region.status === "idle";
+  const done = region.status === "done";
+  const processing = region.status === "processing";
+  const filled = region.instruction.trim().length > 0;
+
+  useEffect(() => {
+    if (editing && idle) inputRef.current?.focus();
+  }, [editing, idle]);
+
+  return (
+    <div
+      className="absolute"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      // 말풍선에 hover 해도 그 박스가 대상임을 알 수 있게 같은 hover 신호를 올린다
+      // (박스 테두리가 굵어지는 것과 같은 매커니즘을 재사용 — 새 state 가 필요 없다).
+      onMouseEnter={() => onHoverRegion(region.id)}
+      onMouseLeave={() => onHoverRegion(null)}
+      style={flipUp
+        ? { left: 0, bottom: "100%", marginBottom: 6, pointerEvents: "auto" }
+        : { left: 0, top: "100%", marginTop: 6, pointerEvents: "auto" }}
+    >
+      {editing ? (
+        <input
+          ref={inputRef}
+          value={region.instruction}
+          onChange={(e) => onChangeInstruction(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); onCollapse(); }
+          }}
+          onBlur={onCollapse}
+          placeholder="이 영역을 어떻게 바꿀까요"
+          readOnly={done}
+          disabled={processing}
+          className="rounded-[8px] px-2 h-8 outline-none"
+          style={{
+            width: 170, border: `1px solid ${done ? "#16A34A" : C.primary}`, boxShadow: "0 4px 14px rgba(16,24,40,0.14)",
+            fontSize: 12.5, fontWeight: 400, color: C.text, background: "#FFFFFF",
+          }}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={onExpand}
+          disabled={processing}
+          className="flex items-center rounded-[8px] px-2 h-7 transition-colors enabled:hover:bg-[#F5F7FA]"
+          style={{ background: "#FFFFFF", border: `1px solid ${C.line}`, boxShadow: "0 2px 8px rgba(16,24,40,0.08)" }}
+        >
+          <span style={{ fontSize: 12, fontWeight: 400, color: filled ? C.text : C.sub, whiteSpace: "nowrap" }}>
+            {filled
+              ? (region.instruction.length > 8 ? `${region.instruction.slice(0, 8)}…` : region.instruction)
+              : "이 영역을 어떻게 바꿀까요"}
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function TabletMiniEditor({
   ratio = "16 / 9",
   canvasSize = "1536 × 1024 px",
   unit = "슬라이드",
   pages = 1,
-  creditBalance = START_BALANCE,
   children,
   onClose,
   embedded = false,
@@ -1429,10 +2045,15 @@ export default function TabletMiniEditor({
   // 선택된 요소가 있어야 쓸 수 있는 도구는 비활성 (데스크톱과 동일)
   const hasSelection = selected;
 
-  /** 디자인 탭의 "이미지 추가" — 지금 보고 있는 슬라이드에 이미지 레이어 하나를 더한다. */
+  /** 디자인 탭의 "이미지 추가" — 지금 보고 있는 슬라이드에 이미지 레이어 하나를 더한다.
+   *  새로 만든 이미지의 id 를 그대로 돌려준다 — addMockImageLayer 가 `added-${seq}` 로
+   *  결정적으로 짓는 id 라 seq 를 먼저 뽑아 두면 별도 조회 없이 바로 알 수 있다(AI 생성
+   *  결과를 캔버스에 넣은 직후 그 이미지를 자동 선택하는 데 쓴다). */
   const addImage = useCallback((slideNo: number) => {
-    setSlides((prev) => addMockImageLayer(prev, slideNo, ++imageSeqRef.current));
+    const seq = ++imageSeqRef.current;
+    setSlides((prev) => addMockImageLayer(prev, slideNo, seq));
     markDirty();
+    return `added-${seq}`;
   }, [markDirty]);
   /** 속성 패널의 "삭제" — 선택된 이미지 레이어를 지운다. 지운 것이 선택 중이었다면 선택도 정리한다. */
   const deleteImage = useCallback((imageId: string) => {
@@ -1442,7 +2063,18 @@ export default function TabletMiniEditor({
     markDirty();
   }, [markDirty]);
 
-  const textSplit = useTextSplit(slides, page, creditBalance, SPLIT_DEV_ON ? splitScenario : undefined);
+  /**
+   * 크레딧 잔액 — 텍스트 분리와 AI 스튜디오(생성·수정·배경제거)가 전부 이 하나를 나눠 쓴다.
+   * 어느 훅도 잔액을 직접 소유하지 않고, 여기서 내려준 값과 setter 를 그대로 되돌려 쓴다 —
+   * 그래야 AI 패널 헤더의 코인 뱃지 하나가 모든 작업의 차감을 정확히 반영한다.
+   *
+   * 앱 전체(프로필 메뉴·설정·요금제 페이지)와 값을 공유하는 useCreditBalance() 를 그대로
+   * 쓴다 — 예전에는 이 컴포넌트만의 로컬 state(초기값 START_BALANCE)였어서 여기서 차감해도
+   * 다른 화면의 잔액 표시는 바뀌지 않았다.
+   */
+  const [creditBal, setCreditBal] = useCreditBalance();
+
+  const textSplit = useTextSplit(slides, page, creditBal, setCreditBal, SPLIT_DEV_ON ? splitScenario : undefined);
 
   /**
    * [개발용] 문서 프리셋 전환 — 슬라이드를 통째로 갈아 끼우고, 그 문서 기준으로 훅의
@@ -1462,6 +2094,57 @@ export default function TabletMiniEditor({
     setDocPreset(id);
   }, [textSplit]);
 
+  /** 지금 선택된 이미지의 실물 — AI 바가 대상 칩을 자동 전환하고, 칩 썸네일·레퍼런스
+   *  "선택한 이미지를 참고할까요?" 체크박스도 이 값으로 노출을 정한다. */
+  const selectedImage = useMemo(
+    () => textSplit.currentImages.find((i) => i.id === selectedImageId) ?? null,
+    [textSplit.currentImages, selectedImageId],
+  );
+
+  const aiStudio = useAIStudio(creditBal, setCreditBal);
+  /** "전체 변환"(문서 단위, 슬라이드를 통째로 HTML 로 재생성) — 우측 텍스트분리 패널의
+   *  두 번째 세그먼트가 쓴다. textSplit·aiStudio 와 같은 잔액을 나눠 쓴다. */
+  const pageConvert = usePageConvert(creditBal, setCreditBal);
+  /** AI 바 — 레일의 "AI" 토글로 여닫는다. tool 과는 무관하다(캔버스 손도구가 아니다). */
+  const [aiBarOpen, setAiBarOpen] = useState(false);
+  /** 대상 드롭다운이 열려 있는 동안 캔버스 이미지 레이어에 "여기서 고를 수 있어요"
+   *  외곽선을 띄우기 위한 신호 — AIBar 가 올려보낸다. */
+  const [aiTargetPickerOpen, setAiTargetPickerOpen] = useState(false);
+  /** AI 바의 대상 칩. "영역 지정"이 곧 옛 regionEditOn 자리다 — 이 값이 "edit-region"일
+   *  때만 캔버스에 드래그 오버레이(RegionEditOverlay)가 뜬다. */
+  const [aiTarget, setAiTarget] = useState<AITargetKind>("illustration");
+  /** "새로 만들기" 계열 중 마지막으로 썼던 대상 — 선택 해제 시 이걸로 되돌아간다. */
+  const [lastCreateKind, setLastCreateKind] = useState<AICreateKind>("illustration");
+  /** 생성 결과를 캔버스에 처음 넣을 때만 "드래그로 옮길 수 있어요" 를 토스트에 덧붙인다
+   *  — 매번 반복하면 잔소리가 된다. */
+  const [dragHintShown, setDragHintShown] = useState(false);
+  // 캔버스 선택 상태를 관찰해 칩을 자동 전환한다(대상 자동 전환의 핵심).
+  // 이미지를 선택하면 "이미지 전체"로(단, 이미 "영역 지정" 중이면 유지해 드래그 도중
+  // 흐름이 끊기지 않게 한다), 선택을 해제하면 마지막 생성 대상으로 되돌린다.
+  useEffect(() => {
+    if (selectedImageId) {
+      setAiTarget((t) => (t === "edit-region" ? t : "edit-whole"));
+    } else {
+      setAiTarget(lastCreateKind);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedImageId]);
+  /** 영역 편집 리스트 ↔ 캔버스 점선 박스 hover 연동 */
+  const [hoverRegionId, setHoverRegionId] = useState<string | null>(null);
+  /** 영역 편집 온보딩 힌트를 세션 동안 한 번 봤는지 — AIBar 가 "영역 지정" 최초 진입
+   *  시에만 자동으로 띄우게 하는 기준. */
+  const [regionHintDismissed, setRegionHintDismissed] = useState(false);
+  /** 지금 말풍선이 펼쳐져 입력 중인 영역 — 한 번에 하나만 펼친다(아코디언). 원래
+   *  RegionEditOverlay 안에만 있던 로컬 상태였는데, AI 바의 "N번 영역에 바꿀 내용을
+   *  적어주세요" 경고를 눌렀을 때 그 영역의 말풍선을 열어 줘야 해서 끌어올렸다. */
+  const [editingRegionId, setEditingRegionId] = useState<string | null>(null);
+  /** 방금 "여기예요"라고 알려주는 중인 영역 번호 뱃지 — 1초간 깜빡이고 스스로 꺼진다. */
+  const [blinkRegionId, setBlinkRegionId] = useState<string | null>(null);
+  const triggerRegionBlink = useCallback((id: string) => {
+    setBlinkRegionId(id);
+    window.setTimeout(() => setBlinkRegionId((cur) => (cur === id ? null : cur)), 1000);
+  }, []);
+
   // 데스크톱(창 1200px 이상) — 우측 속성 패널이 접히지 않는 고정 컬럼이 된다.
   // 2단 구성이라 에디터 열이 좁아도 마찬가지다: 양보하는 쪽은 캔버스이지 패널이 아니다.
   const isDesktop = useMinWidth(DESKTOP_MIN);
@@ -1471,6 +2154,22 @@ export default function TabletMiniEditor({
   // 고정 컬럼일 때는 항상 열려 있고(접는 수단 자체가 없다), 슬라이드일 때만 여닫는다.
   const [panelOpen, setPanelOpen] = useState(false);
   const sidebarOpen = docked || panelOpen;
+
+  /**
+   * AI 바 압축 단계 — 뷰포트가 아니라 이 캔버스 영역(레일·속성 패널을 뺀 실제
+   * 폭)을 기준으로 잰다. 데스크톱 2단(채팅+에디터) 화면처럼 뷰포트는 넓어도 이
+   * 열 자체는 좁아지는 조합이 실제로 있고, 미디어쿼리로는 그 조합을 못 잡는다.
+   * 5단계 표는 ContextToolbar.tsx AIBar 의 compactLevel prop 문서에 정리해 뒀다.
+   */
+  const canvasAreaRef = useRef<HTMLDivElement>(null);
+  const canvasAreaW = useElementWidth(canvasAreaRef);
+  const compactLevel = ((): 0 | 1 | 2 | 3 | 4 => {
+    if (canvasAreaW == null || canvasAreaW >= 760) return 0;
+    if (canvasAreaW >= 620) return 1;
+    if (canvasAreaW >= 520) return 2;
+    if (canvasAreaW >= 440) return 3;
+    return 4;
+  })();
   // 속성 패널이 캔버스를 덮는 폭. 고정 컬럼(데스크톱)일 때는 캔버스가 실제로 줄어드니 0.
   // 텍스트 분리 패널이 열려 있으면 그 폭이 우선한다 — 속성 패널보다 넓고, 캔버스가
   // 그 패널에 가려지지 않아야 목록 호버 → 캔버스 하이라이트가 항상 보인다.
@@ -1507,35 +2206,134 @@ export default function TabletMiniEditor({
   }, [textSplit, selectedImageId]);
 
   /**
-   * 레일에서 도구를 고를 때. 대부분은 도구만 바뀌지만, 텍스트 편집은 고르는 순간
+   * 레일에서 도구를 고를 때. 대부분은 도구만 바뀌지만, 텍스트분리는 고르는 순간
    * 진입 분기를 탄다 — 이 도구는 캔버스를 만지는 손도구가 아니라 실행 버튼에 가깝다.
+   *
+   * 다른 도구로 옮길 때는 열려 있던 우측 텍스트분리 패널(splitPick)뿐 아니라 AI 바도
+   * 함께 닫는다 — "AI 바와 텍스트분리 패널은 동시에 열리지 않는다"는 배타 제어를
+   * 여기서 한 번에 만족시킨다. 반대 방향(AI 바를 열면 텍스트분리가 닫히는 것)은 레일의
+   * AI 토글 onClick 에서 처리한다.
    */
   const pickTool = useCallback((id: ToolId) => {
     setTool(id);
     markDirty();
-    if (id !== "split-text") return;
-    setSidebarTab("design");
-    if (!docked) setPanelOpen(true);
-    startTextSplit();
+    if (id === "split-text") {
+      setSidebarTab("design");
+      if (!docked) setPanelOpen(true);
+      setAiBarOpen(false);
+      startTextSplit();
+      return;
+    }
+    setSplitPick(null);
   }, [docked, markDirty, startTextSplit]);
 
-  /** 텍스트 분리 도구가 켜져 있을 때만 우측 패널이 이 값을 받는다. */
+  /** 텍스트분리 도구가 켜져 있을 때만 우측 패널이 이 값을 받는다. */
   const textEditPanel = useMemo(
     () => (tool === "split-text"
       ? {
         unit,
         imageCount: textSplit.currentImages.length,
         slideCount: slides.length,
-        busy: textSplit.busy,
+        busy: textSplit.busy || pageConvert.busy,
         onStart: startTextSplit,
-        // 보조 링크는 같은 패널을 "전체 선택" 상태로 띄운다 — 범위를 묻는 창을
-        // 따로 세우지 않는 것이 이 기능의 요점이다.
-        onFullConvert: () => setSplitPick({ kind: "all" }),
+        // 보조 링크는 같은 패널을 "전체 변환" 세그먼트로 띄운다.
+        onFullConvert: () => setSplitPick({ kind: "convert" }),
       }
       : null),
-    [tool, unit, textSplit.currentImages.length, textSplit.busy, slides.length, startTextSplit],
+    [tool, unit, textSplit.currentImages.length, textSplit.busy, pageConvert.busy, slides.length, startTextSplit],
   );
 
+  /** AI 바 대상 칩에서 직접 고를 때 — "새로 만들기" 계열이면 lastCreateKind 도 함께 갱신해
+   *  선택 해제 시 되돌아갈 값을 기억해 둔다. */
+  const handleAiTargetChange = useCallback((k: AITargetKind) => {
+    setAiTarget(k);
+    if (k === "icon" || k === "illustration" || k === "background") setLastCreateKind(k);
+  }, []);
+
+  /** "영역 지정" 대상일 때만 뜻이 있는 목록 — 이미지가 없으면 빈 배열. */
+  const aiBarRegions = useMemo(
+    () => (selectedImage ? aiStudio.regionsFor(selectedImage.id) : []),
+    [aiStudio, selectedImage],
+  );
+
+  /**
+   * AI 바 CTA — 대상별로 라벨·비활성·처리중 표시가 갈린다. AIBar 는 그리기만 하고
+   * 이 계산은 여기서 한다(대상·크레딧·프롬프트·영역 개수를 전부 알아야 하므로).
+   */
+  /**
+   * CTA 라벨은 늘 "동사+수량+비용" 그 자체를 보여준다 — 비활성 사유(프롬프트 없음)를
+   * 텍스트로 대신 보여주지 않는다. 그 문구가 프롬프트의 placeholder 와 글자 그대로
+   * 겹쳐서 "버튼에 placeholder 가 새어 들어온 버그"처럼 보였던 게 실제 문제였다.
+   * 예외는 "영역이 0개"뿐이다 — 그 경우는 애초에 계산할 수량·비용 자체가 없다.
+   */
+  const aiBarCta = useMemo(() => {
+    const promptEmpty = aiStudio.prompt.trim().length === 0;
+
+    // 크레딧 표기·동사를 대상 전체에서 하나의 포맷으로 통일한다 —
+    // "{수량 접두어}{생성|수정} · {총액}C". 괄호·"약"·"개당" 같은 변형은 쓰지 않는다.
+    // "영역을 지정해주세요" 같은 사유 문구도 버튼 라벨에서는 뺐다 — 바 아래 barHint
+    // 가 이미 같은 안내를 하고 있어 겹쳐 보이던 것을 하나로 합쳤다(disabled 상태만
+    // 버튼에 반영하면 충분하다).
+    if (aiTarget === "edit-region") {
+      // 이미 완료된 영역은 다시 계산에 넣지 않는다 — 안 그러면 카운터·비용 모두 이미
+      // 처리한 것까지 또 과금하는 것처럼 보인다(실제로 aiStudio.runRegions 도 done 은
+      // 건너뛰지만, CTA 표시가 그와 어긋나면 "재과금될까 봐" 오해를 산다).
+      const pending = aiBarRegions.filter((r) => r.status !== "done");
+      const cost = pending.length * AI_REGION_EDIT_COST;
+      const short = cost > creditBal;
+      const busy = aiStudio.regionBusy;
+      const allDone = aiBarRegions.length > 0 && pending.length === 0;
+      const label = busy ? "수정하는 중"
+        : allDone ? "완료"
+          : short ? "크레딧이 부족해요"
+            : pending.length === 0 ? "수정"
+              : `${pending.length}개 영역 수정 · ${formatCreditShort(cost)}`;
+      return { label, disabled: pending.length === 0 || short || busy, busy };
+    }
+
+    if (aiTarget === "edit-whole") {
+      const short = AI_REGION_EDIT_COST > creditBal;
+      const busy = !!selectedImage && aiStudio.wholeEditBusyId === selectedImage.id;
+      const label = busy ? "수정하는 중"
+        : short ? "크레딧이 부족해요"
+          : `수정 · ${formatCreditShort(AI_REGION_EDIT_COST)}`;
+      return { label, disabled: !selectedImage || promptEmpty || short || busy, busy };
+    }
+
+    // 새로 만들기 계열(icon/illustration/background)
+    const cost = AI_CREATE_KINDS.find((k) => k.id === aiTarget)?.cost ?? 0;
+    const short = cost > creditBal;
+    const busy = aiStudio.createBusy;
+    const label = busy ? "생성하는 중"
+      : short ? "크레딧이 부족해요"
+        : `생성 · ${formatCreditShort(cost)}`;
+    return { label, disabled: promptEmpty || short || busy || !!aiStudio.createResult, busy };
+  }, [
+    aiTarget, aiBarRegions, creditBal, selectedImage,
+    aiStudio.prompt, aiStudio.regionBusy, aiStudio.wholeEditBusyId, aiStudio.createBusy, aiStudio.createResult,
+  ]);
+
+  /** AI 바 CTA 를 눌렀을 때 — 대상에 맞는 aiStudio 함수 하나를 고른다. */
+  const runAIBarAction = useCallback(() => {
+    if (aiBarCta.disabled) return;
+    if (aiTarget === "edit-region") {
+      if (!selectedImage) return;
+      // 지시문이 빈 영역이 있어도 막지 않는다 — 대신 그 영역 번호를 한 번 깜빡여
+      // "여기 빠졌어요"라고만 알리고 그대로 진행한다(바가 이제 공통 프롬프트를
+      // 두지 않으므로 대신 채워 줄 값 자체가 없다 — 각자 인라인 말풍선에서만 받는다).
+      const firstEmpty = aiBarRegions.find((r) => r.status === "idle" && !r.instruction.trim());
+      if (firstEmpty) triggerRegionBlink(firstEmpty.id);
+      aiStudio.runRegions(selectedImage.id);
+      return;
+    }
+    if (aiTarget === "edit-whole") {
+      if (!selectedImage) return;
+      aiStudio.runWholeEdit(selectedImage.id, aiStudio.prompt.trim());
+      return;
+    }
+    const cost = AI_CREATE_KINDS.find((k) => k.id === aiTarget)?.cost ?? 0;
+    aiStudio.runGenerate(aiTarget, cost);
+  }, [aiBarCta.disabled, aiTarget, selectedImage, aiStudio, aiBarRegions, triggerRegionBlink]);
 
   // 상단바 팝오버 — 찾기 / 다운로드 옵션. 저장은 메뉴 없이 바로 실행된다.
   const [findOpen, setFindOpen] = useState(false);
@@ -1943,6 +2741,19 @@ export default function TabletMiniEditor({
               (남는 공간은 위 flex-1 하나에서만 흡수된다). */}
           <div className="shrink-0 flex items-center" style={{ paddingRight: BAR_PAD_X }}>
 
+          {/* 잔여 크레딧 — AI 바 안에는 넣지 않는다(바 폭이 늘어난다). 생성·수정·배경
+              지우기·텍스트분리·전체변환이 전부 이 값 하나를 나눠 쓰므로, 어느 기능을
+              쓰든 항상 보이는 헤더에 상시 노출한다. */}
+          <span
+            className="shrink-0 flex items-center gap-1.5 rounded-full px-2.5"
+            style={{ height: 30, background: GROUP_PILL_BG, marginRight: GAP_GROUP }}
+          >
+            <Coins size={14} strokeWidth={2} color={C.sub} />
+            <span className="tabular-nums" style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
+              {formatCredit(creditBal)}
+            </span>
+          </span>
+
           {/* 문서 조작 — 찾기 · 공유 · 저장 */}
           <div className="flex items-center" style={{ gap: GAP_IN }}>
             {/* 찾기 — 텍스트 찾기 / 바꾸기 팝오버 */}
@@ -2187,52 +2998,50 @@ export default function TabletMiniEditor({
               scrollbarWidth: "none",
             }}
           >
-            {TOOLS.map((t) => {
-              const disabled = !!t.needsSelection && !hasSelection;
-              const active = tool === t.id;
-              // 색은 세 갈래뿐이다: 못 쓰는 것(회색) → 강조 도구·선택된 것(파랑) → 나머지(먹색).
-              const color = disabled ? RAIL_OFF : active || t.accent ? C.primary : "#5B6475";
-              const btn = (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => { if (disabled) return; pickTool(t.id); }}
-                  disabled={disabled}
-                  aria-pressed={active}
-                  className="w-full rounded-[10px] flex flex-col items-center justify-center transition-colors enabled:hover:bg-[#F4F6FA] enabled:active:bg-[#E9EEF9] disabled:cursor-default"
-                  style={{
-                    minHeight: RAIL_ITEM_H,
-                    paddingBlock: 6,
-                    gap: 5,
-                    // 선택됐을 때만 인라인으로 면을 칠한다. 나머지는 비워 둬야
-                    // hover 배경(클래스)이 인라인 값에 가려지지 않는다.
-                    background: active ? C.primarySoft : undefined,
-                    color,
-                  }}
-                >
-                  <span className="inline-flex items-center justify-center">{t.icon}</span>
-                  <span
-                    className="text-center"
-                    style={{
-                      fontSize: RAIL_LABEL,
-                      fontWeight: active || t.accent ? 700 : 500,
-                      lineHeight: 1.25,
-                      letterSpacing: "-0.2px",
-                      wordBreak: "keep-all",
-                    }}
-                  >
-                    {t.label}
-                  </span>
-                </button>
-              );
-              return t.tip
-                ? <IconTooltip key={t.id} label={t.tip} side="right">{btn}</IconTooltip>
-                : btn;
-            })}
+            {TOOLS.map((t) => (
+              <RailButton
+                key={t.id}
+                active={tool === t.id}
+                disabled={!!t.needsSelection && !hasSelection}
+                icon={t.icon}
+                label={t.label}
+                tip={t.tip}
+                onClick={() => pickTool(t.id)}
+              />
+            ))}
+
+            <div aria-hidden="true" style={{ height: 1, background: C.line, marginBlock: 4 }} />
+
+            {/* AI — 토글. 생성·수정이 이제 한 바(AIBar) 안에서 대상만 바꿔 가며 이뤄지므로
+                레일엔 진입점 하나면 된다. 여는 순간 텍스트분리 패널을 닫고 tool 도
+                "select"로 되돌려 배타 제어를 지킨다 — tool 을 그대로 두면 splitPick 은
+                닫혀도 "텍스트분리" 레일 항목이 tool==="split-text" 그대로 남아 파란
+                active 상태로 함께 보이는 불일치가 생긴다(반대 방향은 pickTool 에서 처리). */}
+            <RailButton
+              active={aiBarOpen}
+              accent
+              icon={<Sparkles size={19} strokeWidth={1.7} />}
+              label="AI"
+              tip="생성·수정을 한 곳에서"
+              onClick={() => {
+                setAiBarOpen((v) => !v);
+                setSplitPick(null);
+                setTool("select");
+              }}
+            />
+
+            <RailButton
+              active={tool === "split-text"}
+              accent
+              icon={<TypeOutline size={19} strokeWidth={1.7} />}
+              label="텍스트분리"
+              tip="이미지 텍스트 분리 · 페이지 전체 변환"
+              onClick={() => pickTool("split-text")}
+            />
           </nav>
 
           {/* 캔버스 영역 — 눈금자 + 체커보드. 코드 모드에서는 소스가 이 자리를 대신한다. */}
-          <div className="relative flex-1 min-w-0 flex flex-col">
+          <div ref={canvasAreaRef} className="relative flex-1 min-w-0 flex flex-col">
             {/* 되돌리기 — 캔버스 영역만 덮는다. 레일·사이드바까지 덮으면
                 "지금 무엇이 바뀌는 중인지"가 흐려진다. */}
             {showRevertOverlay && <CanvasLoadingOverlay message="버전을 불러오고 있어요" />}
@@ -2259,6 +3068,102 @@ export default function TabletMiniEditor({
                   텍스트 분리 중 — {textSplit.runProgress.doneCount}/{textSplit.runProgress.total}장
                 </span>
               </div>
+            )}
+
+            {/* 전체 변환 진행 배지 — 위와 같은 이유로 패널이 닫혀 있을 때만 뜬다. */}
+            {!splitPick && pageConvert.runProgress && (
+              <div
+                className="absolute z-20 flex items-center gap-2 rounded-full"
+                style={{
+                  top: RULER + 12,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  padding: "7px 14px",
+                  background: C.card,
+                  border: `1px solid ${C.line}`,
+                  boxShadow: "0 4px 16px rgba(16,24,40,0.10)",
+                  pointerEvents: "none",
+                }}
+              >
+                <Loader2 size={14} strokeWidth={2.4} color={C.primary} className="animate-spin" />
+                <span className="tabular-nums" style={{ fontSize: 12.5, fontWeight: 600, color: C.text }}>
+                  전체 변환 중 — {pageConvert.runProgress.doneCount}/{pageConvert.runProgress.total}장
+                </span>
+              </div>
+            )}
+
+            {/* AI 바 — 레일의 "AI" 토글로 여닫는다. "텍스트 분리 중" 배지와 같은 자리에
+                앵커해 canvasRef 의 내부 스크롤과 무관하게 상단 중앙에 고정된다. 이미지
+                선택 여부와 무관하게 뜬다(대상 없이 "새로 만들기"로 진입할 수 있어야 한다). */}
+            {aiBarOpen && (
+              <div
+                className="absolute z-20"
+                // width 를 직접 못박지 않는다 — left 만 있고 width/right 가 없는
+                // 절대위치 요소는 기본이 "콘텐츠에 맞춰 줄어드는" shrink-to-fit 이라,
+                // "영역 지정"처럼 flex:1 로 늘어나는 입력이 없는 대상에서는 자연히
+                // 짧아진다(고정 width 를 줬을 때는 입력이 사라져도 그 자리가 흰
+                // 여백으로 남았다 — 그게 실제 버그였다). max-width 만 캔버스 폭에
+                // 반응하도록 걸어 둔다 — % 는 이 div 의 위치기준 조상(캔버스 영역
+                // relative 컨테이너, 실제 폭을 가진 진짜 조상)을 기준으로 계산된다.
+                // width 전환 애니메이션도 여기서 건다(대상이 바뀌어 폭이 변할 때).
+                //
+                // 예전엔 여기에 minWidth:860 고정값을 걸어 뒀다("바가 필요로 하는
+                // 최소폭 아래로는 줄지 않는다") — 데스크톱 2단(채팅+에디터) 화면처럼
+                // 캔버스가 그보다 좁아지면 줄어들 공간이 없는 flex-shrink:0 요소들이
+                // 바 박스 밖으로 밀려나 닫기 버튼이 떨어져 나간 것처럼 보이는 걸
+                // 막는 임시 처방이었다. 지금은 AIBar 가 compactLevel 을 받아 폭이
+                // 부족할 때 스스로 콘텐츠를 단계적으로 줄이므로(placeholder 축약 →
+                // 모드명 숨김 → 입력 최소폭 축소 → 버튼 축약) 그 고정값을 없앴다 —
+                // 문제를 다른 곳으로 미루는 대신 원인 자체를 없앤 것이다.
+                style={{
+                  top: RULER + 16, left: "50%", transform: "translateX(-50%)",
+                  maxWidth: "min(1040px, calc(100% - 64px))",
+                  transition: "width 150ms ease-out",
+                }}
+              >
+                <AIBar
+                  target={aiTarget}
+                  compactLevel={compactLevel}
+                  onTargetChange={handleAiTargetChange}
+                  selectedImage={selectedImage}
+                  aiStudio={aiStudio}
+                  regions={aiBarRegions}
+                  hoverRegionId={hoverRegionId}
+                  onHoverRegion={setHoverRegionId}
+                  onChangeInstruction={(regionId, v) => { if (selectedImage) aiStudio.updateInstruction(selectedImage.id, regionId, v); }}
+                  onRemoveRegion={(regionId) => { if (selectedImage) aiStudio.removeRegion(selectedImage.id, regionId); }}
+                  onReopenRegion={(regionId) => { if (selectedImage) aiStudio.reopenRegion(selectedImage.id, regionId); }}
+                  ctaLabel={aiBarCta.label}
+                  ctaDisabled={aiBarCta.disabled}
+                  ctaBusy={aiBarCta.busy}
+                  onRun={runAIBarAction}
+                  onAddImage={() => {
+                    const id = addImage(page);
+                    selectCanvasImage(id);
+                    setDragHintShown(true);
+                  }}
+                  dragHint={dragHintShown ? undefined : "드래그로 위치를 옮길 수 있어요"}
+                  onClose={() => setAiBarOpen(false)}
+                  hintDismissed={regionHintDismissed}
+                  onDismissHint={() => setRegionHintDismissed(true)}
+                  onTargetPickerOpenChange={setAiTargetPickerOpen}
+                  onFocusRegion={(regionId) => { setEditingRegionId(regionId); triggerRegionBlink(regionId); }}
+                />
+              </div>
+            )}
+
+            {/* AI 작업 완료 토스트 — 생성 커밋·영역/이미지 전체 수정·배경 지우기 전부
+                여기 하나로 모인다. 캔버스 영역(이 relative 컨테이너) 하단 중앙에 띄워
+                AI 바와 절대 겹치지 않게 한다. 되돌리기는 이미지 전체·영역 수정 완료
+                토스트에만 붙는다 — lastEditUndo 가 그 두 종류에만 채워지기 때문이다. */}
+            {aiStudio.toast && (
+              <AIActionResultToast
+                message={aiStudio.toast.message}
+                onDismiss={aiStudio.dismissToast}
+                undo={aiStudio.lastEditUndo && selectedImage && aiStudio.lastEditUndo.imageId === selectedImage.id
+                  ? { label: "되돌리기", onUndo: aiStudio.undoLastEdit }
+                  : undefined}
+              />
             )}
 
             {/* 위 눈금자 (왼쪽 모서리 칸 포함) */}
@@ -2330,11 +3235,38 @@ export default function TabletMiniEditor({
                             status={textSplit.status}
                             highlightId={hoverImageId}
                             onSelect={selectCanvasImage}
+                            pickerActive={aiTargetPickerOpen}
                           />
                         )
                     )}
                   </div>
-                  {selected && <SelectionHandles />}
+                  {/* "영역 지정"에서는 파란 선택 핸들을 끈다 — 이미지 전체에 손댈 수
+                      있다는 신호라 "부분만 대상"인 이 모드의 실제 동작과 반대다.
+                      "이미지 전체" 모드는 그 신호가 맞는 그대로 유지한다. */}
+                  {selected && aiTarget !== "edit-region" && <SelectionHandles />}
+                  {aiTarget === "edit-whole" && selectedImage && (
+                    <DimMaskOverlay holes={[selectedImage.rect]} />
+                  )}
+                  {aiTarget === "edit-region" && selectedImage && (
+                    <DimMaskOverlay holes={aiStudio.regionsFor(selectedImage.id).map((r) => r.rect)} />
+                  )}
+                  {aiTarget === "edit-region" && selectedImage && (
+                    <RegionEditOverlay
+                      regions={aiStudio.regionsFor(selectedImage.id)}
+                      hoverRegionId={hoverRegionId}
+                      onHoverRegion={setHoverRegionId}
+                      onAddRegion={(rect) => {
+                        aiStudio.addRegion(selectedImage.id, rect);
+                        setAiTarget("edit-region");
+                      }}
+                      onChangeInstruction={(regionId, v) => aiStudio.updateInstruction(selectedImage.id, regionId, v)}
+                      onRemoveRegion={(regionId) => aiStudio.removeRegion(selectedImage.id, regionId)}
+                      onReopenRegion={(regionId) => aiStudio.reopenRegion(selectedImage.id, regionId)}
+                      editingRegionId={editingRegionId}
+                      onSetEditingRegion={setEditingRegionId}
+                      blinkRegionId={blinkRegionId}
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -2390,7 +3322,6 @@ export default function TabletMiniEditor({
                 style={{
                   width: SIDEBAR_W,
                   borderLeft: `1px solid ${C.line}`,
-                  boxShadow: "-8px 0 24px rgba(16,24,40,0.10)",
                   transform: panelOpen ? "translateX(0)" : "translateX(100%)",
                   transition: "transform 220ms cubic-bezier(0.32,0.72,0,1)",
                 }}
@@ -2429,6 +3360,10 @@ export default function TabletMiniEditor({
               onClose={() => setSplitPick(null)}
               onStart={textSplit.run}
               onRetry={textSplit.retry}
+              convertStatus={pageConvert.status}
+              convertBusy={pageConvert.busy}
+              convertRunProgress={pageConvert.runProgress}
+              onConvertStart={pageConvert.run}
             />
           )}
         </div>
@@ -2541,6 +3476,11 @@ export default function TabletMiniEditor({
           onRetry={() => textSplit.retry(textSplit.toast!.retryIds)}
           onDismiss={textSplit.dismissToast}
         />
+      )}
+
+      {/* 전체 변환 완료 토스트 — 위와 같은 이유로 패널이 닫혀 있을 때만 띄운다. */}
+      {pageConvert.toast && !splitPick && (
+        <PageConvertResultToast result={pageConvert.toast} onDismiss={pageConvert.dismissToast} />
       )}
 
       {/* 진행·완료를 화면 밖으로도 알린다. 스켈레톤과 토스트는 눈으로 보는 표시라

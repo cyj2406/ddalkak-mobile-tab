@@ -7,6 +7,7 @@ import svgCard from "@/imports/Container/svg-n3rzud15nf";
 // Frame svg paths are identical to Container's — svgCard covers all keys
 import imgImageNet from "@/imports/새대화딸깍/70598a9173139973c519fbc9c881094e41ef9297.png";
 import imgUserAvatar from "@/imports/새대화딸깍/ec4bf4c83826b512a10ccb46952ef28cdb24b8d8.png";
+import imgLogoMark from "@/assets/brand/logo-mark.png";
 
 import TabletEditorShell from "@/app/components/viewer/TabletEditorShell";
 import TabletVideoResultViewer from "@/app/components/viewer/TabletVideoResultViewer";
@@ -23,25 +24,35 @@ import {
 import TutorialTour, { type TutorialStepConfig } from "@/app/components/common/TutorialTour";
 import { MobileEditorNotice } from "@/app/components/viewer/MobileEditorNotice";
 import { ScrollableChips } from "@/app/components/common/ScrollableChips";
+import { Button } from "@/app/components/common/Button";
 import ClampedText from "@/app/components/common/ClampedText";
-import CreditBadge from "@/app/components/common/CreditBadge";
 import { COMPOSER_PLACEHOLDER } from "@/app/copy";
+import { color, f, radius, shadow, SUBTITLE_COLOR, typography } from "@/app/styleTokens";
 import FormFillDesktop from "@/app/components/formfill/FormFillDesktop";
+import TaskGrid from "@/app/components/home/TaskGrid";
+import RecommendedCarousel from "@/app/components/home/RecommendedCarousel";
+import HomeSearch from "@/app/components/home/HomeSearch";
+import SearchResultsScreen from "@/app/components/home/SearchResultsScreen";
+import TaskTemplateScreen from "@/app/components/home/TaskTemplateScreen";
+import RequestHelpScreen from "@/app/components/home/RequestHelpScreen";
+import { getTaskById, type TaskTemplate } from "@/app/data/tasks";
 // [formfill 임시] ?formfill=1 확인용. 컴포넌트 단품 확인 화면이라 3단 레이아웃과 별개로 남겨둔다.
 import FormFillPlayground from "@/app/components/formfill/__dev__/FormFillPlayground";
+import { useCreditBalance } from "@/app/state/creditBalance";
+import { PricingPage, type PricingTab } from "@/app/components/pricing/PricingPage";
 
 
 // ─── 타입 ──────────────────────────────────────────────────────────────────────
-type Screen = "home" | "image-ai" | "landing-ai" | "forms-ai" | "forms-fill" | "docs-ai" | "audio-ai" | "ppt-ai" | "video-ai" | "favorites" | "mywork" | "credit-history" | "notifications-all";
-type WorkspaceCategory = "docs" | "ppt" | "video" | "landing" | "image" | "detail";
+type Screen = "home" | "image-ai" | "landing-ai" | "forms-ai" | "forms-fill" | "docs-ai" | "audio-ai" | "ppt-ai" | "video-ai" | "favorites" | "mywork" | "credit-history" | "notifications-all" | "search" | "task-templates" | "request-help" | "pricing";
+export type WorkspaceCategory = "docs" | "ppt" | "video" | "landing" | "image" | "detail";
 const WS_LABEL: Record<WorkspaceCategory, string> = { docs: "문서", ppt: "PPT", video: "영상", landing: "랜딩페이지", image: "이미지", detail: "상세페이지" };
 const WS_COLOR: Record<WorkspaceCategory, string> = { docs: "#3B82F6", ppt: "#8B5CF6", video: "#EF4444", landing: "#22C55E", image: "#F59E0B", detail: "#EC4899" };
 
 // ─── 아이콘 ────────────────────────────────────────────────────────────────────
 const P = (props: React.SVGProps<SVGPathElement>) => <path strokeLinecap="round" strokeLinejoin="round" {...props} />;
 
-function IconMenu() {
-  return <svg width="18" height="18" fill="none" viewBox="0 0 18 18"><P d="M3 3.75H15" stroke="#0A0A0A" strokeWidth="1.5" /><P d="M3 9H15" stroke="#0A0A0A" strokeWidth="1.5" /><P d="M3 14.25H15" stroke="#0A0A0A" strokeWidth="1.5" /></svg>;
+function IconMenu({ className }: { className?: string } = {}) {
+  return <svg className={className} width="18" height="18" fill="none" viewBox="0 0 18 18"><P d="M3 3.75H15" stroke="#0A0A0A" strokeWidth="1.5" /><P d="M3 9H15" stroke="#0A0A0A" strokeWidth="1.5" /><P d="M3 14.25H15" stroke="#0A0A0A" strokeWidth="1.5" /></svg>;
 }
 function IconClose() {
   return <svg width="18" height="18" fill="none" viewBox="0 0 18 18"><P d="M4 4L14 14" stroke="#0A0A0A" strokeWidth="1.5" /><P d="M14 4L4 14" stroke="#0A0A0A" strokeWidth="1.5" /></svg>;
@@ -238,17 +249,6 @@ const myWorkItems = [
   { title: "이사 전 체크리스트 카드뉴스", tag: "이미지", date: "2026. 7. 2." },
 ];
 
-const homeCategories = [
-  { label: "이미지", screen: "image-ai" as Screen, icon: <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><P d={svgPaths.p11d16a80} stroke="#F59E0B" strokeWidth="1.8" /><P d={svgPaths.p1b53d300} stroke="#F59E0B" strokeWidth="1.8" /><P d={svgPaths.p1c7c380} stroke="#F59E0B" strokeWidth="1.8" /></svg> },
-  { label: "랜딩페이지", screen: "landing-ai" as Screen, icon: <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><P d={svgPaths.p111d5080} stroke="#22C55E" strokeWidth="1.8" /><P d={svgPaths.p2ca2ecb0} stroke="#22C55E" strokeWidth="1.8" /><P d={svgPaths.p3a313e00} stroke="#22C55E" strokeWidth="1.8" /></svg> },
-  { label: "동영상", screen: "video-ai" as Screen, icon: <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><P d={svgPaths.p30fea100} stroke="#EF4444" strokeWidth="1.8" /><P d="M6.2 5.3L9.3 9.2" stroke="#EF4444" strokeWidth="1.8" /><P d="M12.4 3.4L15.5 7.4" stroke="#EF4444" strokeWidth="1.8" /><P d={svgPaths.p1ae59200} stroke="#EF4444" strokeWidth="1.8" /></svg> },
-  { label: "프레젠테이션", screen: "ppt-ai" as Screen, icon: <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><P d="M2 3H22" stroke="#8B5CF6" strokeWidth="1.8" /><P d={svgPaths.p21109e00} stroke="#8B5CF6" strokeWidth="1.8" /><P d="M7 21L12 16L17 21" stroke="#8B5CF6" strokeWidth="1.8" /></svg> },
-  { label: "오디오", screen: "audio-ai" as Screen, icon: <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><P d="M2 10V13" stroke="#D946EF" strokeWidth="1.8" /><P d="M6 6V17" stroke="#D946EF" strokeWidth="1.8" /><P d="M10 3V21" stroke="#D946EF" strokeWidth="1.8" /><P d="M14 8V15" stroke="#D946EF" strokeWidth="1.8" /><P d="M18 5V18" stroke="#D946EF" strokeWidth="1.8" /><P d="M22 10V13" stroke="#D946EF" strokeWidth="1.8" /></svg> },
-  { label: "문서", screen: "docs-ai" as Screen, icon: <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><P d={svgPaths.pb007f00} stroke="#3B82F6" strokeWidth="1.8" /><P d={svgPaths.p1b58ab00} stroke="#3B82F6" strokeWidth="1.8" /><P d="M10 9H8" stroke="#3B82F6" strokeWidth="1.8" /><P d="M16 13H8" stroke="#3B82F6" strokeWidth="1.8" /><P d="M16 17H8" stroke="#3B82F6" strokeWidth="1.8" /></svg> },
-  { label: "서식", screen: "forms-ai" as Screen, icon: <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><P d={svgPaths.p37c73510} stroke="#10B981" strokeWidth="1.8" /><P d="M15 5L19 9" stroke="#10B981" strokeWidth="1.8" /></svg> },
-  { label: "PPT 검수", screen: "home" as Screen, icon: <svg width="22" height="22" fill="none" viewBox="0 0 24 24"><P d={svgPaths.pace200} stroke="#F59E0B" strokeWidth="1.8" /><P d="M9 12L11 14L15 10" stroke="#F59E0B" strokeWidth="1.8" /></svg> },
-];
-
 // 서비스 화면 히어로의 부제 문구. 화면 컴포넌트가 아니라 여기서만 고친다.
 // (다른 목 데이터와 같은 방식 — API 가 붙으면 이 상수만 응답으로 교체한다)
 const SERVICE_COPY = {
@@ -264,12 +264,7 @@ const SERVICE_COPY = {
   pptCheck: "완성된 PPT를 넣으면 오타·띄어쓰기부터 번역까지 자동 정리.",
 } as const;
 
-// 헤드라인 아래 부제의 공통 글자색.
-const SUBTITLE_COLOR = "#64748b";
-
 // ─── 공통 컴포넌트 ────────────────────────────────────────────────────────────
-
-const f = { fontFamily: "'Pretendard Variable', sans-serif" };
 
 // 마우스 hover가 가능한 기기인지 여부(데스크톱 true / 터치폰 false).
 // 터치 기기에서는 hover 이벤트가 없으므로 카드의 버튼들을 항상 노출/탭 동작으로 대체한다.
@@ -370,7 +365,8 @@ function MemoryTimeChip({ value }: { value: string }) {
   );
 }
 
-function SettingsModal({ onClose, onCreditHistory }: { onClose: () => void; onCreditHistory: () => void }) {
+function SettingsModal({ onClose, onPricingOpen }: { onClose: () => void; onPricingOpen: () => void }) {
+  const [creditBalance] = useCreditBalance();
   const [tab, setTab] = useState<SettingsTab>("외관");
   const [theme, setTheme] = useState<"시스템" | "라이트" | "다크">("시스템");
   const [notifEnabled, setNotifEnabled] = useState(false);
@@ -809,21 +805,21 @@ function SettingsModal({ onClose, onCreditHistory }: { onClose: () => void; onCr
             <div className="flex flex-col gap-4">
               <SettingsSectionHead
                 title="크레딧 계정 상태 요약"
-                desc="보유한 크레딧 잔액과 이번 달 사용량입니다. 상세 내역과 충전은 크레딧 사용 내역 페이지에서 확인할 수 있습니다."
+                desc="보유한 크레딧 잔액과 이번 달 사용량입니다. 요금제·충전·사용 내역은 요금제 및 크레딧 페이지에서 확인할 수 있습니다."
               />
 
               {/* 요약 카드 — 잔액을 가장 크게, 이번 달 사용량은 구분선 아래 */}
-              <div className="bg-white border border-[#e2e8f0] rounded-[16px] px-5 py-5"
-                style={{ boxShadow: "0px 1px 3px rgba(0,0,0,0.05)" }}>
-                <p style={{ ...f, fontWeight: 500, fontSize: 12, color: "#9ca3af", letterSpacing: "-0.2px" }}>남은 크레딧 잔액</p>
-                <p style={{ ...f, fontWeight: 700, fontSize: 28, color: "#0a0a0a", letterSpacing: "-1.1px", lineHeight: 1.2, marginTop: 4 }}>
-                  {CREDIT_BALANCE.toLocaleString()}
-                  <span style={{ fontWeight: 500, fontSize: 14, color: "#737373", letterSpacing: "-0.2px" }}> 크레딧</span>
+              <div className="bg-white border px-5 py-5"
+                style={{ borderColor: color.border.default, borderRadius: radius.card, boxShadow: shadow.card }}>
+                <p style={typography.caption}>남은 크레딧 잔액</p>
+                <p style={{ ...f, fontWeight: 700, fontSize: 28, color: color.text.primary, letterSpacing: "-1.1px", lineHeight: 1.2, marginTop: 4 }}>
+                  {creditBalance.toLocaleString()}
+                  <span style={{ fontWeight: 500, fontSize: 14, color: color.text.faint, letterSpacing: "-0.2px" }}> 크레딧</span>
                 </p>
                 <div className="h-px bg-[#f1f5f9] my-4" />
                 <div className="flex items-center justify-between gap-3">
                   <span style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af" }}>이번 달 사용 요약</span>
-                  <span style={{ ...f, fontWeight: 600, fontSize: 13, color: "#0a0a0a" }}>
+                  <span style={{ ...f, fontWeight: 600, fontSize: 13, color: color.text.primary }}>
                     {CREDIT_MONTHLY_USED.toLocaleString()} 크레딧 차감
                   </span>
                 </div>
@@ -840,29 +836,30 @@ function SettingsModal({ onClose, onCreditHistory }: { onClose: () => void; onCr
                     { label: "총 토큰", value: "···" },
                   ].map(({ label, value }) => (
                     <div key={label}
-                      className="bg-white border border-[#e2e8f0] rounded-[16px] p-4"
-                      style={{ boxShadow: "0px 1px 3px rgba(0,0,0,0.05)" }}>
-                      <p style={{ ...f, fontWeight: 500, fontSize: 12, color: "#9ca3af", letterSpacing: "-0.2px", marginBottom: 8 }}>{label}</p>
-                      <p style={{ ...f, fontWeight: 700, fontSize: 20, color: "#0a0a0a", letterSpacing: "-0.5px" }}>{value}</p>
+                      className="bg-white border p-4"
+                      style={{ borderColor: color.border.default, borderRadius: radius.card, boxShadow: shadow.card }}>
+                      <p style={{ ...typography.caption, marginBottom: 8 }}>{label}</p>
+                      <p style={{ ...f, fontWeight: 700, fontSize: 20, color: color.text.primary, letterSpacing: "-0.5px" }}>{value}</p>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* 하단 액션 — 새로고침(보조) / 상세 내역·충전 이동(주요) */}
+              {/* 하단 액션 — 새로고침(보조) / 상세 내역·충전 이동(주요).
+                  새로고침은 폭에 따라 높이가 44→36 으로 바뀌는 반응형 버튼이라(wide:h-9)
+                  높이가 고정인 공용 Button 에는 그대로 맞지 않아 값만 토큰으로 맞추고
+                  마크업은 그대로 둔다. */}
               <div className="flex flex-col-reverse gap-2.5 wide:flex-row wide:items-center wide:justify-between">
                 <button
-                  className="flex items-center justify-center gap-1.5 h-11 px-4 rounded-[12px] border border-[#e2e8f0] bg-white wide:h-9"
-                  style={{ boxShadow: "0px 1px 2px rgba(0,0,0,0.06)" }}>
+                  className="flex items-center justify-center gap-1.5 h-11 px-4 wide:h-9"
+                  style={{ borderRadius: 12, border: `1px solid ${color.border.default}`, background: "white", boxShadow: "0px 1px 2px rgba(0,0,0,0.06)" }}>
                   <RefreshCw size={14} strokeWidth={1.7} color="#6b7280" />
                   <span style={{ ...f, fontWeight: 500, fontSize: 13, color: "#6b7280" }}>새로고침</span>
                 </button>
-                <button onClick={onCreditHistory}
-                  className="h-11 px-5 rounded-[14px] flex items-center justify-center gap-2"
-                  style={{ background: "#0a0a0a" }}>
+                <Button variant="dark" size="md" onClick={onPricingOpen}>
                   <Coins size={15} strokeWidth={1.8} color="white" />
-                  <span style={{ ...f, fontWeight: 600, fontSize: 13.5, color: "white", letterSpacing: "-0.3px" }}>크레딧 상세 내역 및 충전</span>
-                </button>
+                  요금제 및 크레딧 관리
+                </Button>
               </div>
             </div>
           )}
@@ -928,17 +925,12 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
   currentFormId?: string;
   onSelectForm?: (id: string, title: string) => void;
 }) {
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const nav = (s: Screen) => { onNavigate(s); onClose(); };
-  const openSettings = () => { setProfileMenuOpen(false); onClose(); onSettingsOpen(); };
   const isHomeVariant = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai"].includes(currentScreen);
   const active = (s: Screen) => s === currentScreen || (isHomeVariant && s === "home");
   const docked = variant === "docked";
   // 접기는 도킹 컬럼에서만 일어난다. 오버레이 드로어는 열림/닫힘만 있다.
   const railed = docked && collapsed;
-
-  // 접는 순간 열려 있던 프로필 팝업은 닫는다 — 폭이 줄면서 팝업만 허공에 뜬 것처럼 남는다.
-  useEffect(() => { if (railed) setProfileMenuOpen(false); }, [railed]);
 
   return (
     <>
@@ -952,16 +944,25 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
         style={docked
           ? { width: railed ? SIDEBAR_RAIL_W : SIDEBAR_W }
           : { width: SIDEBAR_W, transform: open ? "translateX(0)" : "translateX(-100%)" }}>
-        {/* Header — 로고 + 토글. 접힌 레일에는 토글만 남는다(로고가 들어갈 폭이 없다). */}
+        {/* Header — 로고 + 토글. 레일에서는 평소엔 로고 마크만 보이다가, 호버하면
+            로고가 사라지고 그 자리에 펼치기 토글이 나타난다(같은 76px 폭 안에서 자리를 바꿔치기). */}
         <div className={`flex items-center h-[60px] shrink-0 ${railed ? "justify-center px-0" : "justify-between px-4"}`}>
-          {!railed && <img alt="딸깍.net" className="h-6 w-auto object-contain" src={imgImageNet} />}
-          {docked ? (
-            <button onClick={onToggleCollapsed}
-              aria-label={railed ? "사이드바 펼치기" : "사이드바 접기"}
-              aria-expanded={!railed}
-              className="flex items-center justify-center size-9 rounded-[10px] opacity-80"><IconMenu /></button>
+          {docked && railed ? (
+            <button onClick={onToggleCollapsed} aria-label="사이드바 펼치기" aria-expanded={false}
+              className="group relative flex items-center justify-center size-9 rounded-[10px]">
+              <img alt="딸깍.net" className="size-6 object-contain transition-opacity duration-150 group-hover:opacity-0" src={imgLogoMark} />
+              <IconMenu className="absolute inset-0 m-auto opacity-0 transition-opacity duration-150 group-hover:opacity-100" />
+            </button>
           ) : (
-            <button onClick={onClose} aria-label="사이드바 닫기" className="flex items-center justify-center size-9 rounded-[10px]"><IconClose /></button>
+            <>
+              <img alt="딸깍.net" className="h-6 w-auto object-contain" src={imgImageNet} />
+              {docked ? (
+                <button onClick={onToggleCollapsed} aria-label="사이드바 접기" aria-expanded={true}
+                  className="flex items-center justify-center size-9 rounded-[10px] opacity-80"><IconMenu /></button>
+              ) : (
+                <button onClick={onClose} aria-label="사이드바 닫기" className="flex items-center justify-center size-9 rounded-[10px]"><IconClose /></button>
+              )}
+            </>
           )}
         </div>
         {/* Nav */}
@@ -1030,72 +1031,6 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
           </div>
         </div>
         )}
-        {/* User */}
-        <div className="shrink-0 border-t border-[#dfe6ed] p-2 relative">
-          {/* 프로필 팝업 */}
-          {profileMenuOpen && (
-            <>
-              <div onClick={() => setProfileMenuOpen(false)} className="fixed inset-0 z-[60]" />
-              {/* 레일에서는 right-2 로 폭을 잡으면 76px 안에 갇혀 읽을 수 없다 — 컬럼 밖으로 넘겨 편다 */}
-              <div className={`absolute z-[61] bg-white rounded-[20px] border border-[#e2e8f0] overflow-hidden ${railed ? "left-2 w-[260px]" : "left-2 right-2"}`}
-                style={{ bottom: "calc(100% - 8px)", boxShadow: "0px 8px 32px rgba(0,0,0,0.14)", animation: "slideUp 180ms cubic-bezier(0.32,0.72,0,1)" }}>
-                {/* 프로필 헤더 */}
-                <div className="px-5 pt-5 pb-4">
-                  <p style={{ ...f, fontWeight: 700, fontSize: 17, color: "#0a0a0a", letterSpacing: "-0.5px" }}>최유정</p>
-                  <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", marginTop: 2 }}>cyj2406@gmail.com</p>
-                </div>
-                <div className="h-px bg-[#f1f5f9] mx-0" />
-                {/* 메뉴 그룹 1 */}
-                {[
-                  { icon: <HelpCircle size={20} strokeWidth={1.6} color="#9ca3af" />, label: "튜토리얼 다시 보기", onClick: (() => { setProfileMenuOpen(false); onClose(); onStartTutorial(); }) as (() => void) | undefined },
-                  { icon: <SettingsIcon size={20} strokeWidth={1.6} color="#9ca3af" />, label: "설정", onClick: openSettings },
-                ].map(({ icon, label, onClick }) => (
-                  <button key={label} onClick={onClick} className="w-full flex items-center gap-3.5 px-5 py-3.5">
-                    <div className="shrink-0">{icon}</div>
-                    <span style={{ ...f, fontWeight: 500, fontSize: 15, color: "#1e293b", letterSpacing: "-0.3px" }}>{label}</span>
-                  </button>
-                ))}
-                <div className="h-px bg-[#f1f5f9]" />
-                {/* 메뉴 그룹 2 */}
-                {[
-                  { icon: <Users size={20} strokeWidth={1.6} color="#9ca3af" />, label: "커뮤니티" },
-                  { icon: <Mail size={20} strokeWidth={1.6} color="#9ca3af" />, label: "문의하기" },
-                ].map(({ icon, label }) => (
-                  <button key={label} className="w-full flex items-center gap-3.5 px-5 py-3.5">
-                    <div className="shrink-0">{icon}</div>
-                    <span style={{ ...f, fontWeight: 500, fontSize: 15, color: "#1e293b", letterSpacing: "-0.3px" }}>{label}</span>
-                  </button>
-                ))}
-                <div className="h-px bg-[#f1f5f9]" />
-                {/* 로그아웃 */}
-                <button className="w-full flex items-center gap-3.5 px-5 py-3.5 pb-5">
-                  <LogOut size={20} strokeWidth={1.6} color="#9ca3af" />
-                  <span style={{ ...f, fontWeight: 500, fontSize: 15, color: "#1e293b", letterSpacing: "-0.3px" }}>로그아웃</span>
-                </button>
-              </div>
-            </>
-          )}
-          {/* 프로필 바 — 레일에서는 아바타만 남고, 이름·메일·점 세 개는 접힌다 */}
-          <button className={`w-full h-[50px] rounded-[18px] flex items-center ${railed ? "justify-center px-0" : "gap-2.5 px-2"}`}
-            aria-label={railed ? "최유정 계정 메뉴" : undefined}
-            title={railed ? "최유정" : undefined}
-            onClick={() => setProfileMenuOpen((v) => !v)}>
-            <div className="bg-[#e0e7ff] border border-[#c7d2fe] rounded-full size-8 overflow-hidden shrink-0">
-              <img alt="최유정" className="size-full object-cover" src={imgUserAvatar} />
-            </div>
-            {!railed && (
-              <>
-                <div className="flex-1 min-w-0 text-left">
-                  <div className="truncate" style={{ ...f, fontWeight: 600, fontSize: 13, color: "#0a0a0a", lineHeight: "18.6px" }}>최유정</div>
-                  <div className="truncate" style={{ ...f, fontWeight: 400, fontSize: 11, color: "#737373", lineHeight: "15.7px" }}>cyj2406@gmail.com</div>
-                </div>
-                <div className="shrink-0 flex flex-col gap-[3px] items-center justify-center size-6">
-                  {[0,1,2].map(i => <div key={i} className="size-[3.5px] rounded-full bg-[#9ca3af]" />)}
-                </div>
-              </>
-            )}
-          </button>
-        </div>
       </div>
       <style>{`
         /* 사이드바 메뉴 — 배경·이동·색만 전이시킨다(폰트/굵기/크기는 그대로).
@@ -1142,7 +1077,123 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
   );
 }
 
-function TopBar({ onMenuOpen, onBack, showBack, onCreditClick, onBellClick, bellRef, brand = true }: {
+/**
+ * 크레딧이 상시 눈에 띄면 사용자가 만들기 전에 비용부터 계산하게 된다 — 상단바에는
+ * 알림·프로필 아바타만 두고, 잔액은 이 메뉴를 열어야 보이게 감춰 둔다.
+ *
+ * 메뉴 구성(이름·메일·튜토리얼·설정·커뮤니티·문의하기·로그아웃)은 사이드바 하단의
+ * 계정 팝업(위 SidebarDrawer 의 profileMenuOpen 블록)과 같은 스타일을 그대로 따른다 —
+ * 다른 자리에 또 다른 프로필 메뉴 모양이 생기지 않도록. 크레딧 카드만 이 메뉴에 새로 얹는다.
+ */
+function ProfileMenuButton({ onCreditClick, onStartTutorial, onSettingsOpen }: {
+  onCreditClick?: () => void;
+  onStartTutorial?: () => void;
+  onSettingsOpen?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [creditBalance] = useCreditBalance();
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const menuTop = [
+    { icon: <HelpCircle size={19} strokeWidth={1.6} color="#9ca3af" />, label: "튜토리얼 다시 보기", onClick: onStartTutorial ? () => { setOpen(false); onStartTutorial(); } : undefined },
+    { icon: <SettingsIcon size={19} strokeWidth={1.6} color="#9ca3af" />, label: "설정", onClick: onSettingsOpen ? () => { setOpen(false); onSettingsOpen(); } : undefined },
+  ];
+  const menuMid = [
+    { icon: <Users size={19} strokeWidth={1.6} color="#9ca3af" />, label: "커뮤니티" },
+    { icon: <Mail size={19} strokeWidth={1.6} color="#9ca3af" />, label: "문의하기" },
+  ];
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="최유정 계정 메뉴"
+        title="최유정"
+        className="rounded-full overflow-hidden shrink-0 border border-[#c7d2fe]"
+        style={{ width: 32, height: 32, background: "#e0e7ff" }}
+      >
+        <img alt="최유정" className="size-full object-cover" src={imgUserAvatar} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          aria-label="프로필"
+          className="absolute right-0 rounded-[20px] bg-white overflow-hidden"
+          style={{ top: 42, width: 280, border: "1px solid #e2e8f0", boxShadow: "0px 8px 32px rgba(0,0,0,0.14)", zIndex: 60 }}
+        >
+          <div className="px-5 pt-5 pb-4">
+            <p style={{ ...f, fontWeight: 700, fontSize: 17, color: "#0a0a0a", letterSpacing: "-0.5px" }}>최유정</p>
+            <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", marginTop: 2 }}>cyj2406@gmail.com</p>
+          </div>
+          {/* 세로로 쌓는다 — 버튼을 옆에 붙이면(이전 레이아웃) "요금제 및 크레딧"처럼 문구가
+              길어질 때 카드 폭 안에서 줄바꿈되거나 왼쪽 잔액 영역이 눌렸다. 버튼을 전체 폭
+              한 줄로 따로 빼면 문구 길이와 무관하게 항상 한 줄로 안전하게 들어간다. */}
+          <div className="mx-5 mb-4 rounded-2xl flex flex-col gap-3" style={{ background: color.surface.accent, border: `1px solid ${color.border.default}`, padding: "12px 14px" }}>
+            <div>
+              <div style={{ ...f, fontWeight: 600, fontSize: 11.5, color: SUBTITLE_COLOR }}>내 크레딧</div>
+              <div className="mt-1 flex items-center gap-1.5">
+                <div className="rounded-full size-5 flex items-center justify-center shrink-0" style={{ background: color.brand }}>
+                  <span style={{ ...f, fontWeight: 700, fontSize: 10, color: "white" }}>C</span>
+                </div>
+                <span style={{ ...f, fontWeight: 700, fontSize: 18, color: color.text.primary, letterSpacing: "-0.3px" }}>
+                  {creditBalance.toLocaleString()}
+                </span>
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              size="md"
+              fullWidth
+              pill
+              style={{ whiteSpace: "nowrap" }}
+              onClick={() => { setOpen(false); onCreditClick?.(); }}
+            >
+              요금제 및 크레딧
+            </Button>
+          </div>
+          <div className="h-px bg-[#f1f5f9]" />
+          {menuTop.map(({ icon, label, onClick }) => (
+            <button key={label} onClick={onClick} className="w-full flex items-center gap-3.5 px-5 py-3.5">
+              <div className="shrink-0">{icon}</div>
+              <span style={{ ...f, fontWeight: 500, fontSize: 14.5, color: "#1e293b", letterSpacing: "-0.3px" }}>{label}</span>
+            </button>
+          ))}
+          <div className="h-px bg-[#f1f5f9]" />
+          {menuMid.map(({ icon, label }) => (
+            <button key={label} className="w-full flex items-center gap-3.5 px-5 py-3.5">
+              <div className="shrink-0">{icon}</div>
+              <span style={{ ...f, fontWeight: 500, fontSize: 14.5, color: "#1e293b", letterSpacing: "-0.3px" }}>{label}</span>
+            </button>
+          ))}
+          <div className="h-px bg-[#f1f5f9]" />
+          <button className="w-full flex items-center gap-3.5 px-5 py-3.5 pb-5">
+            <LogOut size={19} strokeWidth={1.6} color="#9ca3af" />
+            <span style={{ ...f, fontWeight: 500, fontSize: 14.5, color: "#1e293b", letterSpacing: "-0.3px" }}>로그아웃</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TopBar({ onMenuOpen, onBack, showBack, onCreditClick, onBellClick, bellRef, brand = true, onStartTutorial, onSettingsOpen }: {
   onMenuOpen: () => void; onBack?: () => void; showBack?: boolean;
   onCreditClick?: () => void; onBellClick?: () => void;
   bellRef?: React.RefObject<HTMLButtonElement | null>;
@@ -1152,23 +1203,25 @@ function TopBar({ onMenuOpen, onBack, showBack, onCreditClick, onBellClick, bell
    * 뒤로가기는 화면 맥락이라 brand 와 무관하게 showBack 이 정한다.
    */
   brand?: boolean;
+  onStartTutorial?: () => void;
+  onSettingsOpen?: () => void;
 }) {
   return (
     <header className="h-14 flex items-center justify-between px-4 shrink-0 bg-[#f8fafc]">
       <div className="flex items-center gap-2">
         {showBack && onBack ? (
-          <button onClick={onBack} className="flex items-center justify-center size-9 rounded-[10px]"><IconChevronLeft /></button>
+          <button onClick={onBack} aria-label="뒤로 가기" className="flex items-center justify-center size-9 rounded-[10px]"><IconChevronLeft /></button>
         ) : brand ? (
           <button onClick={onMenuOpen} className="flex items-center justify-center size-9 rounded-[10px] opacity-80"><IconMenu /></button>
         ) : null}
         {brand && <img alt="딸깍.net" className="h-[22px] w-auto object-contain" src={imgImageNet} />}
       </div>
       <div className="flex items-center gap-2">
-        <CreditBadge amount={CREDIT_BALANCE} onClick={onCreditClick} />
         <button ref={bellRef} onClick={onBellClick} className="relative size-9 flex items-center justify-center">
           <IconBell />
           <div className="absolute top-[6px] left-[22px] bg-[#2b7fff] rounded-full size-2" />
         </button>
+        <ProfileMenuButton onCreditClick={onCreditClick} onStartTutorial={onStartTutorial} onSettingsOpen={onSettingsOpen} />
       </div>
     </header>
   );
@@ -1419,8 +1472,8 @@ const COMPOSER_MIN_BODY = 80;
 /** 확대 버튼을 눌렀을 때의 본문 높이. 카드 전체로는 680px 이 된다. */
 const COMPOSER_EXPANDED_BODY = 616;
 
-function ChatInputBox() {
-  const [value, setValue] = useState("");
+function ChatInputBox({ initialValue }: { initialValue?: string } = {}) {
+  const [value, setValue] = useState(initialValue ?? "");
   // 우상단 확대/축소. 자동 높이와 별개로, 눌러서 한 번에 크게 펼쳐 쓰는 용도다.
   const [expanded, setExpanded] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -1929,7 +1982,11 @@ function FormsAIScreen({ activeTab, onTabChange, sortOption, onSortChange, scrol
 
 // ─── 화면 컴포넌트 ────────────────────────────────────────────────────────────
 
-function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
+function HomeScreen({ onSelectTask, onSearch, onHelp }: {
+  onSelectTask: (taskId: string) => void;
+  onSearch: (query: string) => void;
+  onHelp: () => void;
+}) {
   // 태블릿에서는 푸터가 화면 하단 고정이 아니라 콘텐츠 흐름 끝에 와야 하므로
   // 셸(App)이 아니라 스크롤 컨테이너인 이 main 안에서 렌더한다.
   const isTabletRange = useIsTabletRange();
@@ -1946,32 +2003,19 @@ function HomeScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
         {/* Heading */}
         <div className="home-heading text-center">
           <p className="leading-[1.25] whitespace-nowrap" style={{ ...f, fontWeight: 700, fontSize: "var(--hero-title-size)", letterSpacing: "var(--hero-title-tracking)" }}>
-            <span style={{ color: "#4f7bff" }}>딸깍</span>
+            <span style={{ color: color.brand }}>딸깍</span>
             <span style={{ color: "#0a0a0a" }}> 한 번이면, 작업은 더 빠르게</span>
           </p>
           <p className="home-sub" style={{ ...f, fontWeight: 500, fontSize: "var(--hero-sub-size)", color: SUBTITLE_COLOR, letterSpacing: "-0.3px", lineHeight: 1.6, wordBreak: "keep-all" }}>
-            이미지, 문서, 발표자료, 검수까지 필요한 AI 작업을 한 곳에서.
+            만들고 싶은 작업을 고르면, 어울리는 서식을 보여드려요.
           </p>
         </div>
-        {/* 프롬프트 입력창 + 카테고리 공통 컨테이너.
-            두 영역 모두 width:100%로 이 컨테이너를 채우므로 좌우 정렬선이 항상 일치한다.
-            flex 값은 .home-body 로 옮겼다(태블릿에서 늘어나지 않게 덮어쓰기 위함). */}
-        <div className="home-body w-full mx-auto flex flex-col" style={{ maxWidth: "var(--home-container)" }}>
-          <ChatInputBox />
-          <div className="home-spacer flex-[1_0_0] min-h-[20px] max-h-[40px]" />
-          {/* Categories — <1200px: 4열(태블릿 전 구간 4열 x 2행), ≥1200px: 8열 */}
-          <div data-tutorial="categories" className="home-grid grid grid-cols-4 wide:grid-cols-8 gap-x-3 gap-y-5">
-            {homeCategories.map((cat) => (
-              <button key={cat.label} onClick={() => onNavigate(cat.screen)} className="flex flex-col items-center gap-2.5">
-                <div className="bg-[#f1f5f9] rounded-full flex items-center justify-center shrink-0"
-                  style={{ width: "var(--cat-circle)", height: "var(--cat-circle)", filter: "drop-shadow(0px 4px 6px rgba(0,0,0,0.04))" }}>
-                  {cat.icon}
-                </div>
-                <span className="text-center w-full" style={{ ...f, fontWeight: 600, fontSize: "var(--cat-label-size)", color: "#334155", letterSpacing: "-0.25px", lineHeight: 1.3 }}>{cat.label}</span>
-              </button>
-            ))}
-          </div>
-          <div className="home-spacer flex-[1_0_0] min-h-[16px] max-h-[32px]" />
+        {/* 추천 서식 · 검색+도움받기 · 작업 고르기 — 전부 같은 폭(--home-container)에 맞추고,
+            섹션 사이는 --home-block-gap(44px) 하나로만 띄운다. */}
+        <div className="home-body w-full mx-auto flex flex-col" style={{ maxWidth: "var(--home-container)", gap: "var(--home-block-gap)" }}>
+          <RecommendedCarousel onSelectTemplate={onSelectTask} />
+          <HomeSearch onSearch={onSearch} onHelp={onHelp} />
+          <TaskGrid onSelectTask={onSelectTask} />
         </div>
       </div>
       {isTabletRange && <Footer />}
@@ -2073,7 +2117,7 @@ function SortMenu({ selected, onSelect, onClose, triggerRef }: {
   );
 }
 
-function AIAgentScreen({ title, category, desc, filterTabs, cards, cardRatio = "66%", wsCategory, onWorkspace }: {
+function AIAgentScreen({ title, category, desc, filterTabs, cards, cardRatio = "66%", wsCategory, onWorkspace, initialComposerValue }: {
   title: string; category: string;
   /** 헤드라인 아래 부제. 문구는 SERVICE_COPY 에서 가져온다. */
   desc: string;
@@ -2084,6 +2128,8 @@ function AIAgentScreen({ title, category, desc, filterTabs, cards, cardRatio = "
   /** 템플릿 적용 — 템플릿명과 함께 진입 시점의 필터 탭 라벨(워드·한글·엑셀·논문·영상…)을 넘긴다.
       이 값이 결과물의 확장자와 뷰어 상단바 구성을 결정한다. */
   onWorkspace?: (templateName: string, tabLabel: string) => void;
+  /** 요청 작성 도움받기가 완성한 요청문 — 진입 시 컴포저에 미리 채워 둔다. */
+  initialComposerValue?: string;
 }) {
   const [activeTab, setActiveTab] = useState(0);
   const [sortOption, setSortOption] = useState<SortOption>("인기순");
@@ -2122,7 +2168,7 @@ function AIAgentScreen({ title, category, desc, filterTabs, cards, cardRatio = "
         <p className="text-center" style={{ ...f, fontWeight: 500, fontSize: "var(--svc-sub-size)", color: SUBTITLE_COLOR, letterSpacing: "-0.3px", lineHeight: 1.6, wordBreak: "keep-all", marginBottom: "var(--gap-sub-composer)" }}>
           {desc}
         </p>
-        <ChatInputBox />
+        <ChatInputBox initialValue={initialComposerValue} />
       </div>
 
       {/* sticky sentinel — sits just above the filter bar */}
@@ -2329,171 +2375,6 @@ function MyWorkScreen() {
         })}
       </div>
     </main>
-  );
-}
-
-// ─── 크레딧 충전 바텀시트 ────────────────────────────────────────────────────────
-
-const CREDIT_PACKAGES = [
-  { amount: 1000, price: "₩1,000" },
-  { amount: 5000, price: "₩5,000" },
-  { amount: 10000, price: "₩10,000" },
-  { amount: 50000, price: "₩50,000", best: true },
-  { amount: 100000, price: "₩100,000" },
-];
-
-function CreditBottomSheet({ onClose, onHistoryClick }: { onClose: () => void; onHistoryClick: () => void }) {
-  const [selected, setSelected] = useState(0);
-  const pkg = CREDIT_PACKAGES[selected];
-
-  return (
-    <>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.35)", animation: "fadeIn 180ms ease" }} />
-      <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 51, background: "white", borderRadius: "20px 20px 0 0", paddingBottom: "env(safe-area-inset-bottom, 20px)", boxShadow: "0px -4px 24px rgba(0,0,0,0.12)", animation: "slideUp 220ms cubic-bezier(0.32,0.72,0,1)" }}>
-        {/* 드래그 핸들 */}
-        <div className="flex justify-center pt-3 pb-1">
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: "#dfe6ed" }} />
-        </div>
-        {/* 헤더 — 바텀시트에는 닫기(X)를 두지 않는다.
-            위에 그랩 핸들이 있고 바깥(backdrop)을 눌러도 닫히므로 X 는 중복이고,
-            원형 면에 담긴 X 가 "크레딧 충전" 제목과 시각적 무게를 나눠 가진다.
-            (데스크톱 중앙 모달 CreditModal 의 X 는 그대로 둔다 — 그쪽은 스와이프가 없다) */}
-        <div className="flex items-center px-5 pt-2 pb-3">
-          <span style={{ ...f, fontWeight: 700, fontSize: 18, color: "#0a0a0a", letterSpacing: "-0.5px" }}>크레딧 충전</span>
-        </div>
-        {/* 현재 잔액 */}
-        <div className="px-5 pb-4">
-          <p style={{ ...f, fontWeight: 500, fontSize: 12, color: "#90a1b9", marginBottom: 4 }}>현재 잔액</p>
-          <p style={{ ...f, fontWeight: 700, fontSize: 22, color: "#0a0a0a", letterSpacing: "-0.8px" }}>
-            {CREDIT_BALANCE.toLocaleString()} <span style={{ fontWeight: 500, fontSize: 14, color: "#737373" }}>크레딧</span>
-          </p>
-        </div>
-        {/* 충전 패키지 */}
-        <div className="px-5 pb-2">
-          <p style={{ ...f, fontWeight: 600, fontSize: 12, color: "#90a1b9", marginBottom: 10 }}>충전 패키지</p>
-          <div className="flex flex-col gap-2.5">
-            {CREDIT_PACKAGES.map((pkg, i) => (
-              <button key={i} onClick={() => setSelected(i)}
-                className="w-full flex items-center justify-between rounded-[14px] px-4 py-3"
-                style={{ border: i === selected ? "1.5px solid #4f7bff" : "1.5px solid #e2e8f0", background: i === selected ? "#f0f5ff" : "white" }}>
-                <div className="flex items-center gap-2.5">
-                  <div className="size-6 rounded-full bg-[#eff6ff] flex items-center justify-center shrink-0">
-                    <span style={{ ...f, fontWeight: 700, fontSize: 9, color: "#4f7bff" }}>C</span>
-                  </div>
-                  <span style={{ ...f, fontWeight: 700, fontSize: 15, color: "#0a0a0a", letterSpacing: "-0.4px" }}>
-                    {pkg.amount.toLocaleString()} <span style={{ fontWeight: 500, fontSize: 13, color: "#737373" }}>크레딧</span>
-                  </span>
-                  {pkg.best && (
-                    <span className="rounded-full px-2 py-0.5" style={{ background: "#4f7bff", ...f, fontWeight: 700, fontSize: 10, color: "white" }}>BEST</span>
-                  )}
-                </div>
-                <span style={{ ...f, fontWeight: 600, fontSize: 14, color: "#334155" }}>{pkg.price}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        {/* 충전 버튼 */}
-        <div className="px-5 pt-4 pb-2">
-          <button className="w-full h-13 rounded-[14px] flex items-center justify-center" style={{ height: 52, background: "#4f7bff" }}>
-            <span style={{ ...f, fontWeight: 700, fontSize: 16, color: "white", letterSpacing: "-0.4px" }}>
-              {pkg.price} 충전하기
-            </span>
-          </button>
-        </div>
-        <div className="flex justify-center pb-4 pt-2">
-          <button onClick={() => { onClose(); onHistoryClick(); }} style={{ ...f, fontWeight: 500, fontSize: 13, color: "#737373" }}>사용 내역 보기 →</button>
-        </div>
-      </div>
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes slideUp { from { transform: translateY(100%) } to { transform: translateY(0) } }
-      `}</style>
-    </>
-  );
-}
-
-// ─── 크레딧 충전 — 768px 이상: 중앙 모달 ──────────────────────────────────────
-function CreditModal({ onClose, onHistoryClick }: { onClose: () => void; onHistoryClick: () => void }) {
-  const [selected, setSelected] = useState(0);
-  const pkg = CREDIT_PACKAGES[selected];
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4"
-      style={{ background: "rgba(15,23,42,0.35)", backdropFilter: "blur(6px)", animation: "fadeIn 180ms ease" }}
-    >
-      <div
-        role="dialog"
-        aria-label="크레딧 충전"
-        onClick={(e) => e.stopPropagation()}
-        className="w-full flex flex-col"
-        style={{
-          maxWidth: 440, background: "white", borderRadius: 20,
-          boxShadow: "0px 24px 64px rgba(16,24,40,0.24)",
-          animation: "creditModalIn 200ms cubic-bezier(0.32,0.72,0,1)",
-          maxHeight: "calc(100dvh - 48px)", overflowY: "auto", scrollbarWidth: "none",
-        }}
-      >
-        {/* 헤더 */}
-        <div className="flex items-start justify-between px-6 pt-6 pb-4">
-          <span style={{ ...f, fontWeight: 700, fontSize: 20, color: "#0a0a0a", letterSpacing: "-0.5px" }}>크레딧 충전</span>
-          <button onClick={onClose} aria-label="닫기" className="size-9 flex items-center justify-center rounded-full bg-[#f1f5f9] shrink-0">
-            <IconClose />
-          </button>
-        </div>
-        {/* 현재 잔액 */}
-        <div className="px-6 pb-5">
-          <p style={{ ...f, fontWeight: 500, fontSize: 12.5, color: "#90a1b9", marginBottom: 4 }}>현재 잔액</p>
-          <p style={{ ...f, fontWeight: 700, fontSize: 26, color: "#0a0a0a", letterSpacing: "-1px" }}>
-            {CREDIT_BALANCE.toLocaleString()} <span style={{ fontWeight: 500, fontSize: 15, color: "#737373" }}>크레딧</span>
-          </p>
-        </div>
-        {/* 충전 패키지 */}
-        <div className="px-6">
-          <p style={{ ...f, fontWeight: 600, fontSize: 12.5, color: "#90a1b9", marginBottom: 10 }}>충전 패키지</p>
-          <div className="flex flex-col gap-2.5">
-            {CREDIT_PACKAGES.map((p, i) => (
-              <button key={i} onClick={() => setSelected(i)} aria-pressed={i === selected}
-                className="w-full flex items-center justify-between rounded-[14px] px-4 py-3.5"
-                style={{ border: i === selected ? "1.5px solid #4f7bff" : "1.5px solid #e2e8f0", background: i === selected ? "#f0f5ff" : "white" }}>
-                <div className="flex items-center gap-2.5">
-                  <div className="size-6 rounded-full bg-[#eff6ff] flex items-center justify-center shrink-0">
-                    <span style={{ ...f, fontWeight: 700, fontSize: 9, color: "#4f7bff" }}>C</span>
-                  </div>
-                  <span style={{ ...f, fontWeight: 700, fontSize: 15, color: "#0a0a0a", letterSpacing: "-0.4px" }}>
-                    {p.amount.toLocaleString()} <span style={{ fontWeight: 500, fontSize: 13, color: "#737373" }}>크레딧</span>
-                  </span>
-                  {p.best && (
-                    <span className="rounded-full px-2 py-0.5" style={{ background: "#eff6ff", ...f, fontWeight: 700, fontSize: 10, color: "#4f7bff" }}>BEST</span>
-                  )}
-                </div>
-                <span style={{ ...f, fontWeight: 600, fontSize: 14, color: "#334155" }}>{p.price}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        {/* CTA */}
-        <div className="px-6 pt-5">
-          <button className="w-full rounded-[14px] flex items-center justify-center" style={{ height: 52, background: "#4f7bff" }}>
-            <span style={{ ...f, fontWeight: 700, fontSize: 16, color: "white", letterSpacing: "-0.4px" }}>{pkg.price} 충전하기</span>
-          </button>
-        </div>
-        <div className="flex justify-center pt-4 pb-6">
-          <button onClick={() => { onClose(); onHistoryClick(); }} style={{ ...f, fontWeight: 500, fontSize: 13, color: "#737373" }}>사용 내역 보기 →</button>
-        </div>
-      </div>
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes creditModalIn { from { transform: scale(0.97); opacity: 0 } to { transform: scale(1); opacity: 1 } }
-      `}</style>
-    </div>
   );
 }
 
@@ -2857,9 +2738,14 @@ const USAGE_TYPES = ["이미지", "랜딩페이지", "동영상", "프레젠테�
 const BALANCE_TYPES = ["충전", "환불"] as const;
 type CreditType = (typeof USAGE_TYPES)[number] | (typeof BALANCE_TYPES)[number];
 
-const CREDIT_BALANCE = 11974710;
+/** [예시] 이번 달 사용량 — 실제 정책·집계 로직이 없는 고정 예시 값. */
 const CREDIT_MONTHLY_USED = 2480;
 
+/**
+ * [예시] 크레딧 증감 내역 — 각 행의 balance 는 그 시점의 스냅샷(예시 데이터)이다.
+ * 공유 잔액(useCreditBalance)이 이후 바뀌어도 이 과거 내역까지 다시 맞추지 않는다 —
+ * 실제 서비스라면 내역은 그 시점 그대로 남고 현재 잔액과는 별개로 조회되는 값이다.
+ */
 const creditHistoryData: {
   date: string;
   type: CreditType;
@@ -2882,8 +2768,9 @@ const creditHistoryData: {
 
 
 
-function CreditHistoryScreen({ onCharge }: { onCharge: () => void }) {
+function CreditHistoryScreen({ onTopUp }: { onTopUp: () => void }) {
   const [activeTab, setActiveTab] = useState(0);
+  const [creditBalance] = useCreditBalance();
 
   // 데스크톱과 동일하게 크레딧 변동 부호로 사용/환불·충전을 가른다
   const filtered = creditHistoryData.filter(it =>
@@ -2894,41 +2781,43 @@ function CreditHistoryScreen({ onCharge }: { onCharge: () => void }) {
     <main className="flex-1 flex flex-col overflow-y-auto" style={{ scrollbarWidth: "none" }}>
       {/* 페이지 타이틀 */}
       <div className="px-4 pt-5 pb-4">
-        <h1 style={{ ...f, fontWeight: 700, fontSize: 24, color: "#0a0a0a", letterSpacing: "-0.8px" }}>크레딧 사용 내역</h1>
+        <h1 style={typography.pageTitle}>크레딧 사용 내역</h1>
       </div>
 
-      {/* 잔액 카드 */}
-      <div className="mx-4 mb-4 bg-white rounded-[20px] border border-[#e2e8f0] px-5 py-5"
-        style={{ boxShadow: "0px 2px 10px rgba(0,0,0,0.05)" }}>
-        <p style={{ ...f, fontWeight: 500, fontSize: 12, color: "#9ca3af", marginBottom: 2 }}>사용 가능한 크레딧</p>
+      {/* 잔액 카드 — 요금제 페이지의 강조 카드와 같은 라운드·그림자(20px, cardEmphasis) */}
+      <div className="mx-4 mb-4 bg-white px-5 py-5"
+        style={{ borderRadius: radius.cardEmphasis, border: `1px solid ${color.border.default}`, boxShadow: shadow.cardEmphasis }}>
+        <p style={{ ...f, fontWeight: 500, fontSize: 12, color: color.text.muted, marginBottom: 2 }}>사용 가능한 크레딧</p>
         <div className="flex items-center justify-between gap-3 mt-1">
           <div>
-            <p style={{ ...f, fontWeight: 700, fontSize: 28, color: "#0a0a0a", letterSpacing: "-1.1px", lineHeight: 1.1 }}>
-              {CREDIT_BALANCE.toLocaleString()}
+            <p style={{ ...f, fontWeight: 700, fontSize: 28, color: color.text.primary, letterSpacing: "-1.1px", lineHeight: 1.1 }}>
+              {creditBalance.toLocaleString()}
             </p>
-            <p style={{ ...f, fontWeight: 400, fontSize: 12, color: "#9ca3af", marginTop: 5 }}>
+            <p style={{ ...f, fontWeight: 400, fontSize: 12, color: color.text.muted, marginTop: 5 }}>
               이번 달 사용한 크레딧: <span style={{ fontWeight: 600 }}>{CREDIT_MONTHLY_USED.toLocaleString()}</span>
             </p>
           </div>
-          <button onClick={onCharge}
-            className="shrink-0 rounded-[12px] px-4 flex items-center gap-1"
-            style={{ height: 40, background: "#0a0a0a" }}>
-            <span style={{ ...f, fontWeight: 700, fontSize: 13, color: "white", whiteSpace: "nowrap" }}>+ 크레딧 충전</span>
-          </button>
+          {/* 다크 CTA — SettingsModal의 "요금제 및 크레딧 관리"와 같은 역할·같은 색(color.text.primary=#0a0a0a)이라
+              공용 Button(variant="dark")을 그대로 재사용한다. 기존엔 hover/focus-visible 표시가 전혀 없었다. */}
+          <Button variant="dark" size="md" onClick={onTopUp} className="shrink-0">
+            + 크레딧 충전
+          </Button>
         </div>
       </div>
 
-      {/* 필터 탭 + 총 건수 (데스크톱의 CATEGORY FILTERS 행) */}
-      <div className="mx-4 mb-3 pb-2 flex items-center justify-between gap-3 border-b border-[#e2e8f0]">
+      {/* 필터 탭 + 총 건수 (데스크톱의 CATEGORY FILTERS 행) — "사용 내역/환불·충전 내역"은
+          같은 목록을 좁히는 필터라 탭(패널 전환)이 아니라 기존 ScrollableChips(필터 칩)를 그대로 쓴다. */}
+      <div className="mx-4 mb-3 pb-2 flex items-center justify-between gap-3" style={{ borderBottom: `1px solid ${color.border.default}` }}>
         <ScrollableChips items={CREDIT_FILTERS} activeIndex={activeTab} onChange={setActiveTab} edgeClassName="" className="min-w-0" />
-        <span className="shrink-0" style={{ ...f, fontWeight: 700, fontSize: 11, color: "#9ca3af", whiteSpace: "nowrap" }}>
+        <span className="shrink-0" style={{ ...f, fontWeight: 700, fontSize: 11, color: color.text.muted, whiteSpace: "nowrap" }}>
           총 {filtered.length}건
         </span>
       </div>
 
-      {/* 내역 리스트 */}
-      <div className="flex flex-col mx-4 mb-6 bg-white rounded-[20px] border border-[#e2e8f0] overflow-hidden"
-        style={{ boxShadow: "0px 1px 4px rgba(0,0,0,0.04)" }}>
+      {/* 내역 리스트 — 그림자값(0px 1px 4px rgba(0,0,0,.04))이 shadow.card(0px 1px 3px rgba(0,0,0,.05))와
+          미세하게 달라 억지로 합치지 않고 그대로 둔다(라운드만 카드 강조 토큰과 일치해 교체). */}
+      <div className="flex flex-col mx-4 mb-6 bg-white overflow-hidden"
+        style={{ borderRadius: radius.cardEmphasis, border: `1px solid ${color.border.default}`, boxShadow: "0px 1px 4px rgba(0,0,0,0.04)" }}>
         {filtered.map((item, i) => {
           const positive = item.change > 0;
           return (
@@ -2946,13 +2835,13 @@ function CreditHistoryScreen({ onCharge }: { onCharge: () => void }) {
                 <span className="shrink-0 inline-flex items-center rounded px-1.5 py-0.5"
                   style={{
                     ...f, fontWeight: 800, fontSize: 10, letterSpacing: "0.3px",
-                    background: positive ? "#eff6ff" : "#f1f5f9",
+                    background: positive ? color.surface.accent : "#f1f5f9",
                     color: positive ? "#3b63f6" : "#475569",
                   }}>
                   {item.type}
                 </span>
-                <span className="truncate" style={{ ...f, fontWeight: 400, fontSize: 11.5, color: "#9ca3af" }}>{item.date}</span>
-                <span className="shrink-0" style={{ ...f, fontWeight: 700, fontSize: 12, color: "#0a0a0a", marginLeft: "auto" }}>
+                <span className="truncate" style={{ ...f, fontWeight: 400, fontSize: 11.5, color: color.text.muted }}>{item.date}</span>
+                <span className="shrink-0" style={{ ...f, fontWeight: 700, fontSize: 12, color: color.text.primary, marginLeft: "auto" }}>
                   {item.balance.toLocaleString()}
                 </span>
               </div>
@@ -4492,6 +4381,12 @@ const CATEGORY_FILE_TYPE: Record<WorkspaceCategory, ViewerFileType> = {
   docs: "docx", ppt: "pptx", video: "mp4", landing: "html", image: "png", detail: "html",
 };
 
+/** 요청 작성 도움받기(1단계 작업 선택)가 고른 wsCategory 를 이어 붙일 AI 작업 화면.
+ * "상세페이지"는 별도 화면이 없어 이미지 작업 화면(상세페이지 필터 탭 포함)으로 보낸다. */
+const REQUEST_HELP_SCREEN: Record<WorkspaceCategory, Screen> = {
+  image: "image-ai", detail: "image-ai", docs: "docs-ai", ppt: "ppt-ai", video: "video-ai", landing: "landing-ai",
+};
+
 /** 문서 계열(docx·hwpx·xlsx·pdf)은 미리보기 본문을 문서 페이지로 공유한다. */
 const FILE_TYPE_VARIANT: Record<ViewerFileType, ResultCardVariant> = {
   docx: "word", hwpx: "word", xlsx: "word", pdf: "word",
@@ -5343,7 +5238,19 @@ export default function App() {
   // 별개의 상태다 — 창을 줄였다 늘려도 접기 선택이 그대로 남는다.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [screen, setScreen] = useState<Screen>("home");
-  const [creditOpen, setCreditOpen] = useState(false);
+  /**
+   * 뒤로 가기 스택 — navigate() 로 화면을 옮길 때마다 "떠나기 직전 화면"을 쌓아 두고,
+   * goBack() 은 그 마지막 값을 그대로 되돌린다. 이전에는 상단바 뒤로 가기가 항상
+   * "home" 으로 고정돼 있었는데, 그러면 예를 들어 크레딧 사용 내역 → 요금제 페이지처럼
+   * 서브 화면끼리 오간 다음 뒤로 가면 원래 있던 화면(사용 내역)이 아니라 항상 홈으로
+   * 튀었다. 스택은 push/pop만 하므로 요금제 ↔ 사용 내역을 여러 번 오가도(각 이동이
+   * 스택에 한 칸씩 쌓일 뿐) 순환하지 않고 뒤로 갈 때마다 정확히 한 단계씩 풀린다.
+   */
+  const [screenHistory, setScreenHistory] = useState<Screen[]>([]);
+  // "요금제 및 크레딧" 화면을 열 때 어느 탭으로 들어갈지. 프로필·설정에서 일반 진입하면
+  // 월 구독 탭, 크레딧 사용 내역의 "+ 크레딧 충전"에서는 추가 충전 탭으로 바로 연다.
+  const [pricingTab, setPricingTab] = useState<PricingTab>("subscription");
+  const [creditBalance] = useCreditBalance();
   const [notifOpen, setNotifOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // fileType — "템플릿 적용하기"로 들어온 카테고리(필터 탭)가 정한 결과물 형식.
@@ -5357,6 +5264,24 @@ export default function App() {
       templateName,
       fileType: resolveFileType(tabLabel, CATEGORY_FILE_TYPE[category]),
     });
+
+  // 홈 — 작업 고르기에서 고른 작업(템플릿 목록 화면 대상), 검색어, 요청 작성 도움받기가
+  // 완성한 요청문. screen 문자열만으로는 "어떤 작업/검색어인지"를 담을 수 없어 따로 든다.
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [requestHandoff, setRequestHandoff] = useState<{ text: string; screen: Screen } | null>(null);
+
+  const openTaskTemplates = (taskId: string) => { setSelectedTaskId(taskId); navigate("task-templates"); };
+  const openSearch = (query: string) => { setSearchQuery(query); navigate("search"); };
+  const openTemplate = (template: TaskTemplate) => {
+    const task = getTaskById(template.taskId);
+    if (task?.wsCategory) openWorkspace(task.wsCategory)(template.title, task.tabLabel ?? "전체");
+  };
+  // 요청 작성 도움받기 완료 — 정리된 요청문을 고른 작업의 AI 작업 화면 컴포저에 이어 붙인다.
+  // 목적지 화면을 벗어나면(다른 화면으로 이동) 지운다 — 그래야 나중에 같은 화면을 다시
+  // 열었을 때 지난 요청문이 엉뚱하게 다시 채워지지 않는다.
+  useEffect(() => { if (requestHandoff && screen !== requestHandoff.screen) setRequestHandoff(null); }, [screen, requestHandoff]);
+  const composerFor = (s: Screen) => (requestHandoff?.screen === s ? requestHandoff.text : undefined);
 
   // 서식 채우기 — screen 문자열만으로는 "어떤 서식인지"를 담을 수 없어 대상만 따로 든다.
   const [fillTarget, setFillTarget] = useState<{ id: string; title: string } | null>(null);
@@ -5378,8 +5303,28 @@ export default function App() {
    * 사이드바 이동. 워크스페이스는 screen 과 별개의 상태로 본문을 덮고 있어,
    * 함께 지우지 않으면 "홈"을 눌러도 워크스페이스가 그대로 남는다.
    * (예전에는 워크스페이스 전용 드로어가 onGoHome 으로 같은 일을 했다.)
+   *
+   * 지금 screen 을 스택에 남기고 다음 화면으로 옮긴다 — 같은 화면으로 다시 이동하는
+   * 호출(예: 이미 "pricing"인데 또 navigate("pricing"))은 쌓지 않는다.
    */
-  const navigate = (s: Screen) => { setWorkspace(null); setScreen(s); };
+  const navigate = (s: Screen) => {
+    setScreenHistory((h) => (screen === s ? h : [...h, screen]));
+    setWorkspace(null);
+    setScreen(s);
+  };
+
+  /** 상단바 뒤로 가기 — 스택에 쌓인 "떠나기 직전 화면"으로 돌아간다. 스택이 비어 있으면
+   *  (예: 튜토리얼이 navigate 를 거치지 않고 화면을 강제로 바꾼 경우) 기존과 같이 홈으로. */
+  const goBack = () => {
+    setScreenHistory((h) => {
+      if (h.length === 0) { setScreen("home"); return h; }
+      setScreen(h[h.length - 1]);
+      return h.slice(0, -1);
+    });
+  };
+
+  /** 프로필/설정/크레딧 부족 등, 앱 어디서든 "요금제 및 크레딧" 화면을 여는 단일 진입로. */
+  const openPricing = (tab: PricingTab) => { setPricingTab(tab); navigate("pricing"); };
 
   /**
    * 워크스페이스에 들어가면 사이드바를 아이콘 레일로 접고, 나오면 다시 편다.
@@ -5392,7 +5337,7 @@ export default function App() {
   const inWorkspace = !!workspace;
   useEffect(() => { setSidebarCollapsed(inWorkspace); }, [inWorkspace]);
 
-  const isSubScreen = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai", "credit-history", "notifications-all"].includes(screen);
+  const isSubScreen = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai", "credit-history", "notifications-all", "search", "task-templates", "request-help", "pricing"].includes(screen);
 
   // 튜토리얼 다시 보기 — 홈으로 돌아가 1단계부터 다시 실행한다(중복 실행 방지)
   const startTutorial = () => {
@@ -5409,6 +5354,8 @@ export default function App() {
       target: '[data-tutorial="composer"]',
       title: "메시지 입력",
       description: "만들고 싶은 작업을 자유롭게 적고 전송 버튼으로 대화를 시작하세요.",
+      // 홈에는 더 이상 입력창이 없다 — 컴포저가 남아 있는 문서 화면을 잠깐 빌려 보여준다.
+      onEnter: () => setScreen("docs-ai"),
     },
     {
       target: '[data-tutorial="attach"]',
@@ -5429,11 +5376,12 @@ export default function App() {
       target: ['[data-tutorial="auto-prompt"]', '[data-tutorial="doc-source"]'],
       title: "자동 프롬프트 · 원문 사용",
       description: "자동 프롬프트는 질문을 최적화하고, 원문 사용은 참고문서 전체를 AI 입력에 포함합니다.",
+      onExit: () => setScreen("home"),
     },
     {
       target: '[data-tutorial="categories"]',
-      title: "카테고리",
-      description: "이미지·랜딩페이지·동영상·문서 등 원하는 작업을 골라 바로 시작할 수 있어요.",
+      title: "작업 고르기",
+      description: "이미지·문서·발표자료 등 원하는 작업을 고르면 어울리는 템플릿을 보여줘요.",
     },
     {
       target: '[data-tutorial="template-grid"]',
@@ -5468,14 +5416,34 @@ export default function App() {
       <div className="flex-1 min-w-0 relative flex flex-col overflow-hidden">
       <TopBar
         onMenuOpen={() => setDrawerOpen(true)}
-        onBack={() => setScreen("home")}
+        onBack={goBack}
         showBack={isSubScreen}
         brand={!isDesktop}
-        onCreditClick={() => setCreditOpen(true)}
+        onCreditClick={() => openPricing("subscription")}
         onBellClick={() => setNotifOpen((v) => !v)}
         bellRef={bellRef}
+        onStartTutorial={startTutorial}
+        onSettingsOpen={() => setSettingsOpen(true)}
       />
-      {screen === "home" && <HomeScreen onNavigate={setScreen} />}
+      {screen === "home" && (
+        <HomeScreen onSelectTask={openTaskTemplates} onSearch={openSearch} onHelp={() => navigate("request-help")} />
+      )}
+      {screen === "search" && (
+        <SearchResultsScreen initialQuery={searchQuery} onBack={() => navigate("home")} onOpenTemplate={openTemplate} />
+      )}
+      {screen === "task-templates" && selectedTaskId && (
+        <TaskTemplateScreen taskId={selectedTaskId} onBack={() => navigate("home")} onOpenTemplate={openTemplate} />
+      )}
+      {screen === "request-help" && (
+        <RequestHelpScreen
+          onBack={() => navigate("home")}
+          onComplete={(text, wsCategory) => {
+            const target = REQUEST_HELP_SCREEN[wsCategory];
+            setRequestHandoff({ text, screen: target });
+            navigate(target);
+          }}
+        />
+      )}
       {screen === "image-ai" && (
         <AIAgentScreen
           category="이미지"
@@ -5485,6 +5453,7 @@ export default function App() {
           cards={imageAICards}
           wsCategory="image"
           onWorkspace={openWorkspace("image")}
+          initialComposerValue={composerFor("image-ai")}
         />
       )}
       {screen === "landing-ai" && (
@@ -5518,6 +5487,7 @@ export default function App() {
           cardRatio="140%"
           wsCategory="docs"
           onWorkspace={openWorkspace("docs")}
+          initialComposerValue={composerFor("docs-ai")}
         />
       )}
       {screen === "audio-ai" && (
@@ -5539,6 +5509,7 @@ export default function App() {
           cardRatio="81%"
           wsCategory="ppt"
           onWorkspace={openWorkspace("ppt")}
+          initialComposerValue={composerFor("ppt-ai")}
         />
       )}
       {screen === "video-ai" && (
@@ -5551,6 +5522,7 @@ export default function App() {
           cardRatio="203%"
           wsCategory="video"
           onWorkspace={openWorkspace("video")}
+          initialComposerValue={composerFor("video-ai")}
         />
       )}
       {screen === "favorites" && <FavoritesScreen />}
@@ -5559,7 +5531,13 @@ export default function App() {
       {screen === "home" && !isTabletRange && <Footer />}
       {screen === "notifications-all" && <NotificationsAllScreen />}
       {screen === "credit-history" && (
-        <CreditHistoryScreen onCharge={() => { setScreen("home"); setCreditOpen(true); }} />
+        <CreditHistoryScreen onTopUp={() => openPricing("topup")} />
+      )}
+      {/* 요금제 및 크레딧 — 기존 크레딧 충전 모달(CreditModal/CreditBottomSheet) 대신 전용
+          페이지 하나로 통합했다. 진입 탭은 pricingTab(프로필·설정은 구독 탭, 크레딧 사용
+          내역의 "+ 크레딧 충전"은 추가 충전 탭)으로 정한다. */}
+      {screen === "pricing" && (
+        <PricingPage initialTab={pricingTab} onHistoryClick={() => navigate("credit-history")} />
       )}
       {/* 워크스페이스 — 본문 컬럼만 덮는다(사이드바는 옆에 그대로 남는다).
           TopBar 까지 덮는 것은 지금과 같다. */}
@@ -5569,26 +5547,21 @@ export default function App() {
           templateName={workspace.templateName}
           fileType={workspace.fileType}
           onBack={() => setWorkspace(null)}
-          onCreditClick={() => setCreditOpen(true)}
+          onCreditClick={() => openPricing("subscription")}
           onBellClick={() => setNotifOpen(true)}
         />
       )}
       </div>
       {notifOpen && (isTabletUp ? (
-        <NotificationsPopover anchorRef={bellRef} onClose={() => setNotifOpen(false)} onViewAll={() => { setNotifOpen(false); setScreen("notifications-all"); }} />
+        <NotificationsPopover anchorRef={bellRef} onClose={() => setNotifOpen(false)} onViewAll={() => { setNotifOpen(false); navigate("notifications-all"); }} />
       ) : (
-        <NotificationsPanel onClose={() => setNotifOpen(false)} onViewAll={() => { setNotifOpen(false); setScreen("notifications-all"); }} />
-      ))}
-      {creditOpen && (isTabletUp ? (
-        <CreditModal onClose={() => setCreditOpen(false)} onHistoryClick={() => setScreen("credit-history")} />
-      ) : (
-        <CreditBottomSheet onClose={() => setCreditOpen(false)} onHistoryClick={() => setScreen("credit-history")} />
+        <NotificationsPanel onClose={() => setNotifOpen(false)} onViewAll={() => { setNotifOpen(false); navigate("notifications-all"); }} />
       ))}
       <TutorialTour isOpen={tutorialOpen} steps={tutorialSteps} onClose={() => { setTutorialOpen(false); setScreen("home"); }} />
       {settingsOpen && (
         <SettingsModal
           onClose={() => setSettingsOpen(false)}
-          onCreditHistory={() => { setSettingsOpen(false); setScreen("credit-history"); }}
+          onPricingOpen={() => { setSettingsOpen(false); openPricing("subscription"); }}
         />
       )}
       {/* 서식 채우기 — 데스크톱 3단. TopBar·사이드바까지 덮는 전체 화면이라 최상단에 얹는다.
@@ -5597,7 +5570,7 @@ export default function App() {
         <FormFillDesktop
           formId={fillTarget.id}
           formTitle={fillTarget.title}
-          credits={CREDIT_BALANCE}
+          credits={creditBalance}
           onBack={() => setScreen("forms-ai")}
           sidebar={
             <SidebarDrawer

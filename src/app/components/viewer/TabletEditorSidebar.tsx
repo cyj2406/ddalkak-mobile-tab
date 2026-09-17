@@ -68,9 +68,10 @@ export interface TextEditPanelProps {
   imageCount: number;
   /** 문서 전체 슬라이드 수 — 보조 링크에 그대로 적힌다 */
   slideCount: number;
-  /** 처리 중인 이미지·슬라이드가 있는지 */
+  /** 처리 중인 이미지·슬라이드가 있는지(텍스트 분리·전체 변환 어느 쪽이든) */
   busy: boolean;
   onStart: () => void;
+  /** 우측 텍스트분리 패널을 "전체 변환" 세그먼트로 연다 */
   onFullConvert: () => void;
 }
 
@@ -137,9 +138,9 @@ export default function TabletEditorSidebar({
 
 /* ── 디자인 탭 — 텍스트 편집 도구 ─────────────────────────────────
    주 버튼 하나와 그 아래 보조 링크 하나. 이 순서가 곧 위계다.
-   전체 슬라이드 변환은 예전에 좌측 레일에 따로 서 있었는데, 한 장씩 고르는 일과
-   문서 전체를 갈아엎는 일이 같은 크기로 나란히 놓여 있어 실수로 누르기 쉬웠다.
-   지금은 같은 맥락 안으로 들여와 텍스트 링크로 한 단 낮춰 두었다. */
+   한 장씩 고르는 일(텍스트 분리)과 문서 전체를 갈아엎는 일(전체 변환)이 같은 크기로
+   나란히 놓이면 실수로 누르기 쉬워, 후자는 텍스트 링크로 한 단 낮춰 둔다 — 실행은
+   여기서 하지 않고 우측 텍스트분리 패널의 "전체 변환" 세그먼트를 열기만 한다. */
 function TextEditPanel({ unit, imageCount, slideCount, busy, onStart, onFullConvert }: TextEditPanelProps) {
   const empty = imageCount === 0;
   return (
@@ -199,7 +200,7 @@ function TextEditPanel({ unit, imageCount, slideCount, busy, onStart, onFullConv
         className="self-start rounded-[8px] px-1 py-1 -mx-1 transition-colors enabled:hover:bg-[#F5F7FA] disabled:opacity-45 disabled:cursor-default"
         style={{ fontSize: 12.5, fontWeight: 600, color: C.sub }}
       >
-        전체 {unit} 분리 ({slideCount})
+        전체 {unit} 변환 ({slideCount})
       </button>
     </div>
   );

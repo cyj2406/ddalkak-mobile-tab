@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState,
+} from "react";
 
 /**
  * 이미지 텍스트 분리 — 상태와 규칙.
@@ -37,9 +39,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /** 이미지 한 장을 분리하는 데 드는 크레딧. 범위(현재/전체)와 무관하게 단가는 하나다. */
 export const CREDIT_PER_IMAGE = 300;
-
-/** [목업] 크레딧 잔액 */
-export const START_BALANCE = 906_431;
 
 /**
  * "고액"으로 보는 기준 — 예상 크레딧이 잔액의 이 비율을 넘으면 크레딧 표기를
@@ -240,6 +239,9 @@ export type SplitMockScenario = "success" | "partial" | "fail" | "loading";
 
 export const creditFor = (imageCount: number) => imageCount * CREDIT_PER_IMAGE;
 export const formatCredit = (n: number) => n.toLocaleString("ko-KR");
+/** 작업 비용 전용 표기 — 잔액용 formatCredit("약 900"류)과 달리 카드·CTA·확인 문구에는
+ *  짧게 "NC"로 통일한다. AI 패널·텍스트분리 패널·전체 변환 패널이 전부 이 하나를 쓴다. */
+export const formatCreditShort = (n: number) => `${n}C`;
 
 /* ── 상태 ─────────────────────────────────────────────────────────── */
 
@@ -270,7 +272,10 @@ export interface UseTextSplit {
 export function useTextSplit(
   slides: Slide[],
   currentSlide: number,
-  initialBalance: number = START_BALANCE,
+  /** 크레딧 잔액 — 이 훅이 소유하지 않는다. AI 스튜디오(생성/수정/배경제거)와 같은 잔액을
+   *  나눠 써야 해서 TabletMiniEditor 가 하나만 들고 여기·useAIStudio 양쪽에 그대로 흘려보낸다. */
+  balance: number,
+  setBalance: Dispatch<SetStateAction<number>>,
   /** 지정되면 이미지별 mockFails 대신 이 시나리오로 성공/실패를 강제한다 (개발 패널 전용). */
   mockScenario?: SplitMockScenario,
 ): UseTextSplit {
@@ -280,7 +285,6 @@ export function useTextSplit(
     return init;
   });
   const [attempts, setAttempts] = useState<Record<string, number>>({});
-  const [balance, setBalance] = useState(initialBalance);
   const [toast, setToast] = useState<SplitToast | null>(null);
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null);
   const [liveMessage, setLiveMessage] = useState("");

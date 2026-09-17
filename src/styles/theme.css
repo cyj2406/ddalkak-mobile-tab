@@ -59,6 +59,11 @@
      프롬프트 입력창과 카테고리 그리드가 같은 좌우 정렬선을 쓰도록 공유하는 값.
      모바일(<768px)은 화면 폭을 그대로 사용해 기존 레이아웃을 유지한다. */
   --home-container: 100%;
+  /* ── 홈 섹션 간격 — 두 종류만 쓴다 ─────────────
+     섹션 사이(추천 서식 → 검색·도움받기 → 작업 고르기)는 --home-block-gap,
+     한 덩어리 안(검색창 ↔ 도움받기 배너)은 --home-cluster-gap. */
+  --home-block-gap: 44px;
+  --home-cluster-gap: 12px;
   /* ── 홈·서비스 히어로 타이포 스케일 ─────────────
      기본값 = 지금의 모바일(≤767px) 수치. 데스크톱(≥1200px)도 이 값을 그대로 쓴다.
      태블릿(768~1199px)만 아래 미디어 블록에서 키운다. */
@@ -73,10 +78,6 @@
   /* 컴포저 textarea 최대 높이. 넘어가면 내부 스크롤.
      화면이 낮은 기기에서 입력창이 화면을 다 먹지 않도록 40vh 로도 한 번 더 조인다. */
   --composer-max-h: min(160px, 40vh);
-  --cat-label-size: 11.5px;     /* 홈 아이콘 그리드 라벨 */
-  --cat-circle: 56px;           /* 홈 아이콘 원 지름 */
-  --cat-icon: 22px;             /* 홈 아이콘 svg */
-  --cat-row-gap: 20px;          /* 홈 아이콘 그리드 행 간격 */
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: #030213;
@@ -143,11 +144,8 @@
    아래 태블릿 블록이 이 값들을 덮으므로 반드시 이 순서를 유지할 것. */
 .home-stack { display: contents; }
 .home-body { flex: 2 1 auto; }
-.home-heading { margin-bottom: 40px; }
+.home-heading { margin-bottom: var(--home-block-gap); }
 .home-sub { margin-top: 8px; }
-
-/* 아이콘 크기는 svg 속성 대신 토큰으로 — 기본 22px 라 모바일·데스크톱은 그대로다. */
-.home-grid svg { width: var(--cat-icon); height: var(--cat-icon); }
 
 /* ── 태블릿(768~1199px) 홈·서비스 화면 ────────────────────────────────────────
    데스크톱 레이아웃을 폭만 줄여 쓰던 것을 태블릿 전용 스케일로 다시 잡는다.
@@ -169,10 +167,6 @@
     --svc-sub-size: 15.5px;
     --svc-hero-max: 720px;
     --composer-ph-size: 15px;
-    --cat-label-size: 14px;
-    --cat-circle: 64px;
-    --cat-icon: 24px;
-    --cat-row-gap: 32px;
     /* 좌우 24px 축 (서비스·서식 화면 전용 토큰) */
     --gap-screen-x: 24px;
     --gap-title-sub: 12px;      /* 헤드라인 ↔ 부제 */
@@ -198,7 +192,6 @@
   .home-body { flex: 0 0 auto; }
   .home-heading { margin-bottom: var(--gap-sub-composer); }
   .home-sub { margin-top: var(--gap-title-sub); }
-  .home-grid { margin-top: var(--gap-composer-chips); row-gap: var(--cat-row-gap); }
 }
 
 /* ── 워크스페이스 상세 프롬프트 카드 본문 ─────────────────────────────
@@ -469,3 +462,11 @@
 
 /* 컴포저 하단 칩 줄 — 가로 스크롤은 살리고 스크롤바만 감춘다(전송 버튼은 이 영역 밖에 고정). */
 .composer-chips-scroll::-webkit-scrollbar { display: none; }
+
+/* ── 홈 추천 서식 캐러셀 마퀴 ─────────────────────────────────────────────────
+   트랙에는 카드 목록을 두 번 이어 붙여 렌더한다 — 50% 지점에서 멈추면 원본 목록 하나만큼
+   움직인 것과 같아 이음매 없이 반복된다. */
+@keyframes home-carousel-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}

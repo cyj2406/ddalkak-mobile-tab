@@ -7,8 +7,9 @@ import {
 
 import {
   BULK_THRESHOLD, HIGH_COST_RATIO, type EditorImage, type ImageStatus, type RunProgress,
-  type Slide, creditFor, formatCredit, statusOfMap,
+  type Slide, creditFor, formatCredit, formatCreditShort, statusOfMap,
 } from "./textSplit";
+import { PAGE_CONVERT_COST, type PageConvertStatus } from "./pageConvert";
 
 /**
  * 텍스트 분리할 이미지를 고르는 화면 — 우측에서 슬라이드 인/아웃 하는 패널 하나다.
@@ -52,15 +53,17 @@ const SUB_THUMB_W = 40;
 const SUB_THUMB_H = 30;
 
 /**
- * 패널이 열릴 때의 초기 체크 상태 세 가지.
- *   focus   캔버스에서 이미지를 선택한 채 열림 — 그 이미지만 체크
- *   current 아무것도 선택하지 않고 열림 — 지금 보고 있는 슬라이드만 체크
- *   all     "전체 선택" 진입 — 이미 분리한 것을 제외한 전체 체크
+ * 패널이 열릴 때의 초기 상태 네 가지.
+ *   focus   캔버스에서 이미지를 선택한 채 열림 — "텍스트 분리" 세그먼트, 그 이미지만 체크
+ *   current 아무것도 선택하지 않고 열림 — "텍스트 분리" 세그먼트, 지금 보고 있는 슬라이드만 체크
+ *   all     "전체 선택" 진입 — "텍스트 분리" 세그먼트, 이미 분리한 것을 제외한 전체 체크
+ *   convert "전체 변환" 진입 — "전체 변환" 세그먼트로 연다(슬라이드는 미리 체크하지 않는다)
  */
 export type SplitOpenMode =
   | { kind: "current" }
   | { kind: "all" }
-  | { kind: "focus"; imageId: string };
+  | { kind: "focus"; imageId: string }
+  | { kind: "convert" };
 
 /** 캔버스에서 이미지를 클릭할 때마다 부모가 nonce 를 올려 보낸다 — 같은 이미지를 다시
  *  클릭해도 effect 가 다시 반응하게 하려면 id 만으로는 부족하기 때문이다. */
@@ -169,6 +172,7 @@ export function TextSplitModal({
   slides, currentSlide, balance, unit = "슬라이드", mode,
   status, runProgress, hoverImageId, onHoverImage, focusRequest,
   onClose, onStart, onRetry,
+  convertStatus, convertBusy, convertRunProgress, onConvertStart,
 }: {
   slides: Slide[];
   currentSlide: number;
@@ -185,6 +189,12 @@ export function TextSplitModal({
   /** 회차를 시작만 한다 — 패널을 닫는 것은 이 컴포넌트가 스스로 판단한다(20장 기준). */
   onStart: (ids: string[]) => void;
   onRetry: (ids: string[]) => void;
+  /** "전체 변환" 세그먼트 — 슬라이드 번호 기준. 완료 토스트는 이 패널이 아니라
+   *  호출부가 텍스트 분리와 같은 자리에 독립적으로 띄운다(패널을 닫아도 알 수 있게). */
+  convertStatus: Record<number, PageConvertStatus>;
+  convertBusy: boolean;
+  convertRunProgress: RunProgress | null;
+  onConvertStart: (slideNos: number[]) => void;
 }) {
   const titleId = useId().replace(/:/g, "_");
 
@@ -196,6 +206,43 @@ export function TextSplitModal({
   const [bulkIds, setBulkIds] = useState<string[] | null>(null);
   const [retrying, setRetrying] = useState(false);
   const startedAtRef = useRef<number | null>(null);
+
+  /* ── "전체 변환" 세그먼트 — 선택 단위가 이미지가 아니라 슬라이드다 ── */
+  const [segment, setSegment] = useState<"split" | "convert">(mode.kind === "convert" ? "convert" : "split");
+  const [pickedSlides, setPickedSlides] = useState<Set<number>>(new Set());
+  const [convertConfirmOpen, setConvertConfirmOpen] = useState(false);
+  const convertStartedAtRef = useRef<number | null>(null);
+
+  const convertSelectableNos = useMemo(
+    () => slides.filter((s) => convertStatus[s.no] !== "done").map((s) => s.no),
+    [slides, convertStatus],
+  );
+  const convertAllOn = convertSelectableNos.length > 0 && pickedSlides.size === convertSelectableNos.length;
+  const convertSomeOn = !convertAllOn && pickedSlides.size > 0;
+  const convertAllDone = slides.length > 0 && convertSelectableNos.length === 0;
+  const toggleConvertAll = useCallback(() => {
+    if (convertSelectableNos.length === 0) return;
+    setPickedSlides(convertAllOn ? new Set() : new Set(convertSelectableNos));
+  }, [convertAllOn, convertSelectableNos]);
+  const toggleSlidePick = useCallback((no: number) => {
+    if (convertStatus[no] === "done") return;
+    setPickedSlides((s) => {
+      const next = new Set(s);
+      if (next.has(no)) next.delete(no); else next.add(no);
+      return next;
+    });
+  }, [convertStatus]);
+
+  const convertCost = pickedSlides.size * PAGE_CONVERT_COST;
+  const convertShort = convertCost > balance;
+
+  const startConvert = () => {
+    const nos = [...pickedSlides];
+    convertStartedAtRef.current = Date.now();
+    onConvertStart(nos);
+    setConvertConfirmOpen(false);
+    setPickedSlides(new Set());
+  };
 
   const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
   const registerRef = useCallback((id: string, el: HTMLElement | null) => {
@@ -337,9 +384,24 @@ export function TextSplitModal({
   return (
     <PanelShell labelledBy={titleId} onClose={onClose}>
       {phase === "progress" ? (
-        <ProgressView runProgress={runProgress} retrying={retrying} startedAt={startedAtRef.current} onBackground={onClose} />
+        <ProgressView
+          runProgress={runProgress}
+          retrying={retrying}
+          startedAt={startedAtRef.current}
+          onBackground={onClose}
+          title="텍스트를 분리하고 있어요"
+          retryingTitle="실패한 이미지를 다시 분리하고 있어요"
+        />
       ) : phase === "summary" && bulkIds ? (
         <SummaryView bulkIds={bulkIds} status={status} slides={slides} onRetry={handleRetry} onClose={onClose} />
+      ) : segment === "convert" && convertBusy ? (
+        <ProgressView
+          runProgress={convertRunProgress}
+          retrying={false}
+          startedAt={convertStartedAtRef.current}
+          onBackground={onClose}
+          title="페이지를 편집 가능한 HTML로 만들고 있어요"
+        />
       ) : (
         <>
           <div className="shrink-0 flex items-center justify-between px-4 pt-4 pb-3">
@@ -357,8 +419,72 @@ export function TextSplitModal({
             </button>
           </div>
 
-          {totalImages === 0 ? (
-            <EmptyState />
+          {/* 작업 범위 세그먼트 — 이미지 단위(텍스트 분리) / 슬라이드 단위(전체 변환).
+              같은 슬라이드 트리 UI를 공유하되 선택 단위만 다르게 처리한다. 이 안에서
+              직접 오가는 탭 전환 UI는 두지 않는다 — "텍스트 분리"로 열었을 때 헤더
+              바로 아래가 "전체 선택" 행으로 곧장 이어져야 한다(디자인 기준). "전체
+              변환"은 그 자체의 진입점(mode.kind === "convert")으로만 들어온다 —
+              한 번 그렇게 연 회차 안에서는 segment 상태가 그대로 유지된다. */}
+          {segment === "split" ? (
+            totalImages === 0 ? (
+              <EmptyState />
+            ) : (
+              <>
+                <div
+                  className="shrink-0 px-4 py-2.5 flex items-center justify-between"
+                  style={{ borderTop: `1px solid ${C.line}`, borderBottom: `1px solid ${C.line}` }}
+                >
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={allOn ? "true" : someOn ? "mixed" : "false"}
+                    disabled={allDone}
+                    onClick={toggleAll}
+                    className="flex items-center gap-2 rounded-[8px] px-1 py-1 -mx-1 transition-colors enabled:hover:bg-[#F5F7FA] disabled:cursor-default"
+                  >
+                    <CheckBox state={allOn ? "on" : someOn ? "mixed" : "off"} disabled={allDone} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: allDone ? C.sub : C.text }}>전체 선택</span>
+                  </button>
+                  <span className="tabular-nums" style={{ fontSize: 12.5, fontWeight: 600, color: C.sub }}>
+                    {picked.size} / {totalImages}장
+                  </span>
+                </div>
+
+                {allDone && (
+                  <div
+                    className="shrink-0 px-4 py-2.5"
+                    style={{ background: C.surface, borderBottom: `1px solid ${C.line}` }}
+                  >
+                    <p style={{ fontSize: 12.5, fontWeight: 600, color: C.sub }}>
+                      이 문서의 이미지를 모두 분리했어요
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-0.5" style={{ scrollbarWidth: "none" }}>
+                  {slides.map((s) => (
+                    <SlideRow
+                      key={s.no}
+                      slide={s}
+                      unit={unit}
+                      currentSlide={currentSlide}
+                      status={status}
+                      picked={picked}
+                      expanded={expanded.has(s.no)}
+                      confirmingIds={confirmingIds}
+                      hoverImageId={hoverImageId}
+                      onToggleImage={toggleImage}
+                      onToggleSlide={toggleSlide}
+                      onToggleExpand={toggleExpand}
+                      onConfirmResplit={confirmResplit}
+                      onCancelResplit={cancelResplit}
+                      onHoverImage={onHoverImage}
+                      registerRef={registerRef}
+                    />
+                  ))}
+                </div>
+              </>
+            )
           ) : (
             <>
               <div
@@ -368,49 +494,40 @@ export function TextSplitModal({
                 <button
                   type="button"
                   role="checkbox"
-                  aria-checked={allOn ? "true" : someOn ? "mixed" : "false"}
-                  disabled={allDone}
-                  onClick={toggleAll}
+                  aria-checked={convertAllOn ? "true" : convertSomeOn ? "mixed" : "false"}
+                  disabled={convertAllDone}
+                  onClick={toggleConvertAll}
                   className="flex items-center gap-2 rounded-[8px] px-1 py-1 -mx-1 transition-colors enabled:hover:bg-[#F5F7FA] disabled:cursor-default"
                 >
-                  <CheckBox state={allOn ? "on" : someOn ? "mixed" : "off"} disabled={allDone} />
-                  <span style={{ fontSize: 13, fontWeight: 600, color: allDone ? C.sub : C.text }}>전체 선택</span>
+                  <CheckBox state={convertAllOn ? "on" : convertSomeOn ? "mixed" : "off"} disabled={convertAllDone} />
+                  <span style={{ fontSize: 13, fontWeight: 600, color: convertAllDone ? C.sub : C.text }}>전체 선택</span>
                 </button>
                 <span className="tabular-nums" style={{ fontSize: 12.5, fontWeight: 600, color: C.sub }}>
-                  {picked.size} / {totalImages}장
+                  {pickedSlides.size} / {slides.length}장
                 </span>
               </div>
 
-              {allDone && (
+              {convertAllDone && (
                 <div
                   className="shrink-0 px-4 py-2.5"
                   style={{ background: C.surface, borderBottom: `1px solid ${C.line}` }}
                 >
                   <p style={{ fontSize: 12.5, fontWeight: 600, color: C.sub }}>
-                    이 문서의 이미지를 모두 분리했어요
+                    이 문서의 페이지를 모두 변환했어요
                   </p>
                 </div>
               )}
 
               <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3 flex flex-col gap-0.5" style={{ scrollbarWidth: "none" }}>
                 {slides.map((s) => (
-                  <SlideRow
+                  <ConvertSlideRow
                     key={s.no}
                     slide={s}
                     unit={unit}
                     currentSlide={currentSlide}
-                    status={status}
-                    picked={picked}
-                    expanded={expanded.has(s.no)}
-                    confirmingIds={confirmingIds}
-                    hoverImageId={hoverImageId}
-                    onToggleImage={toggleImage}
-                    onToggleSlide={toggleSlide}
-                    onToggleExpand={toggleExpand}
-                    onConfirmResplit={confirmResplit}
-                    onCancelResplit={cancelResplit}
-                    onHoverImage={onHoverImage}
-                    registerRef={registerRef}
+                    status={convertStatus[s.no]}
+                    checked={pickedSlides.has(s.no)}
+                    onToggle={() => toggleSlidePick(s.no)}
                   />
                 ))}
               </div>
@@ -418,33 +535,74 @@ export function TextSplitModal({
           )}
 
           <div className="shrink-0 px-4 py-3.5 flex items-end gap-3" style={{ borderTop: `1px solid ${C.line}` }}>
-            <div className="flex-1 min-w-0">
-              <CreditLine cost={cost} balance={balance} short={short} high={high} />
-            </div>
-            <div className="shrink-0 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="h-10 px-4 rounded-[10px] transition-colors hover:bg-[#F5F7FA]"
-                style={{ border: `1px solid ${C.line}`, color: C.text, fontSize: 13.5, fontWeight: 600 }}
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmClick}
-                disabled={picked.size === 0 || short}
-                className="h-10 px-4 rounded-[10px] transition-[filter] enabled:hover:brightness-[0.97] disabled:cursor-default"
-                style={{
-                  background: picked.size === 0 || short ? "#E7EAF0" : C.primary,
-                  color: picked.size === 0 || short ? C.sub : "#FFFFFF",
-                  fontSize: 13.5,
-                  fontWeight: 700,
-                }}
-              >
-                {picked.size}장 분리하기
-              </button>
-            </div>
+            {segment === "split" ? (
+              <>
+                <div className="flex-1 min-w-0">
+                  <CreditLine cost={cost} balance={balance} short={short} high={high} />
+                </div>
+                <div className="shrink-0 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="h-10 px-4 rounded-[10px] transition-colors hover:bg-[#F5F7FA]"
+                    style={{ border: `1px solid ${C.line}`, color: C.text, fontSize: 13.5, fontWeight: 600 }}
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmClick}
+                    disabled={picked.size === 0 || short}
+                    className="h-10 px-4 rounded-[10px] transition-[filter] enabled:hover:brightness-[0.97] disabled:cursor-default"
+                    style={{
+                      background: picked.size === 0 || short ? "#E7EAF0" : C.primary,
+                      color: picked.size === 0 || short ? C.sub : "#FFFFFF",
+                      fontSize: 13.5,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {picked.size}장 분리하기
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex-1 min-w-0">
+                  <CreditLine cost={convertCost} balance={balance} short={convertShort} high={false} />
+                </div>
+                <div className="shrink-0 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="h-10 px-4 rounded-[10px] transition-colors hover:bg-[#F5F7FA]"
+                    style={{ border: `1px solid ${C.line}`, color: C.text, fontSize: 13.5, fontWeight: 600 }}
+                  >
+                    취소
+                  </button>
+                  {/*
+                    "전체 변환"은 페이지를 통째로 HTML로 다시 만드는, 비싸고(450C/장)
+                    되돌리기 어려운 작업이다. "텍스트 분리" CTA(위 segment==="split"
+                    분기)와 나란히 primary 로 두면 더 신중해야 할 쪽이 더 강조되는
+                    역전이 생긴다 — outline 으로 낮춰 "분리하기" 쪽만 primary 로 남긴다.
+                    확인 다이얼로그(BulkConfirmDialog)는 이미 뜨므로 그대로 재사용한다.
+                  */}
+                  <button
+                    type="button"
+                    onClick={() => { if (pickedSlides.size > 0 && !convertShort) setConvertConfirmOpen(true); }}
+                    disabled={pickedSlides.size === 0 || convertShort}
+                    className="h-10 px-4 rounded-[10px] transition-colors enabled:hover:bg-[#F5F7FA] disabled:cursor-default"
+                    style={{
+                      border: `1px solid ${pickedSlides.size === 0 || convertShort ? C.line : C.text}`,
+                      color: pickedSlides.size === 0 || convertShort ? C.sub : C.text,
+                      fontSize: 13.5,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {pickedSlides.size}장 변환하기
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </>
       )}
@@ -456,6 +614,18 @@ export function TextSplitModal({
           balance={balance}
           onCancel={() => setPhase("pick")}
           onConfirm={startBulk}
+        />
+      )}
+
+      {convertConfirmOpen && (
+        <BulkConfirmDialog
+          title={`선택한 ${pickedSlides.size}장을 편집 가능한 HTML로 다시 만들까요?`}
+          confirmLabel="변환 시작"
+          count={pickedSlides.size}
+          cost={convertCost}
+          balance={balance}
+          onCancel={() => setConvertConfirmOpen(false)}
+          onConfirm={startConvert}
         />
       )}
     </PanelShell>
@@ -510,7 +680,6 @@ function PanelShell({
           width: SPLIT_PANEL_W,
           background: C.card,
           borderLeft: `1px solid ${C.line}`,
-          boxShadow: "-8px 0 24px rgba(16,24,40,0.14)",
           ...font,
         }}
       >
@@ -522,24 +691,31 @@ function PanelShell({
 
 /* ── 크레딧 한 줄 ─────────────────────────────────────────────────── */
 
+/** "예상 크레딧" 라벨을 위에, 값을 그 아래 크게 — 버튼 라벨에서 비용 숫자를 뺀 만큼
+ *  (아래 "N장 분리하기"는 이제 수량과 동작만 말한다) 비용을 확인할 곳이 여기 하나로
+ *  분명해졌다. 값 자체는 지금처럼 creditFor() 가 셈한 정확한 단일값 그대로다 — 표기만
+ *  "C" 대신 "크레딧"을 풀어 쓴다(이 요약 줄에서만, 버튼·카드 등 다른 자리의 "숫자+C"
+ *  관례는 그대로 둔다). */
 function CreditLine({
   cost, balance, short, high,
 }: { cost: number; balance: number; short: boolean; high: boolean }) {
   if (short) {
     return (
-      <span style={{ fontSize: 13, fontWeight: 600, color: C.danger }}>
-        크레딧이 부족해요 (약 {formatCredit(cost)} 필요 · 잔액 {formatCredit(balance)})
-      </span>
+      <div className="flex flex-col gap-0.5">
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: C.sub }}>예상 크레딧</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: C.danger }}>
+          크레딧이 부족해요 (약 {formatCreditShort(cost)} 필요 · 잔액 {formatCredit(balance)})
+        </span>
+      </div>
     );
   }
   return (
-    <span
-      style={high
-        ? { fontSize: 13, fontWeight: 700, color: C.primary }
-        : { fontSize: 12, color: C.sub }}
-    >
-      약 {formatCredit(cost)} 크레딧
-    </span>
+    <div className="flex flex-col gap-0.5">
+      <span style={{ fontSize: 11.5, fontWeight: 600, color: C.sub }}>예상 크레딧</span>
+      <span style={{ fontSize: 15, fontWeight: 700, color: high ? C.primary : C.text }}>
+        {formatCredit(cost)} 크레딧
+      </span>
+    </div>
   );
 }
 
@@ -749,11 +925,62 @@ function SlideRow({
   );
 }
 
+/* ── "전체 변환" 목록 행 — 선택 단위가 이미지가 아니라 슬라이드 하나다 ──────
+ * SlideRow 와 달리 이미지 개수로 갈리는 세 branch 가 없다. 이미지가 0장인 슬라이드도
+ * 그대로 선택할 수 있어야 하고(페이지 변환은 이미지 유무와 무관하다), 펼쳐서 이미지를
+ * 따로 고를 일도 없어 슬라이드당 한 행으로 충분하다. */
+
+function ConvertSlideRow({
+  slide, unit, currentSlide, status, checked, onToggle,
+}: {
+  slide: Slide;
+  unit: string;
+  currentSlide: number;
+  status: PageConvertStatus | undefined;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  const isCurrent = slide.no === currentSlide;
+  const done = status === "done";
+  const processing = status === "processing";
+
+  return (
+    <div
+      role="checkbox"
+      aria-checked={checked}
+      tabIndex={0}
+      onClick={onToggle}
+      onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); onToggle(); } }}
+      className="flex items-center gap-2.5 rounded-[8px] px-2 py-2 cursor-pointer transition-colors hover:bg-[#F5F7FA]"
+    >
+      <CheckBox state={checked ? "on" : "off"} disabled={done} />
+      <span
+        className="shrink-0 rounded-[6px]"
+        style={{ width: THUMB_W, height: THUMB_H, background: slide.tone, border: `1px solid ${C.line}`, opacity: done ? 0.55 : 1 }}
+      />
+      <span className="flex-1 min-w-0 flex items-center gap-1.5">
+        <span className="truncate" style={{ fontSize: 13, fontWeight: 600, color: done ? C.sub : C.text }}>
+          {unit} {slide.no}
+        </span>
+        {isCurrent && <Tag>현재</Tag>}
+      </span>
+      {processing && <Loader2 size={14} strokeWidth={2.4} className="animate-spin" color={C.primary} />}
+      {done && <span className="shrink-0" style={{ fontSize: 11.5, fontWeight: 600, color: C.sub }}>변환 완료</span>}
+    </div>
+  );
+}
+
 /* ── 대량 선택 확인 다이얼로그 ────────────────────────────────────── */
 
 function BulkConfirmDialog({
-  count, cost, balance, onCancel, onConfirm,
-}: { count: number; cost: number; balance: number; onCancel: () => void; onConfirm: () => void }) {
+  count, cost, balance, title, confirmLabel = "분리 시작", onCancel, onConfirm,
+}: {
+  count: number; cost: number; balance: number;
+  /** 전체 변환처럼 문구가 다른 확인 다이얼로그가 이 컴포넌트를 재사용할 때 넘긴다 */
+  title?: string;
+  confirmLabel?: string;
+  onCancel: () => void; onConfirm: () => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -777,11 +1004,11 @@ function BulkConfirmDialog({
           className="rounded-[16px] flex flex-col gap-4 p-5"
           style={{ pointerEvents: "auto", width: "min(340px, 100%)", background: C.card, boxShadow: "0 18px 48px rgba(16,24,40,0.22)", ...font }}
         >
-          <p style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{count}장을 분리할까요?</p>
+          <p style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{title ?? `${count}장을 분리할까요?`}</p>
           <div className="flex flex-col gap-1.5">
-            <ConfirmRow label="사용 크레딧" value={formatCredit(cost)} />
+            <ConfirmRow label="사용 크레딧" value={formatCreditShort(cost)} />
             <ConfirmRow label="보유 잔액" value={formatCredit(balance)} />
-            <ConfirmRow label="분리 후 잔액" value={formatCredit(after)} strong />
+            <ConfirmRow label="실행 후 잔액" value={formatCredit(after)} strong />
           </div>
           <div className="flex items-center justify-end gap-2">
             <button
@@ -798,7 +1025,7 @@ function BulkConfirmDialog({
               className="h-9 px-3.5 rounded-[8px] transition-[filter] hover:brightness-[0.97]"
               style={{ background: C.primary, color: "#FFFFFF", fontSize: 13, fontWeight: 700 }}
             >
-              분리 시작
+              {confirmLabel}
             </button>
           </div>
         </div>
@@ -819,8 +1046,13 @@ function ConfirmRow({ label, value, strong }: { label: string; value: string; st
 /* ── 진행 화면 ────────────────────────────────────────────────────── */
 
 function ProgressView({
-  runProgress, retrying, startedAt, onBackground,
-}: { runProgress: RunProgress | null; retrying: boolean; startedAt: number | null; onBackground: () => void }) {
+  runProgress, retrying, startedAt, onBackground, title, retryingTitle,
+}: {
+  runProgress: RunProgress | null; retrying: boolean; startedAt: number | null; onBackground: () => void;
+  /** 전체 변환처럼 다른 문구가 필요한 회차가 이 화면을 재사용할 때 넘긴다 */
+  title: string;
+  retryingTitle?: string;
+}) {
   // 500ms 마다 다시 그려 남은 시간 추정치를 갱신한다 (실시간 타이머가 아니라 목업 추정용).
   const [, tick] = useState(0);
   useEffect(() => {
@@ -843,7 +1075,7 @@ function ProgressView({
     <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-4 px-6 py-8 text-center">
       <Loader2 size={22} strokeWidth={2.2} color={C.primary} className="animate-spin" />
       <p style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
-        {retrying ? "실패한 이미지를 다시 분리하고 있어요" : "텍스트를 분리하고 있어요"}
+        {retrying ? (retryingTitle ?? title) : title}
       </p>
       <p className="tabular-nums" style={{ fontSize: 13, fontWeight: 600, color: C.sub }}>
         {done} / {total}장 완료 · {remainingLabel}
