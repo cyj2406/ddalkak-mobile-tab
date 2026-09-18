@@ -31,7 +31,7 @@ export default function SearchResultsScreen({
         </button>
 
         <div
-          className="flex items-center gap-2 rounded-full mb-6"
+          className="field-pill flex items-center gap-2 rounded-full mb-6"
           style={{ background: "#fff", border: "1px solid #e2e8f0", padding: "6px 6px 6px 14px" }}
         >
           <Search size={18} color="#94a3b8" aria-hidden className="shrink-0" />
@@ -42,7 +42,7 @@ export default function SearchResultsScreen({
             onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
             aria-label="서식 검색어"
             placeholder="용도와 형식으로 찾아보세요 (예: 협조 요청 공문, 카드뉴스 5장, PPTX)"
-            className="flex-1 min-w-0 outline-none bg-transparent"
+            className="field-inline flex-1 min-w-0 outline-none bg-transparent"
             style={{ ...f, fontWeight: 500, fontSize: 14, color: "#0a0a0a", padding: "9px 0", border: 0 }}
           />
           <button type="button" onClick={submit} className="rounded-full shrink-0 bg-[#4f7bff] hover:bg-[#3d68e8] transition-colors" style={{ ...f, fontWeight: 700, fontSize: 13.5, color: "#fff", padding: "10px 20px", border: 0 }}>

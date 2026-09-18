@@ -37,8 +37,7 @@
 | `color.brandHover` | `#3d68e8` | `color.brand` 채움 위에 마우스를 올렸을 때. Button.tsx의 primary variant뿐 아니라 홈 화면 CTA(HomeSearch·SearchResultsScreen·RequestHelpScreen)도 같은 값을 쓴다 |
 | `color.text.primary` | `#0a0a0a` | 제목, 강조 숫자(잔액 등), 다크 CTA 배경(`Button`의 `dark` variant) |
 | `color.text.secondary` | `#64748b` | 라벨, 보조 설명. 기존 `SUBTITLE_COLOR`와 동일(이름은 하위 호환을 위해 그대로 둠) |
-| `color.text.muted` | `#9ca3af` | 카드 안 옅은 라벨. **대비 4.5:1 미만(2.54:1, 흰 배경 기준) — 아래 "대비 확인 결과" 참고, 이번엔 값을 바꾸지 않았다** |
-| `color.text.faint` | `#737373` | 또 다른 보조 회색(4.5:1대, AA 통과). muted와 톤이 미묘하게 달라 구분 유지 |
+| `color.text.muted` | `#9ca3af` | 카드 안 옅은 라벨, 장식용 아이콘 등 "읽지 않아도 되는" 부가 정보 전용. **대비 4.5:1 미만(2.54:1, 흰 배경 기준) — 아래 "대비 확인 결과" 참고, 이번엔 값을 바꾸지 않았다.** 읽어야 하는 작은 텍스트에는 쓰지 않는다(2026-09-18 대비 재확인 이후 원칙 — "회색 계열" 절 참고) |
 | `color.surface.default` | `#ffffff` | 카드/팝오버 기본 배경 |
 | `color.surface.subtle` | `#f8fafc` | 카드 안 보조 박스, 새로고침 버튼 배경 |
 | `color.surface.accent` | `#eff6ff` | 브랜드 톤 옅은 배경(선택된 상태, "내 크레딧" 배지 배경) |
@@ -214,26 +213,173 @@ import { Tabs, tabPanelProps } from "@/app/components/common/Tabs";
 성격에 가까워 보이지만(섹션마다 편집 대상이 바뀐다) 이번 범위(요금제/크레딧) 밖이라
 `role="tablist"`를 적용하지 않았다 — 후속 과제로 남긴다.
 
+### `Badge` — `src/app/components/common/Badge.tsx`
+
+```tsx
+import { Badge } from "@/app/components/common/Badge";
+<Badge tone="brand">구독 중</Badge>
+<Badge tone="warning">해지 예정</Badge>
+<Badge tone="neutral">결제 완료</Badge>
+<Badge tone="danger">결제 실패</Badge>
+```
+
+새 색은 만들지 않았다 — `brand`/`neutral`/`warning`은 화면마다 이미 쓰던 pill 색
+쌍(각각 UsageSummary의 "현재 요금제" 배지, 크레딧 사용 내역의 중립 유형 배지,
+요금제 페이지 개발용 안내 박스)을 그대로 가져왔다. `danger`만 새로 짝지었는데,
+진한 텍스트(`#ef4444`, 크레딧 사용 내역의 음수 금액 색)에 다른 톤과 같은 "옅은
+배경 + 진한 텍스트" 패턴을 적용해 배경만 새로 골랐다(`#fef2f2`) — 값 자체를
+새로 만든 게 아니라 기존 패턴을 그대로 확장한 것.
+
+### `Modal` — `src/app/components/common/Modal.tsx`
+
+`PurchaseConfirmDialog`에 박혀 있던 모달 shell(배경 블러, 중앙 카드 라운드·그림자,
+ESC 닫기)을 뽑아냈다. `PurchaseConfirmDialog`와 `CancelSubscriptionDialog`,
+`PaymentMethodDialog`가 이걸 함께 쓴다 — 확인용 모달이 반복될 때마다 chrome을
+새로 쓰지 않기 위해서다.
+
+## 구독·결제(mock) — `src/app/state/subscription.ts`
+
+크레딧·요금제 페이지의 자연스러운 확장으로 월 구독/추가 충전/결제 수단/결제
+내역/구독 해지를 추가했다(2026-09-17). **실제 결제 백엔드·토스페이먼츠 SDK는
+여전히 없다**(package.json에 관련 의존성 없음, 서버/API 디렉터리 자체가 없음 —
+2026-09-17 재확인). 이 스토어의 상태 변경 액션(`subscribeToPlan`, `addTopup`,
+`scheduleCancel`, `undoCancel`, `setPaymentMethod`)은 전부 로컬 상태만 바꾸는
+시뮬레이션이다.
+
+**Toss Payments 연결 지점 분리(2026-09-17 갱신)** — 카드사를 사용자가 직접
+고르는 UI(신한/현대/국민/카카오뱅크 목록)는 완전히 제거했다. 대신 실제 연동 전
+경계를 아래 5개 함수로 명확히 나눴다 — 전부 `Promise`를 반환하고, 연동 시 함수
+내부만 실제 SDK/API 호출로 바꾸면 호출부(화면 코드)는 그대로 둘 수 있다.
+
+| 함수 | 대응하는 실제 Toss/서버 동작 | 반환 |
+|---|---|---|
+| `registerCardWithTossPayments()` | 카드 등록/인증(빌링키 발급) | `TossCardResult`(success/failure/cancelled) |
+| `chargeFirstPaymentWithTossPayments(plan)` | 구독 첫 결제 승인(빌링키로 청구) | `TossChargeResult` |
+| `chargeTopupWithTossPayments(pkg)` | 크레딧 충전 일회성 결제 | `TossChargeResult` |
+| `cancelSubscriptionWithServer()` | 서버의 해지 처리(다음 자동결제 중단) | `{success}` |
+| `fetchPaymentHistory()` | 결제 내역 조회 | `Promise<PaymentRecord[]>`(reject 시 조회 실패) |
+| `fetchPaymentMethod()` | 결제 수단 조회 | `Promise<PaymentMethod \| null>`(reject 시 조회 실패) |
+
+- **카드 등록 ≠ 첫 결제 ≠ 구독 활성화**를 서로 다른 상태로 관리한다. "구독
+  시작" 확인창에서 등록된 카드가 없으면 `registerCardWithTossPayments()`를
+  먼저 부르고(성공해도 아직 구독 아님), 그다음 `chargeFirstPaymentWithTossPayments`가
+  성공해야만 `subscribeToPlan()`으로 실제 활성화한다. 둘 중 하나라도 실패/취소되면
+  구독 상태는 바뀌지 않는다.
+- 카드 변경(`setPaymentMethod`)은 `lastPaymentFailed`를 건드리지 않는다 — "카드를
+  바꿨다"와 "밀린 결제가 해결됐다"는 다른 사실이라, 카드 변경만으로 결제 실패
+  상태를 지우지 않는다. 실패 후 재청구 흐름 자체는 정책 미정이라 구현하지 않았다.
+- 개발용 결정적 실패/취소 재현: `getDevForcedOutcomes()`/`setDevForcedOutcome()`로
+  다음 호출 결과(성공/실패/취소)를 강제할 수 있다. `BillingManagementPage`의
+  `?devpanel=1` 패널에서 6개 항목(카드 등록/첫 결제/충전 결제/해지/내역 조회/결제
+  수단 조회)을 각각 토글해 실패·취소 화면을 결정적으로 확인한다.
+- 결제 수단은 `subscription.paymentMethod`를 그대로 읽지 않고 `fetchPaymentMethod()`를
+  거친 값(`BillingManagementPage`의 `cardMethod`/`cardState`)을 화면에 쓴다 —
+  "조회 자체에 실패했다"(`cardState==="error"`, 재시도 버튼)와 "정상 조회했는데
+  카드가 없다"(`cardState==="ready" && cardMethod===null`, 등록 유도)를 구분하기
+  위해서다. 등록/변경 성공 시엔 그 응답을 바로 반영하고 재조회하지 않는다(성공
+  직후 "불러오는 중"이 다시 뜨는 어색함을 피한다). 등록(카드가 없던 상태)과
+  변경(이미 카드가 있던 상태)은 토스트 문구가 다르다 — "결제 수단이
+  등록되었습니다." / "결제 수단이 변경되었습니다. 다음 정기결제부터 적용됩니다."
+  실패 문구도 같은 기준으로 "등록하지 못했습니다"/"변경하지 못했습니다"로 갈린다.
+- 설정 크레딧 탭(`SettingsCreditTab.tsx`)은 결제 수단을 `subscription.paymentMethod`에서
+  카드사·마스킹 번호만 요약해 보여준다(등록·변경 버튼 없음) — 등록/변경 UI는
+  `BillingManagementPage` 한 곳에만 둔다. 두 화면이 같은 스토어를 읽으므로 변경
+  후 설정을 다시 열어도 최신 값이 보인다.
+- 크레딧을 "구독 지급분"과 "추가 충전분" 두 버킷으로 나눈다. 아직 한 번도
+  구독/충전을 하지 않은 상태에서는 기존 총액(`creditBalance.ts`)을 임의로
+  나누지 않고 "—"로 가려 둔다(이전 크레딧 페이지 작업에서 정한 원칙 유지) —
+  첫 구독/충전이 실제로 일어나는 순간부터만 버킷을 추적한다.
+- `creditBalance.ts`(총액, AI 에디터가 실시간으로 차감)는 건드리지 않았다.
+  대신 이 스토어가 그 총액 변화를 구독해 "구독분부터 소진" 규칙으로 두 버킷에
+  반영한다 — AI 편집 차감 금액·조건은 그대로다.
+- IA: 프로필 메뉴 → 설정 → 크레딧(요약만) → **구독 및 결제 관리**(상세 관리) →
+  결제 수단 변경 / 결제 내역 / 구독 해지. 구독 해지는 메인·설정 화면에 노출하지
+  않고 "구독 및 결제 관리" 화면 가장 하단에 낮은 강조도 버튼(`Button
+  variant="secondary"`에 텍스트 색만 `#ef4444`)으로만 둔다 — 큰 필드/강한 빨강
+  버튼을 쓰지 않는다는 요구를 그대로 따랐다.
+- 구독 해지 확인창은 반복적인 방어 화면을 두지 않는다 — 제목·본문 한 줄·이용
+  종료일 안내 한 줄·버튼("구독 유지"/"구독 해지")이 전부다. 서버 확인
+  (`cancelSubscriptionWithServer`) 후에만 `scheduleCancel()`로 반영하고, 실패하면
+  모달 안에서 에러만 보여주고 기존 상태를 유지한 채 재시도할 수 있다.
+- 결제 내역은 완료/실패/취소/환불/부분환불 상태와 구독·충전 유형 배지를 함께
+  보여준다. `receiptUrl`이 실제로 있을 때만 "영수증 보기"를 노출한다 — 지금은
+  실데이터 소스가 없어 mock 레코드엔 전부 `receiptUrl`이 없고, 그래서 "영수증
+  보기"는 항상 숨겨진다(의도된 동작). 조회는 `fetchPaymentHistory()`를 거쳐
+  로딩/실패/재시도 상태를 실제로 갖는다.
+- 크레딧 사용 내역(`CreditHistoryScreen`)과 결제 내역(`BillingManagementPage`
+  Section 03)은 서로 다른 목록이다 — 섞지 않는다.
+
+새 화면: `SettingsCreditTab.tsx`(설정 크레딧 탭, 기존 "크레딧 사용량" 자리표시자
+카드 4개는 실제 데이터가 없어 제거), `BillingManagementPage.tsx`,
+`SubscriptionCompletePage.tsx`, `CancelSubscriptionDialog.tsx`,
+`PaymentFailedAlert.tsx`. `PaymentMethodDialog.tsx`(카드사 선택 모달)는
+2026-09-17에 완전히 제거했다 — "결제 수단 등록/변경" 버튼이 이제 모달 없이
+바로 `registerCardWithTossPayments()` 연결 지점을 부른다.
+
 ## 적용 범위
 
 이번에 토큰·공통 컴포넌트를 적용한 화면(2026-09-17 기준):
 
-- `src/app/components/pricing/*`(PricingPage, UsageSummary, SubscriptionTab, TopUpTab, PurchaseConfirmDialog)
-- `src/app/App.tsx`의 `ProfileMenuButton`(내 크레딧 카드 + CTA)
-- `src/app/App.tsx`의 `SettingsModal` 크레딧 탭(요약 카드, 사용량 카드, 하단 액션)
+- `src/app/components/pricing/*`(PricingPage, UsageSummary, SubscriptionTab, TopUpTab, PurchaseConfirmDialog, BillingManagementPage, SubscriptionCompletePage, CancelSubscriptionDialog, PaymentFailedAlert)
+- `src/app/components/settings/SettingsCreditTab.tsx`(설정 크레딧 탭 — App.tsx에서 추출)
+- `src/app/App.tsx`의 `ProfileMenuButton`(내 크레딧 카드 + CTA), `SettingsModal`(크레딧 탭 렌더만 위임)
 - `src/app/App.tsx`의 `CreditHistoryScreen`(잔액 카드, 리스트 카드, 필터 행, "+크레딧 충전" 버튼 — 화면 구조·필터·정렬·뒤로가기 등 기존 동작은 그대로 유지)
-- `src/app/components/common/{Button,Tabs,ScrollableChips}.tsx`(공통 컴포넌트 자체)
+- `src/app/components/common/{Button,Tabs,ScrollableChips,Badge,Modal}.tsx`(공통 컴포넌트 자체)
+- `src/app/state/subscription.ts`(신규 — 구독·결제·크레딧 버킷 mock 스토어)
 - 서비스 전역의 브랜드 블루 색상값(아래 "1) 브랜드 블루" 참고) — 홈/검색/템플릿 화면의
   **레이아웃·문구는 건드리지 않고 색상값만** `#2563eb`→`color.brand`, `#1d4ed8`→`color.brandHover`,
   `#eff5ff`→`color.surface.accent`로 맞췄다. 대상 파일: `HomeSearch.tsx`,
   `SearchResultsScreen.tsx`, `TaskTemplateScreen.tsx`, `RequestHelpScreen.tsx`,
   `TemplateResultCard.tsx`, `RecommendedCarousel.tsx`, `App.tsx`(홈 히어로의 "딸깍" 글자색)
 
-**적용하지 않은 곳**: 랜딩페이지, 홈/검색/템플릿 화면의 레이아웃·타이포·간격·컴포넌트
+**적용하지 않은 곳**: 랜딩페이지, 검색/템플릿 화면의 레이아웃·타이포·간격·컴포넌트
 구조(색상값만 위에서 맞췄을 뿐 나머지는 그대로), 기업 브랜드 킷. `CreditHistoryScreen`의
 `#3b63f6`(양수 금액/상세 텍스트 색), `#475569`, `#ef4444`(오류)는 이번 브랜드 블루
 결정(`#2563eb` 계열만 해당) 범위 밖이라 손대지 않았다 — 새로 발견된 네 번째 블루
-계열로 기록만 해 둔다.
+계열로 기록만 해 둔다. **홈 화면의 레이아웃은 이후 재구성했다 — 아래 "홈 화면 재구성"
+참고.**
+
+## 홈 화면 재구성 (2026-09-17)
+
+메인 홈을 "제목+검색 → 대표 카테고리 → (선택 시) 세부 기능 → 바로 시작하기 좋은
+템플릿 → 전체 기능" 순서로 다시 짰다. 기존 검색·요청 작성 도움받기·템플릿
+선택·기능 카드 이동 동작은 그대로 두고 배치와 카테고리 선택 상호작용만 바꿨다.
+
+- **카테고리 데이터는 하나의 원본만 쓴다** — `src/app/data/tasks.ts`의 `TASK_GROUPS`에
+  그룹별 대표 아이콘(`TaskGroup.icon`)을 추가해, 홈의 "대표 카테고리" 5개 바로가기와
+  "전체 기능" 7개 그룹 헤더가 같은 데이터에서 파생된다(이름·아이콘·이동 경로를
+  두 곳에 따로 적지 않는다).
+- 신규 `CategoryQuickLinks.tsx` — 대표 카테고리(이미지/문서/발표자료/표·데이터/영상)
+  5개를 "일러스트 위 + 이름 아래" 형태로 보여준다. 기본은 테두리·그림자 없음, hover는
+  옅은 회색 배경, 선택은 `color.surface.accent` 배경 + `color.brand` 텍스트로 구분한다.
+  다시 누르면 선택이 풀린다(같은 위치의 세부 기능 영역이 접힌다) — 페이지 이동·강제
+  스크롤은 없다. "더보기"는 없앴다(오디오·웹페이지는 전체 기능에서만 보인다).
+- 신규 `CategoryFeatureStrip.tsx` — 카테고리를 선택하면 그 아래 나타난다. 기존
+  `TaskGrid.tsx`의 `TaskCard`를 그대로 재사용한다(새 카드를 만들지 않음). `status
+  === "available"`인 항목만 보여주고, 카드 폭을 고정해 1~2개여도 가로 전체로
+  늘리지 않는다. 실제로 넘칠 때만(스크롤 컨테이너의 scrollWidth > clientWidth)
+  좌우 화살표가 나타나고, 스크롤이 끝에 닿으면 그 방향 버튼이 사라진다(`ResizeObserver`
+  + `scroll` 이벤트로 매번 다시 계산).
+- `RecommendedCarousel.tsx`("바로 시작하기 좋은 템플릿") — 자동 재생·무한 순환 마퀴를
+  없애고 일반 `overflow-x-auto` 가로 스크롤로 바꿨다(첫 카드가 왼쪽 끝에 온전히
+  보이고 다음 카드가 오른쪽에 걸치는 건 이 기본 동작 그대로 나온다). 좌우 화살표는
+  카드 위가 아니라 제목 옆에 둬서 표지를 가리지 않는다. **주의**: `TaskTemplate`에는
+  실제 미리보기 이미지 필드가 원래 없어서(이 프로젝트 어디에도 템플릿별 실제 표지
+  이미지 자산이 없다 — 2026-09-17 확인), 기존에 쓰던 자리표시자(대각선 빗금 패턴)를
+  그대로 쓰되 "표지 예시"·형식 배지·흰 정보 박스를 지우고 제목만 이미지 위 최소
+  캡션으로 남겼다. 실제 표지 이미지 자산이 생기면 이 배경을 실제 `<img>`로 교체하면
+  된다(카드 크기·비율 로직은 이미 `meta`의 정사각형/세로형/가로형/와이드 키워드로
+  계산해 두어서 그대로 맞는다).
+- `TaskGrid.tsx`("전체 기능") — 그룹별 배치·"준비 중" 회색 처리·이동 경로는 그대로
+  두고, 반응형 열만 `grid-cols-1 sm:grid-cols-2 md:max-wide:grid-cols-3
+  wide:grid-cols-4`로 다듬었다(가장 좁은 화면에서 1열).
+- `HomeSearch.tsx` — 큰 "요청 작성 도움받기" 배너 카드를 지우고 검색창 아래 오른쪽
+  링크 한 줄로 줄였다. 검색창은 최대 폭 760px·높이 60px·입력 16px, PC/모바일
+  placeholder를 나눴다(768px 미만은 짧은 문구).
+- `theme.css` — `--hero-title-size`가 데스크톱(≥1200px)에서도 모바일과 같은 26px를
+  그대로 쓰고 있었다(재확인 전까지 몰랐던 사각지대). ≥1200px 전용 오버라이드
+  38px를 추가했다. `--gap-title-search`(26px)를 새로 둬서 제목→검색창 간격을
+  섹션 간격(`--home-block-gap`, 44px)과 분리했다.
 
 ## 반응형 규칙
 
@@ -331,6 +477,81 @@ solid, MobileEditorNotice)이 깨진다. 새 컴포넌트는 이 규칙과 충�
 정확히 측정했을 뿐, 값 자체를 바꾸는 것은 "근거 없는 브랜드 변경"에 해당해 이번
 범위에서는 하지 않았다 — 다음 단계(PDF 기반 화면 검수)에서 실제 화면 문제로
 판단되면 그때 사용자 확인 후 조정할 항목으로 남긴다.
+
+## 중성 회색·쿨 그레이 혼용 정리 (2026-09-18, 2026-09-18 표현·대비 수정 반영)
+
+홈·요금제/크레딧·요청 작성 도우미·설정·프로필의 회색 텍스트·아이콘·테두리·배경을 실제
+computed 값 기준으로 훑었다. 대부분은 이미 슬레이트 계열(`#64748b`/`#9ca3af`/`#e2e8f0`/
+`#f8fafc` 등)로 일관돼 있었고, `stone`/`zinc` 같은 실제 웜 계열 Tailwind 클래스나
+하드코딩된 웜 hex는 발견되지 않았다(카테고리 배지색·danger 배경·영상 목업 그라디언트처럼
+의도된 색은 제외). **주의**: 이 판단은 "B채널이 R채널 이상인가"만으로 내리지 않았다 —
+그 기준 하나로는 채도가 0인 완전 무채색(R=G=B)도 다르게 분류되므로, 실제로는 각 색의
+채도·색상각과 주변에서 실제로 쓰이는 값과의 시각적 일관성을 함께 봤다.
+
+유일한 실제 불일치는 `color.text.faint`(`#737373`)였다 — **웜톤이 아니라 R=G=B로
+채도가 0인 완전 무채색(중성 회색)이다.** 이 자체는 "잘못된 색"이 아니지만, 나머지
+회색 토큰이 전부 미세하게 파란기가 도는 슬레이트 계열이어서, 무채색 하나만 섞여 있으면
+그 자리만 계열이 갈려 보였다 — 즉 이번 정리는 "웜톤을 걷어낸" 것이 아니라 **중성
+회색과 쿨 그레이 계열의 혼용을 하나(쿨 그레이 계열)로 정리**한 것이다. 이 토큰이
+실제로 쓰이던 자리(페이지 설명, 가격 옆 단위 "/ 월"·"크레딧", 알림 본문, 사이드바
+"이전 대화 더 보기", 종·검색 아이콘)를 역할별로 다시 보니 전부 이미 있는 `secondary`
+(설명·읽어야 하는 본문) 또는 `muted`(부가 정보)로 나뉘어서, 별도 토큰을 굳이 유지할
+이유가 없었다 — 값을 바꾸는 대신 토큰 자체를 정리하고 각 사용처를 맞는 기존 토큰에
+연결했다.
+
+- `color.text.faint` 토큰 제거(`styleTokens.ts`) — 위 이유로 전 사용처를 확인한 뒤
+  제거했다(전역 검색으로 재확인, `src/imports/*`의 미사용 Figma 원본 제외).
+- `secondary`로 연결: `PageContainer.tsx`의 `PageHeader` 설명, 알림 패널/전체 알림
+  화면의 알림 본문 3곳, `IconBell`.
+- `muted`로 연결(1차, 이후 대비 재확인에서 정정됨 — 아래 절 참고): 요금제·크레딧의
+  "/ 월"·"크레딧" 단위 라벨, 사이드바 "이전 대화 더 보기". `IconSearch`(장식용 아이콘,
+  텍스트 아님)는 `muted`로 유지.
+- 사용되지 않는 `IconSettings`(App.tsx)는 어디서도 렌더링되지 않아(전역 검색으로 확인)
+  손대지 않았다 — 실제 화면에 영향이 없는 죽은 코드까지 이번 범위에서 고치지 않는다.
+
+### 대비 재확인과 정정 (2026-09-18, 같은 날 후속 수정)
+
+1차 정리에서 "기존에 이미 쓰이던 토큰이니 대비 문제는 없다"고 가정한 것이 잘못이었다 —
+`color.text.muted`(`#9ca3af`)는 흰 배경 기준 **2.54:1**로 AA 4.5:1에 크게 미달한다
+(design-system.md 위쪽 "대비 확인 결과" 절에 이미 측정돼 있던 값과 동일). 반면 옮기기
+전 값이던 `color.text.faint`(`#737373`)는 흰 배경에서 **4.74:1**로 AA를 통과하고
+있었다 — 즉 1차 정리가 "같은 역할·같은 무게의 값을 옮긴 것"이 아니라 **가독성을
+낮추는 회귀**를 만들었다. `color.text.secondary`(`#64748b`)는 흰 배경에서 **4.76:1**로
+통과한다.
+
+읽어야 하는 텍스트(가격 옆 단위, 정적 캡션)에 쓰인 `muted`를 전부 `secondary`로
+다시 옮겼다 — `muted` 자체(토큰 값)는 바꾸지 않았고(다른 화면 다수가 이미 참조하는
+공용 값이라 이번 범위에서 건드리지 않는다), 이번에 새로 옮긴 "읽기용" 사용처만
+개별적으로 재조정했다:
+
+| 위치 | 이전 토큰 | 최종 토큰 | 실제 배경 | 대비(변경 전→후) | 브라우저 확인 |
+|---|---|---|---|---|---|
+| `TopUpTab.tsx` 패키지 행 "크레딧" | `muted`(1차) | `secondary` | 흰색(기본) / `#f8fafc`(호버) / `#f1f5f9`(눌림) / `#f0f5ff`(선택) | 2.54:1 → 4.76:1(기본) · 약 4.3~4.4:1(눌림·선택, 경계 미달 가능) | 미확인 |
+| `SubscriptionTab.tsx` 가격 옆 "/ 월" | `muted`(1차) | `secondary` | 흰색(카드 배경 고정) | 2.54:1 → 4.76:1 | 미확인 |
+| `CreditBalanceCard.tsx` 잔액 옆 "크레딧" | `muted`(1차) | `secondary` | 흰색 | 2.54:1 → 4.76:1 | 미확인 |
+| `SubscriptionBillingTab.tsx` 가격 옆 "/ 월" | `muted`(1차) | `secondary` | 흰색(`SectionCard`) | 2.54:1 → 4.76:1 | 미확인 |
+| `App.tsx` 사이드바 "이전 대화 더 보기" | `muted`(1차) | `secondary` | 흰색(사이드바 배경) | 2.54:1 → 4.76:1 | 미확인 |
+| `App.tsx` `IconSearch`(장식 아이콘, 텍스트 아님) | `muted`(유지) | `muted`(유지) | 흰색 | 변화 없음(2.54:1) — 텍스트 기준을 아이콘에 그대로 적용하지 않음 | 미확인 |
+
+**남은 한계 — 이번 범위에서 완전히 해결하지 못한 것**: `TopUpTab`의 "크레딧" 단위는
+패키지 행의 눌림(`#f1f5f9`)·선택(`#f0f5ff`) 배경에서 `secondary`가 약 4.3~4.4:1로
+AA 4.5:1에 근소하게 못 미칠 수 있다(기본·호버 상태는 4.5:1 이상). 이 두 상태의 배경
+자체(브랜드 틴트 배경 토큰)를 조정해야 완전히 해결되는데, 이는 텍스트 토큰이 아니라
+그 행의 배경 토큰 범위의 문제라 이번 "회색 텍스트 토큰" 정리 범위를 벗어난다 — 별도
+확인이 필요한 항목으로 남긴다.
+
+**muted 토큰 자체의 개선 여부**: 이번엔 `color.text.muted` 값 자체(2.54:1)는 바꾸지
+않았다. 이 값은 이 다섯 곳 외에도 여러 화면에서 참조되므로, 값을 바꾸려면 전체
+사용처와 테마 영향을 별도로 정리해야 한다 — design-system.md 아래 "미해결 또는
+미확인" 절의 기존 항목으로 남겨 둔다.
+
+**검증**: `npm run typecheck` / `npm run build` 통과(대비 재수정 이후 재실행 기준).
+Hover·focus·selected·disabled 색 로직 자체는 건드리지 않았다(값만 토큰 참조로
+교체). **다만 상태 로직을 건드리지 않았다는 사실이 시각적 회귀가 없다는 뜻은
+아니다** — 이번에도 브라우저 자동화 도구가 없어 기본·hover·focus·selected·disabled
+상태의 실제 렌더링을 육안으로 확인하지 못했다. 위 표의 "브라우저 확인" 열은 전부
+미확인으로 남겨 둔다 — `npm run dev`로 특히 `TopUpTab`의 눌림/선택 상태를 직접 확인
+해 주기를 요청한다.
 
 ## 남은 항목 — 해결 완료 / 의도적으로 유지하는 예외 / 미해결·미확인
 

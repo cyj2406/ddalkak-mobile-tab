@@ -56,8 +56,6 @@ export const color = {
     secondary: "#64748b",
     /** 더 옅은 보조 텍스트(카드 라벨 등) */
     muted: "#9ca3af",
-    /** 캡션류에 쓰던 또 다른 회색 — muted 와 톤이 미묘하게 달라 그대로 유지 */
-    faint: "#737373",
   },
   surface: {
     default: "#ffffff",
@@ -98,6 +96,41 @@ export const typography = {
 } as const;
 
 /**
+ * 홈 화면 섹션 제목("바로 시작하기 좋은 템플릿", "전체 기능") 전용 — 위 typography 항목들과
+ * 달리 PC/모바일 크기가 달라야 해서(PC 22px·행간 30px / 모바일 20px·행간 28px, 둘 다
+ * fontWeight 600 — 2026-09-18에 24/32·700에서 한 단계 낮췄다) 반응형 className과 고정
+ * 스타일을 나눠 내보낸다. 두 섹션 제목이 항상 같은 값을 쓰도록 이 상수 하나만 참조한다 —
+ * 각자 값을 따로 적지 않는다. `wide` 브레이크포인트(1200px)는 홈 히어로 타이틀
+ * (theme.css --hero-title-size)과 같은 PC 기준이다. Pretendard Variable은 45~920 전
+ * 구간을 지원하는 가변 폰트라(design-system.md "Pretendard 800/900 확인 결과" 참고,
+ * 600은 그보다 훨씬 안전한 굵기) 합성 볼드 걱정 없이 600을 그대로 쓴다.
+ */
+export const homeSectionTitleClassName = "text-[20px] wide:text-[22px] leading-[28px] wide:leading-[30px]";
+export const homeSectionTitleStyle = { ...f, fontWeight: 600, letterSpacing: "-0.5px", color: color.text.primary } as const;
+
+/**
+ * 홈 "전체 기능" 그룹 제목("이미지", "문서", "발표자료"...) 전용(2026-09-18) — 섹션
+ * 제목(위)보다 한 단계 낮은 위계라 크기를 더 낮췄다(PC 18px·행간 26px / 모바일 16px·
+ * 행간 24px, 둘 다 600). `typography.sectionTitle`(17px/700, 플랜 카드·프로필 팝오버 등
+ * 다른 화면에서도 쓰는 공용 토큰)을 그대로 손대지 않고 홈 전용으로 새로 뺐다 — 값을
+ * 바꾸면 그 다른 화면들까지 흔들린다. 색은 `color.text.primary`(순검정, 제목·숫자용)
+ * 대신 이미 "본문"용으로 쓰던 진한 중성~쿨 그레이(`typography.body.color`, #4b5262)를
+ * 재사용해 primary보다 한 단계 낮은 무게를 낸다 — 새 회색 값을 만들지 않는다.
+ */
+export const taskGroupTitleClassName = "text-[16px] wide:text-[18px] leading-[24px] wide:leading-[26px]";
+export const taskGroupTitleStyle = { ...f, fontWeight: 600, letterSpacing: "-0.3px", color: typography.body.color } as const;
+
+/**
+ * 홈 상단 카테고리 버튼("이미지"/"문서"/...·"전체 보기") 전용(2026-09-18) — 그룹
+ * 제목보다도 낮은 위계라 굵기를 500(medium)까지 낮췄다(PC 16px·행간 24px / 모바일
+ * 14px·행간 20px). hover·선택 상태는 굵기를 바꾸지 않고 배경·테두리·색상만 바뀐다
+ * (굵기가 바뀌면 같은 글자라도 폭이 달라져 버튼이 흔들린다). 기본(미선택) 텍스트 색도
+ * 그룹 제목과 같은 이유로 `typography.body.color`를 쓴다 — 선택 시에만 `color.brand`로
+ * 바뀐다(기존 그대로).
+ */
+export const categoryButtonClassName = "text-[14px] wide:text-[16px] leading-[20px] wide:leading-[24px]";
+
+/**
  * 라운드 — 요금제 페이지 기준 값. 버튼·입력창 등 "조작 가능한 요소"는 control 하나로
  * 통일돼 있었고(14px), 카드는 강조도에 따라 두 단계(16 / 20)로 이미 나뉘어 있었다.
  */
@@ -124,3 +157,16 @@ export const controlHeight = {
 
 /** 페이지 콘텐츠 최대 폭 — 홈 화면의 --home-container(theme.css) 데스크톱 상한과 같은 값. */
 export const pageContainerWidth = 1120;
+
+/**
+ * Motion — Interaction Layer 전체가 공유하는 유일한 두 값. 컴포넌트마다 임의의
+ * duration/easing을 새로 정하지 않고 이 둘 중 하나를 쓴다.
+ *   fast:   hover/pressed/tab·chip 전환 같은 즉각적인 micro-interaction (120~200ms)
+ *   normal: modal/dropdown/popover/accordion처럼 레이어가 열리고 닫히는 전환 (180~240ms)
+ * easing은 과장 없는 ease-out 계열 하나로 고정한다(진입은 감속, 퇴장은 살짝 더 빠르게
+ * 느껴지되 같은 커브를 재사용).
+ */
+export const motion = {
+  fast: "160ms cubic-bezier(0.4, 0, 0.2, 1)",
+  normal: "200ms cubic-bezier(0.4, 0, 0.2, 1)",
+} as const;

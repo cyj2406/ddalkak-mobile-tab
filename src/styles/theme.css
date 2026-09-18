@@ -64,6 +64,8 @@
      한 덩어리 안(검색창 ↔ 도움받기 배너)은 --home-cluster-gap. */
   --home-block-gap: 44px;
   --home-cluster-gap: 12px;
+  /* 홈 제목 ↔ 검색창 간격 — 섹션 사이(44px)보다는 좁고, 제목·부제 간격보다는 넓다. */
+  --gap-title-search: 26px;
   /* ── 홈·서비스 히어로 타이포 스케일 ─────────────
      기본값 = 지금의 모바일(≤767px) 수치. 데스크톱(≥1200px)도 이 값을 그대로 쓴다.
      태블릿(768~1199px)만 아래 미디어 블록에서 키운다. */
@@ -144,7 +146,7 @@
    아래 태블릿 블록이 이 값들을 덮으므로 반드시 이 순서를 유지할 것. */
 .home-stack { display: contents; }
 .home-body { flex: 2 1 auto; }
-.home-heading { margin-bottom: var(--home-block-gap); }
+.home-heading { margin-bottom: var(--gap-title-search); }
 .home-sub { margin-top: 8px; }
 
 /* ── 태블릿(768~1199px) 홈·서비스 화면 ────────────────────────────────────────
@@ -190,8 +192,18 @@
     padding-block: 24px;
   }
   .home-body { flex: 0 0 auto; }
-  .home-heading { margin-bottom: var(--gap-sub-composer); }
+  .home-heading { margin-bottom: var(--gap-title-search); }
   .home-sub { margin-top: var(--gap-title-sub); }
+}
+
+/* ── 데스크톱(≥1200px) 홈 헤드라인 ─────────────────────────────────────────────
+   기존엔 데스크톱도 모바일과 같은 26px를 그대로 썼다 — 홈 히어로 치고 작아서
+   36~40px 범위로 키운다(다른 --svc-* 화면엔 영향 없음, 홈 전용 --hero-title-size만). */
+@media (min-width: 1200px) {
+  :root {
+    --hero-title-size: 38px;
+    --hero-title-tracking: -1.4px;
+  }
 }
 
 /* ── 워크스페이스 상세 프롬프트 카드 본문 ─────────────────────────────
@@ -463,10 +475,192 @@
 /* 컴포저 하단 칩 줄 — 가로 스크롤은 살리고 스크롤바만 감춘다(전송 버튼은 이 영역 밖에 고정). */
 .composer-chips-scroll::-webkit-scrollbar { display: none; }
 
+/* ── 홈 "바로 시작하기 좋은 템플릿" 캐러셀 — 이전/다음 버튼 ─────────────────────
+   호버 가능한 포인터(마우스)에서는 평소 숨기고, 캐러셀 뷰포트(.carousel-viewport)
+   위에 마우스가 있거나 내부에 키보드 포커스가 들어와 있을 때만 보인다. 버튼 자신
+   위로 마우스를 옮겨도 뷰포트의 자식이라 :hover가 계속 유지된다(별도 처리 불필요).
+   호버 개념이 없는 터치 등에서는 이 미디어 쿼리 자체가 적용되지 않아 항상 보인다
+   (스와이프는 그대로 네이티브 동작). 처음/끝 위치의 옅어짐(--nav-enabled-opacity,
+   컴포넌트가 disabled일 때 인라인으로 내려준다)과 호버 노출은 서로 다른 opacity라
+   calc()로 곱해서 하나의 값으로 합친다 — 회전운동을 위해서. */
+.carousel-nav-btn {
+  --nav-hover-visible: 1;
+  opacity: calc(var(--nav-hover-visible) * var(--nav-enabled-opacity, 1));
+  transition: opacity 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+@media (hover: hover) and (pointer: fine) {
+  .carousel-nav-btn {
+    --nav-hover-visible: 0;
+    pointer-events: none;
+  }
+  .carousel-viewport:hover .carousel-nav-btn,
+  .carousel-viewport:focus-within .carousel-nav-btn {
+    --nav-hover-visible: 1;
+    pointer-events: auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .carousel-nav-btn { transition: none; }
+}
+
+/* ── 홈 "바로 시작하기 좋은 템플릿" 캐러셀 — 카드 호버 리프트 ────────────────────
+   이미지 프레임(.template-card-media)에만 transform을 줘서 카드 전체(.template-card,
+   이미지가 곧 클릭 영역)의 크기·위치는 그대로다. 호버(실제 정밀 포인터)와
+   키보드 포커스를 서로 다른 트리거로 분리한다 — 포커스는 움직임 없이 테두리·그림자만,
+   호버는 거기에 4px 들림을 더한다. 그림자는 기존 하나(0 4px 16px)에서 한 단계만
+   강해진다(0 10px 26px, 같은 브랜드 톤 계열로 alpha만 살짝 올림). prefers-reduced-motion
+   에서는 호버해도 들림(transform)만 빠지고 테두리·그림자 변화는 그대로 남는다. */
+.template-card-media {
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1), border-color 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.template-card:focus-visible .template-card-media {
+  border-color: #4f7bff;
+  box-shadow: 0 4px 16px rgba(79, 123, 255, 0.16);
+}
+@media (hover: hover) and (pointer: fine) {
+  .template-card:hover .template-card-media {
+    border-color: #4f7bff;
+    box-shadow: 0 10px 26px rgba(79, 123, 255, 0.2);
+  }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .template-card:hover .template-card-media {
+    transform: translateY(-4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .template-card-media { transition: box-shadow 160ms ease, border-color 160ms ease; }
+}
+
+/* ── 캐러셀 카드 이름 라벨 — 이미지 안쪽 하단 오버레이(2026-09-18, 상시 캡션 대체) ──
+   평소엔 opacity:0이라 카드 높이·여백을 차지하지 않는다. 호버(들림과 달리 포인터
+   종류 제한 없이 전부)와 키보드 포커스 둘 다에서 보인다 — 이름 확인은 이동(들림)과
+   달리 터치에서도 의미가 있지만, 터치는 hover 자체가 없어 CSS만으로는 켜지지 않는다
+   (탭은 이 라벨과 무관하게 곧바로 onClick을 실행한다). */
+.template-card-label {
+  opacity: 0;
+  transition: opacity 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.template-card:focus-visible .template-card-label {
+  opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .template-card:hover .template-card-label {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .template-card-label { transition: none; }
+}
+
+/* ── "전체 기능" 카테고리 카드 — 일러스트 흔들림(hover) ────────────────────────
+   카드 배경·테두리·제목·설명은 그대로 두고 일러스트 래퍼(.task-illustration-wobble)
+   에만 하단 중앙 기준 작은 회전을 한 번 재생한다. 원본 <img>의 기존 scale 보정(별도
+   요소)과는 충돌하지 않는다. 부모(.task-illustration-hover — "전체 기능" grid
+   variant·활성(준비 중 아님) 카드에만 붙는다, TaskGrid.tsx 참고)에 실제 호버 가능한
+   정밀 포인터로 마우스가 올라와 있을 때만 애니메이션이 걸린다. 호버가 풀리면
+   animation이 사라지고 아래 transition이 애니메이션의 마지막 각도에서 0도로 부드럽게
+   이어받는다(브라우저가 전환 시작점으로 현재 렌더링된 값을 쓰기 때문에 튀지 않는다).
+   반복 재생하지 않도록 iteration-count는 기본값(1)을 그대로 둔다. */
+.task-illustration-wobble {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 100%;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .task-illustration-hover:hover .task-illustration-wobble {
+    animation: taskIllustrationWobble 400ms cubic-bezier(0.33, 1, 0.68, 1);
+  }
+}
+@keyframes taskIllustrationWobble {
+  0% { transform: rotate(0deg); }
+  30% { transform: rotate(-2deg); }
+  65% { transform: rotate(1deg); }
+  100% { transform: rotate(0deg); }
+}
+/* 카드 자체(배경·테두리)에 hover 신호가 전혀 없던 grid 카드를 위한, reduced-motion
+   전용 대체 신호 — box-shadow는 인라인(TaskCard의 boxShadow 계산)이 var()를 참조하는
+   형태로 내려줘야 여기서 값을 채울 수 있다(인라인 스타일이 항상 CSS 클래스보다 우선
+   하는 문제를 피하기 위함, Button.tsx와 같은 이유). */
+@media (prefers-reduced-motion: reduce) {
+  .task-illustration-hover:hover {
+    --task-hover-shadow: 0 3px 10px rgba(26, 29, 41, 0.1);
+  }
+}
+
 /* ── 홈 추천 서식 캐러셀 마퀴 ─────────────────────────────────────────────────
    트랙에는 카드 목록을 두 번 이어 붙여 렌더한다 — 50% 지점에서 멈추면 원본 목록 하나만큼
    움직인 것과 같아 이음매 없이 반복된다. */
 @keyframes home-carousel-marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
+}
+
+/* ── Interaction Layer: 순수 input/textarea/select 공통 상태 ───────────────────
+   앱 전역(템플릿 생성 폼 등)에 흩어진 input/textarea/select 대부분이 outline-none만
+   있고 hover/focus/disabled 표시가 전혀 없었다. 화면마다 className을 따로 손보는 대신
+   여기 한 번으로 전체에 적용한다 — 각 입력마다 이미 Tailwind의 개별 border-color
+   유틸(예: border-[#e2e8f0])이 있어도, 아래 pseudo-class 선택자가 특이도상 항상
+   이긴다(엘리먼트+가상클래스가 단일 클래스 선택자보다 더 구체적이다). 이미 자체 포커스
+   처리를 하는 컴포넌트(Button/ScrollableChips 등은 버튼이라 대상 아님)에는 영향 없다. */
+/* .field-inline — 자기 자신은 테두리가 없고(border:0), 검색창처럼 감싸는 pill
+   컨테이너가 시각적 필드 역할을 하는 input에 붙인다. 이 클래스가 있으면 아래
+   input 단위 규칙에서 빠지고, 대신 감싸는 요소에 .field-pill을 붙여 그쪽에서
+   :focus-within으로 표시한다 — 안 그러면 둥근 pill 안에 각진 포커스 박스가
+   따로 떠서 어색해진다(실제로 이 문제가 있었다: 홈/검색결과 화면 검색창). */
+input:not([type="checkbox"]):not([type="radio"]):not(.field-inline),
+textarea:not(.field-inline),
+select {
+  transition: border-color 160ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 160ms cubic-bezier(0.4, 0, 0.2, 1), background-color 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+input:not([type="checkbox"]):not([type="radio"]):not(.field-inline):not(:disabled):hover,
+textarea:not(.field-inline):not(:disabled):hover,
+select:not(:disabled):hover {
+  border-color: #cbd5e1;
+}
+input:not([type="checkbox"]):not([type="radio"]):not(.field-inline):focus-visible,
+textarea:not(.field-inline):focus-visible,
+select:focus-visible {
+  border-color: #4f7bff;
+  box-shadow: 0 0 0 2px rgba(79, 123, 255, 0.16);
+  outline: none;
+}
+input:disabled,
+textarea:disabled,
+select:disabled {
+  background-color: #f8fafc;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+@media (prefers-reduced-motion: reduce) {
+  input, textarea, select { transition: none; }
+}
+
+/* .field-pill — .field-inline input을 감싸는 pill 컨테이너. 안의 input이 포커스를
+   받으면 pill 테두리 전체를 강조한다(각진 박스 대신 pill 모양 그대로). */
+.field-pill {
+  transition: border-color 160ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.field-pill:focus-within {
+  border-color: #4f7bff !important;
+  box-shadow: 0 0 0 2px rgba(79, 123, 255, 0.16);
+}
+@media (prefers-reduced-motion: reduce) {
+  .field-pill { transition: none; }
+}
+
+/* 워크스페이스 컴포저(ComposerCard "plain") — 안의 textarea가 포커스를 받으면 카드
+   테두리 전체를 브랜드색으로 강조한다. 홈 메인 컴포저("focus" variant)는 이미 항상
+   파란 테두리라 별도 처리가 필요 없다. */
+.composer-card-plain {
+  transition: border-color 160ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.composer-card-plain:focus-within {
+  border-color: #4f7bff;
+  box-shadow: 0px 2px 20px rgba(0, 0, 0, 0.09), 0 0 0 2px rgba(79, 123, 255, 0.12);
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-card-plain { transition: none; }
 }

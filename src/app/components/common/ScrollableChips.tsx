@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { cn } from "@/app/components/ui/utils";
+import { color, motion } from "@/app/styleTokens";
 
 const CHIP_FONT = { fontFamily: "'Pretendard Variable', sans-serif" } as const;
+/** outline variant는 배경/테두리를 인라인 style로 계산해서 Tailwind hover: 클래스가 안 먹는다
+ *  (Button.tsx와 같은 이유) — hover/pressed도 같은 방식(JS 상태)으로 계산한다. */
+const CHIP_TRANSITION = `background-color ${motion.fast}, border-color ${motion.fast}, color ${motion.fast}`;
 
-type Variant = "solid" | "outline";
+type Variant = "solid" | "outline" | "underline";
 
 /** 포커스 링 — Button.tsx와 같은 이유로 outline 대신 ring 을 쓴다(theme.css 전역
  *  outline-ring/50 규칙과 Tailwind outline-none 이 캐스케이드 순서를 두고 충돌해
@@ -18,7 +22,12 @@ export interface ScrollableChipsProps {
   onChange: (index: number) => void;
   /**
    * solid: 선택 시 검정 채움 + 흰 텍스트 (크레딧/템플릿 필터)
-   * outline: 선택 시 파란 테두리 + 파란 텍스트 (상세 프롬프트 섹션 칩)
+   * outline: 선택 시 파란 테두리 + 파란 텍스트 (상세 프롬프트 섹션 칩) — 칩마다 각자
+   *   테두리가 있어 "독립된 버튼 여러 개"로 보인다.
+   * underline: 배경 채움이 전혀 없는 순수 텍스트 탭 — 선택된 항목만 진한 텍스트 +
+   *   brand 밑줄로 표시한다. 값이 같은 옵션을 고르는 toggle/switch가 아니라 서로 다른
+   *   화면(콘텐츠)으로 이동하는 navigation임을 보여줘야 할 때 쓴다(요금제 페이지의
+   *   "월 구독 요금제 / 추가 크레딧 충전"). 회색 트랙·pill·둥근 배경을 두지 않는다.
    */
   variant?: Variant;
   /**
@@ -82,6 +91,8 @@ export function ScrollableChips({
   // 눌러야 실제로 onChange 가 불린다. 그래서 "포커스된 탭"과 "선택된 탭"이 다를 수 있고,
   // 그 둘을 시각적으로 구분해야 한다(focus-visible 링 vs 선택 배경/테두리).
   const [focusedIndex, setFocusedIndex] = useState(activeIndex);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [pressedIndex, setPressedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     const el = activeRef.current;
@@ -135,7 +146,8 @@ export function ScrollableChips({
       role={isTablist ? "tablist" : undefined}
       aria-orientation={isTablist ? "horizontal" : undefined}
       className={cn(
-        "flex items-center gap-2 py-1 overflow-x-auto overscroll-x-contain whitespace-nowrap [&::-webkit-scrollbar]:hidden",
+        "flex items-center overflow-x-auto overscroll-x-contain whitespace-nowrap [&::-webkit-scrollbar]:hidden",
+        variant === "underline" ? "gap-8" : "gap-2 py-1",
         edgeClassName,
         className,
       )}
@@ -156,7 +168,16 @@ export function ScrollableChips({
             }
           : {};
 
-        if (variant === "outline") {
+        const hovered = hoveredIndex === i;
+        const isPressed = pressedIndex === i;
+        const clearPress = () => setPressedIndex((v) => (v === i ? null : v));
+
+        if (variant === "underline") {
+          // 배경·테두리 채움이 전혀 없다 — 선택 여부는 텍스트 색·굵기와 밑줄(bottom
+          // border)만으로 나타낸다. 비선택 탭도 항상 같은 두께의 투명 밑줄을 깔아 둬서
+          // 선택이 바뀔 때 밑줄이 생기고 사라지며 높이가 흔들리지 않게 한다. hover는
+          // 비선택 탭의 텍스트만 살짝 진해질 뿐 배경은 그대로 비워 둔다.
+          const textColor = selected ? color.text.primary : hovered || isPressed ? "#475569" : "#64748b";
           return (
             <button
               key={label}
@@ -165,14 +186,56 @@ export function ScrollableChips({
                 if (selected) activeRef.current = el;
               }}
               onClick={() => onChange(i)}
+              onMouseEnter={() => setHoveredIndex(i)}
+              onMouseLeave={() => { setHoveredIndex((v) => (v === i ? null : v)); clearPress(); }}
+              onMouseDown={() => setPressedIndex(i)}
+              onMouseUp={clearPress}
+              className={cn("shrink-0", FOCUS_RING_CLASS)}
+              style={{
+                ...CHIP_FONT,
+                fontSize: 14.5,
+                fontWeight: selected ? 700 : 500,
+                color: textColor,
+                background: "transparent",
+                border: "none",
+                borderBottom: `2px solid ${selected ? color.brand : "transparent"}`,
+                padding: "0 0 9px",
+                transition: CHIP_TRANSITION,
+              }}
+              {...tabProps}
+            >
+              {label}
+            </button>
+          );
+        }
+
+        if (variant === "outline") {
+          // 선택되지 않은 칩의 hover/pressed는 선택 상태(파란 배경)와 겹치지 않도록
+          // 테두리·배경만 한 단계 진하게 한다 — "골랐다"가 아니라 "누를 수 있다"는 신호.
+          const borderColor = selected ? "#3B5BFE" : isPressed ? "#B7C2E0" : hovered ? "#C7D0E8" : "#E3E6EB";
+          const background = selected ? "#ECEFFE" : isPressed ? "#EEF1FA" : hovered ? "#F5F7FD" : "white";
+          const textColor = selected ? "#3B5BFE" : hovered || isPressed ? "#334155" : "#4B5262";
+          return (
+            <button
+              key={label}
+              ref={(el) => {
+                buttonRefs.current[i] = el;
+                if (selected) activeRef.current = el;
+              }}
+              onClick={() => onChange(i)}
+              onMouseEnter={() => setHoveredIndex(i)}
+              onMouseLeave={() => { setHoveredIndex((v) => (v === i ? null : v)); clearPress(); }}
+              onMouseDown={() => setPressedIndex(i)}
+              onMouseUp={clearPress}
               className={cn("h-9 px-3.5 rounded-full shrink-0", FOCUS_RING_CLASS)}
               style={{
                 ...CHIP_FONT,
                 fontSize: 12.5,
                 fontWeight: 600,
-                border: `1.5px solid ${selected ? "#3B5BFE" : "#E3E6EB"}`,
-                background: selected ? "#ECEFFE" : "white",
-                color: selected ? "#3B5BFE" : "#4B5262",
+                border: `1.5px solid ${borderColor}`,
+                background,
+                color: textColor,
+                transition: CHIP_TRANSITION,
               }}
               {...tabProps}
             >
@@ -188,13 +251,13 @@ export function ScrollableChips({
               if (selected) activeRef.current = el;
             }}
             onClick={() => onChange(i)}
-            style={CHIP_FONT}
+            style={{ ...CHIP_FONT, transition: CHIP_TRANSITION }}
             className={cn(
               "shrink-0 h-8 rounded-full px-4 text-[13px] font-semibold whitespace-nowrap",
               FOCUS_RING_CLASS,
               selected
-                ? "bg-foreground text-background"
-                : "bg-background border border-border text-foreground",
+                ? "bg-foreground text-background active:bg-foreground/80"
+                : "bg-background border border-border text-foreground hover:bg-muted active:bg-muted",
             )}
             {...tabProps}
           >

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useLayoutEffect, useMemo, type ReactNode } from "react";
-import { HelpCircle, Settings as SettingsIcon, Users, Mail, LogOut, Palette, Bell, Brain, Coins, Monitor, Sun, Moon, RefreshCw, FileText, FileVideo, FileSpreadsheet, FileType2, Compass, Image as ImageIcon, X as XIcon, Play, Volume2, Maximize2, Minimize2, BookOpen, Search, Plus, Upload, Check } from "lucide-react";
+import { HelpCircle, Settings as SettingsIcon, Users, Mail, LogOut, Palette, Bell, Brain, Coins, CreditCard, Monitor, Sun, Moon, FileText, FileVideo, FileSpreadsheet, FileType2, Compass, Image as ImageIcon, X as XIcon, Play, Volume2, Maximize2, Minimize2, BookOpen, Search, Plus, Upload, Check } from "lucide-react";
 
 // ── 공통 에셋 ──────────────────────────────────────────────────────────────────
 import svgPaths from "@/imports/새대화딸깍/svg-yz49hawimu";
@@ -25,25 +25,34 @@ import TutorialTour, { type TutorialStepConfig } from "@/app/components/common/T
 import { MobileEditorNotice } from "@/app/components/viewer/MobileEditorNotice";
 import { ScrollableChips } from "@/app/components/common/ScrollableChips";
 import { Button } from "@/app/components/common/Button";
+import { ToastHost } from "@/app/components/common/Toast";
+import { IconButton } from "@/app/components/common/IconButton";
+import { useFocusTrap } from "@/app/components/common/useFocusTrap";
 import ClampedText from "@/app/components/common/ClampedText";
 import { COMPOSER_PLACEHOLDER } from "@/app/copy";
-import { color, f, radius, shadow, SUBTITLE_COLOR, typography } from "@/app/styleTokens";
+import { color, controlHeight, f, motion, radius, shadow, SUBTITLE_COLOR, typography } from "@/app/styleTokens";
 import FormFillDesktop from "@/app/components/formfill/FormFillDesktop";
 import TaskGrid from "@/app/components/home/TaskGrid";
 import RecommendedCarousel from "@/app/components/home/RecommendedCarousel";
 import HomeSearch from "@/app/components/home/HomeSearch";
+import { CategoryQuickLinks } from "@/app/components/home/CategoryQuickLinks";
+import { CategoryFeatureStrip } from "@/app/components/home/CategoryFeatureStrip";
 import SearchResultsScreen from "@/app/components/home/SearchResultsScreen";
 import TaskTemplateScreen from "@/app/components/home/TaskTemplateScreen";
 import RequestHelpScreen from "@/app/components/home/RequestHelpScreen";
-import { getTaskById, type TaskTemplate } from "@/app/data/tasks";
+import { getTaskById, TASK_GROUPS, type TaskTemplate } from "@/app/data/tasks";
 // [formfill 임시] ?formfill=1 확인용. 컴포넌트 단품 확인 화면이라 3단 레이아웃과 별개로 남겨둔다.
 import FormFillPlayground from "@/app/components/formfill/__dev__/FormFillPlayground";
 import { useCreditBalance } from "@/app/state/creditBalance";
+import { findPlan, useSubscription } from "@/app/state/subscription";
 import { PricingPage, type PricingTab } from "@/app/components/pricing/PricingPage";
+import { SubscriptionCompletePage } from "@/app/components/pricing/SubscriptionCompletePage";
+import { SettingsCreditTab } from "@/app/components/settings/SettingsCreditTab";
+import { SettingsBillingTab } from "@/app/components/settings/SettingsBillingTab";
 
 
 // ─── 타입 ──────────────────────────────────────────────────────────────────────
-type Screen = "home" | "image-ai" | "landing-ai" | "forms-ai" | "forms-fill" | "docs-ai" | "audio-ai" | "ppt-ai" | "video-ai" | "favorites" | "mywork" | "credit-history" | "notifications-all" | "search" | "task-templates" | "request-help" | "pricing";
+type Screen = "home" | "image-ai" | "landing-ai" | "forms-ai" | "forms-fill" | "docs-ai" | "audio-ai" | "ppt-ai" | "video-ai" | "favorites" | "mywork" | "notifications-all" | "search" | "task-templates" | "request-help" | "pricing" | "subscription-complete";
 export type WorkspaceCategory = "docs" | "ppt" | "video" | "landing" | "image" | "detail";
 const WS_LABEL: Record<WorkspaceCategory, string> = { docs: "문서", ppt: "PPT", video: "영상", landing: "랜딩페이지", image: "이미지", detail: "상세페이지" };
 const WS_COLOR: Record<WorkspaceCategory, string> = { docs: "#3B82F6", ppt: "#8B5CF6", video: "#EF4444", landing: "#22C55E", image: "#F59E0B", detail: "#EC4899" };
@@ -61,7 +70,7 @@ function IconChevronLeft() {
   return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d="M12.5 15L7.5 10L12.5 5" stroke="#0A0A0A" strokeWidth="1.5" /></svg>;
 }
 function IconBell() {
-  return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.p1c3efea0} stroke="#737373" strokeWidth="1.5" /><P d={svgPaths.p25877f40} stroke="#737373" strokeWidth="1.5" /></svg>;
+  return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.p1c3efea0} stroke={color.text.secondary} strokeWidth="1.5" /><P d={svgPaths.p25877f40} stroke={color.text.secondary} strokeWidth="1.5" /></svg>;
 }
 // 사이드바 메뉴 아이콘은 상태(비활성/호버/활성)에 따라 색이 바뀌므로 currentColor 를 쓴다.
 // 다른 곳에서 쓸 때는 감싸는 요소에 color 를 지정하면 된다.
@@ -108,7 +117,7 @@ function IconSend() {
   return <svg width="15" height="15" fill="none" viewBox="0 0 16 16"><P d={svgPaths.p82fb540} stroke="white" strokeWidth="1.33333" /><P d="M8 12.6667V3.33333" stroke="white" strokeWidth="1.33333" /></svg>;
 }
 function IconSearch() {
-  return <svg width="16" height="16" fill="none" viewBox="0 0 16 16"><P d="M14 14L11.1067 11.1067" stroke="#737373" strokeWidth="1.33333" /><circle cx="6.5" cy="6.5" r="4.5" stroke="#737373" strokeWidth="1.33333" /></svg>;
+  return <svg width="16" height="16" fill="none" viewBox="0 0 16 16"><P d="M14 14L11.1067 11.1067" stroke={color.text.muted} strokeWidth="1.33333" /><circle cx="6.5" cy="6.5" r="4.5" stroke={color.text.muted} strokeWidth="1.33333" /></svg>;
 }
 /** 필터 버튼 아이콘 — 깔때기(funnel). 색은 열림 상태에 따라 호출부가 넘긴다. */
 function IconFilter({ color = "#334155" }: { color?: string }) {
@@ -340,7 +349,7 @@ const memorySummary: MemorySummarySection[] = [
  */
 const FOOTER_MUTED = "#9ca3af";
 
-type SettingsTab = "외관" | "알림" | "메모리" | "크레딧";
+type SettingsTab = "화면 설정" | "알림" | "메모리" | "크레딧" | "구독 및 결제";
 type MemoryFilter = "전체" | "사실" | "요약";
 
 // 설정 콘텐츠의 공통 섹션 헤더(제목 → 설명 → 컨트롤 순서를 모든 탭에서 동일하게 유지).
@@ -365,9 +374,20 @@ function MemoryTimeChip({ value }: { value: string }) {
   );
 }
 
-function SettingsModal({ onClose, onPricingOpen }: { onClose: () => void; onPricingOpen: () => void }) {
-  const [creditBalance] = useCreditBalance();
-  const [tab, setTab] = useState<SettingsTab>("외관");
+function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
+  initialTab?: SettingsTab;
+  onClose: () => void;
+  /** "크레딧" 탭의 "크레딧 충전" — 설정을 닫고 구매 페이지의 추가 충전 탭을 연다. */
+  onOpenTopUp: () => void;
+  /** "구독 및 결제" 탭의 "요금제 변경" — 설정을 닫고 구매 페이지의 월 구독 탭을 연다. */
+  onOpenPlanChange: () => void;
+}) {
+  const [tab, setTab] = useState<SettingsTab>(initialTab ?? "화면 설정");
+  // 1200px 이상(wide)에서는 좌측 세로 카테고리 메뉴, 그 아래에서는 기존 가로 탭 바 —
+  // 두 레이아웃이 색상 규칙이 달라(데스크톱은 카드·그림자 없는 은은한 강조, 모바일은
+  // 기존 흰 카드 탭 유지) CSS만으로는 어색해 JS로 분기한다(이 파일의 다른 곳들과
+  // 같은 useIsDesktop 패턴).
+  const isDesktop = useIsDesktop();
   const [theme, setTheme] = useState<"시스템" | "라이트" | "다크">("시스템");
   const [notifEnabled, setNotifEnabled] = useState(false);
   const contentRef = React.useRef<HTMLDivElement>(null);
@@ -379,7 +399,7 @@ function SettingsModal({ onClose, onPricingOpen }: { onClose: () => void; onPric
   const [factDraft, setFactDraft] = useState("");
   const [addingFact, setAddingFact] = useState(false);
 
-  const tabs: SettingsTab[] = ["외관", "알림", "메모리", "크레딧"];
+  const tabs: SettingsTab[] = ["화면 설정", "알림", "메모리", "크레딧", "구독 및 결제"];
 
   const memq = memQuery.trim();
   const visibleFacts = memFilter === "요약" ? [] : facts.filter((it) => !memq || it.text.includes(memq));
@@ -415,10 +435,11 @@ function SettingsModal({ onClose, onPricingOpen }: { onClose: () => void; onPric
   }, [onClose]);
 
   const tabIcons: Record<SettingsTab, React.ReactNode> = {
-    "외관": <Palette size={17} strokeWidth={1.7} />,
-    "알림": <Bell size={17} strokeWidth={1.7} />,
-    "메모리": <Brain size={17} strokeWidth={1.7} />,
-    "크레딧": <Coins size={17} strokeWidth={1.7} />,
+    "화면 설정": <Palette size={20} strokeWidth={1.7} />,
+    "알림": <Bell size={20} strokeWidth={1.7} />,
+    "메모리": <Brain size={20} strokeWidth={1.7} />,
+    "크레딧": <Coins size={20} strokeWidth={1.7} />,
+    "구독 및 결제": <CreditCard size={20} strokeWidth={1.7} />,
   };
 
   const themeCards = [
@@ -510,24 +531,52 @@ function SettingsModal({ onClose, onPricingOpen }: { onClose: () => void; onPric
         {/* body — 767px 이하·태블릿: 가로 탭 + 아래 콘텐츠 / 1200px 이상: 좌측 사이드 메뉴 + 우측 콘텐츠 */}
         <div className="flex-1 min-h-0 flex flex-col wide:flex-row">
 
-          {/* 탭 메뉴 (같은 버튼을 방향만 바꿔 사용 — 색·그림자·아이콘은 동일) */}
-          <div className="shrink-0 px-4 pb-3 wide:w-[212px] wide:px-4 wide:py-5">
-            <div className="flex wide:flex-col bg-[#f1f5f9] rounded-[16px] p-1 gap-0.5 wide:gap-1">
-              {tabs.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTab(t)}
-                  className="flex-1 wide:flex-none flex flex-col wide:flex-row items-center wide:justify-start gap-1 wide:gap-2.5 py-2.5 wide:px-3 rounded-[12px] transition-all duration-150"
-                  style={{
-                    background: tab === t ? "white" : "transparent",
-                    boxShadow: tab === t ? "0px 1px 4px rgba(0,0,0,0.1)" : "none",
-                    color: tab === t ? "#0a0a0a" : "#9ca3af",
-                  }}
-                >
-                  {tabIcons[t]}
-                  <span className="wide:text-[13px]" style={{ ...f, fontWeight: tab === t ? 600 : 500, fontSize: 11 }}>{t}</span>
-                </button>
-              ))}
+          {/* 탭 메뉴 — 767px 이하·태블릿은 기존 흰 카드 가로 탭 그대로. 1200px 이상(wide)은
+              전체를 감싸는 회색 박스·선택 항목의 흰 카드+그림자를 없애고, 세로 목록 위에
+              선택 행만 은은한 중립색(#f1f5f9, 이 파일에서 구분선·배경으로 이미 쓰는 톤)
+              배경으로 강조한다. 비선택 텍스트는 #1e293b(프로필 메뉴 행 라벨과 같은 톤)로
+              — 옅은 회색은 비활성처럼 보여서 피한다.
+              글자 크기는 클래스(wide:text-*)가 아니라 isDesktop 분기로 직접 정한다 —
+              이 파일의 인라인 style은 항상 클래스보다 우선이라(Button.tsx 등에서 이미
+              확인된 문제) wide: 접두사 클래스를 얹어도 인라인 fontSize에 덮여 무시된다. */}
+          <div className="shrink-0 px-4 pb-3 wide:w-[232px] wide:px-4 wide:py-5">
+            <div
+              className="flex wide:flex-col gap-0.5 wide:gap-1.5"
+              style={!isDesktop ? { background: "#f1f5f9", borderRadius: 16, padding: 4 } : undefined}
+            >
+              {tabs.map((t) => {
+                const selected = tab === t;
+                return (
+                  <button
+                    key={t}
+                    onClick={() => setTab(t)}
+                    aria-current={selected ? "page" : undefined}
+                    className={[
+                      "flex-1 wide:flex-none flex flex-col wide:flex-row items-center wide:justify-start gap-1 wide:gap-3",
+                      "py-2.5 wide:py-0 transition-colors duration-150 outline-none",
+                      "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff]",
+                      isDesktop && !selected ? "hover:bg-[#f8fafc]" : "",
+                    ].join(" ")}
+                    style={{
+                      background: isDesktop ? (selected ? "#f1f5f9" : "transparent") : selected ? "white" : "transparent",
+                      boxShadow: isDesktop ? "none" : selected ? "0px 1px 4px rgba(0,0,0,0.1)" : "none",
+                      color: selected ? "#0a0a0a" : isDesktop ? "#1e293b" : "#9ca3af",
+                      borderRadius: radius.control,
+                      minHeight: isDesktop ? controlHeight.md : undefined,
+                      paddingLeft: isDesktop ? 12 : undefined,
+                      paddingRight: isDesktop ? 12 : undefined,
+                    }}
+                  >
+                    {tabIcons[t]}
+                    <span
+                      className="whitespace-nowrap"
+                      style={{ ...f, fontWeight: selected ? 600 : 500, fontSize: isDesktop ? 16 : 11, lineHeight: isDesktop ? "24px" : undefined }}
+                    >
+                      {t}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -545,7 +594,7 @@ function SettingsModal({ onClose, onPricingOpen }: { onClose: () => void; onPric
           <div className="w-full wide:max-w-[720px] wide:pt-4">
 
           {/* ── 외관 ── */}
-          {tab === "외관" && (
+          {tab === "화면 설정" && (
             <div className="flex flex-col gap-7">
               <section className="flex flex-col gap-3.5">
                 <SettingsSectionHead title="테마" desc="인터페이스가 기기를 따르도록 하거나 고정된 테마를 선택합니다." />
@@ -800,68 +849,14 @@ function SettingsModal({ onClose, onPricingOpen }: { onClose: () => void; onPric
             </div>
           )}
 
-          {/* ── 크레딧 ── */}
+          {/* ── 크레딧·사용 내역 ── */}
           {tab === "크레딧" && (
-            <div className="flex flex-col gap-4">
-              <SettingsSectionHead
-                title="크레딧 계정 상태 요약"
-                desc="보유한 크레딧 잔액과 이번 달 사용량입니다. 요금제·충전·사용 내역은 요금제 및 크레딧 페이지에서 확인할 수 있습니다."
-              />
+            <SettingsCreditTab onTopUp={() => { onClose(); onOpenTopUp(); }} />
+          )}
 
-              {/* 요약 카드 — 잔액을 가장 크게, 이번 달 사용량은 구분선 아래 */}
-              <div className="bg-white border px-5 py-5"
-                style={{ borderColor: color.border.default, borderRadius: radius.card, boxShadow: shadow.card }}>
-                <p style={typography.caption}>남은 크레딧 잔액</p>
-                <p style={{ ...f, fontWeight: 700, fontSize: 28, color: color.text.primary, letterSpacing: "-1.1px", lineHeight: 1.2, marginTop: 4 }}>
-                  {creditBalance.toLocaleString()}
-                  <span style={{ fontWeight: 500, fontSize: 14, color: color.text.faint, letterSpacing: "-0.2px" }}> 크레딧</span>
-                </p>
-                <div className="h-px bg-[#f1f5f9] my-4" />
-                <div className="flex items-center justify-between gap-3">
-                  <span style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af" }}>이번 달 사용 요약</span>
-                  <span style={{ ...f, fontWeight: 600, fontSize: 13, color: color.text.primary }}>
-                    {CREDIT_MONTHLY_USED.toLocaleString()} 크레딧 차감
-                  </span>
-                </div>
-              </div>
-
-              {/* 사용량 상세 */}
-              <div className="flex flex-col gap-3">
-                <SettingsSectionHead title="크레딧 사용량" desc="API 사용 비용을 추적합니다." />
-                <div className="grid grid-cols-2 gap-2.5">
-                  {[
-                    { label: "총 작업 수", value: "···" },
-                    { label: "예상 비용", value: "$···" },
-                    { label: "실제 비용", value: "$···" },
-                    { label: "총 토큰", value: "···" },
-                  ].map(({ label, value }) => (
-                    <div key={label}
-                      className="bg-white border p-4"
-                      style={{ borderColor: color.border.default, borderRadius: radius.card, boxShadow: shadow.card }}>
-                      <p style={{ ...typography.caption, marginBottom: 8 }}>{label}</p>
-                      <p style={{ ...f, fontWeight: 700, fontSize: 20, color: color.text.primary, letterSpacing: "-0.5px" }}>{value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 하단 액션 — 새로고침(보조) / 상세 내역·충전 이동(주요).
-                  새로고침은 폭에 따라 높이가 44→36 으로 바뀌는 반응형 버튼이라(wide:h-9)
-                  높이가 고정인 공용 Button 에는 그대로 맞지 않아 값만 토큰으로 맞추고
-                  마크업은 그대로 둔다. */}
-              <div className="flex flex-col-reverse gap-2.5 wide:flex-row wide:items-center wide:justify-between">
-                <button
-                  className="flex items-center justify-center gap-1.5 h-11 px-4 wide:h-9"
-                  style={{ borderRadius: 12, border: `1px solid ${color.border.default}`, background: "white", boxShadow: "0px 1px 2px rgba(0,0,0,0.06)" }}>
-                  <RefreshCw size={14} strokeWidth={1.7} color="#6b7280" />
-                  <span style={{ ...f, fontWeight: 500, fontSize: 13, color: "#6b7280" }}>새로고침</span>
-                </button>
-                <Button variant="dark" size="md" onClick={onPricingOpen}>
-                  <Coins size={15} strokeWidth={1.8} color="white" />
-                  요금제 및 크레딧 관리
-                </Button>
-              </div>
-            </div>
+          {/* ── 구독·결제 ── */}
+          {tab === "구독 및 결제" && (
+            <SettingsBillingTab onChangePlan={() => { onClose(); onOpenPlanChange(); }} />
           )}
           </div>
           </div>
@@ -957,80 +952,109 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
             <>
               <img alt="딸깍.net" className="h-6 w-auto object-contain" src={imgImageNet} />
               {docked ? (
-                <button onClick={onToggleCollapsed} aria-label="사이드바 접기" aria-expanded={true}
-                  className="flex items-center justify-center size-9 rounded-[10px] opacity-80"><IconMenu /></button>
+                <IconButton onClick={onToggleCollapsed} aria-label="사이드바 접기" aria-expanded={true}
+                  className="flex items-center justify-center size-9 opacity-80"><IconMenu /></IconButton>
               ) : (
-                <button onClick={onClose} aria-label="사이드바 닫기" className="flex items-center justify-center size-9 rounded-[10px]"><IconClose /></button>
+                <IconButton onClick={onClose} aria-label="사이드바 닫기" className="flex items-center justify-center size-9"><IconClose /></IconButton>
               )}
             </>
           )}
         </div>
-        {/* Nav */}
-        <div className="flex flex-col gap-1 px-2 shrink-0">
-          {[
-            { s: "home" as Screen, icon: <IconHome />, label: "홈" },
-            { s: "mywork" as Screen, icon: <IconWork />, label: "내 작업" },
-            { s: "favorites" as Screen, icon: <IconStar />, label: "즐겨찾기" },
-          ].map(({ s, icon, label }) => (
-            <button key={s} onClick={() => nav(s)}
-              aria-current={active(s) ? "page" : undefined}
-              aria-label={railed ? label : undefined}
-              title={railed ? label : undefined}
-              className={`dk-nav-item h-11 rounded-[14px] flex items-center w-full ${railed ? "justify-center" : "gap-3 px-3"} ${active(s) ? "is-active" : ""}`}>
-              {/* 아이콘·라벨 색 모두 CSS 가 담당한다(인라인 style 은 :hover 를 이긴다).
-                  아이콘은 currentColor 라 버튼의 color 를 따라간다. */}
-              {icon}
-              {!railed && (
-                <span className="dk-nav-item__label" style={{ ...f, fontWeight: active(s) ? 600 : 500, fontSize: 14, letterSpacing: "-0.35px" }}>
-                  {label}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-        {/* Scrollable — 레일에서는 목록을 접고 빈 공간만 남긴다(제목·파일명이 76px 에 들어가지 않는다) */}
-        {railed ? <div className="flex-1" /> : (
-        <div className="flex-1 overflow-y-auto mt-1" style={{ scrollbarWidth: "none" }}>
-          <div className="px-2 pt-1">
-            <div className="h-8 flex items-center px-2">
-              <span style={{ ...f, fontWeight: 500, fontSize: 12, color: "#90a1b9" }}>최근 서식</span>
-            </div>
-            {/* recentForms 가 오면 클릭 가능한 목록, 없으면 지금까지의 정적 목록 그대로. */}
-            {recentForms
-              ? recentForms.map((form) => {
-                  const isCurrent = form.id === currentFormId;
-                  return (
-                    <button key={form.id} type="button"
-                      onClick={() => onSelectForm?.(form.id, form.title)}
-                      aria-current={isCurrent ? "page" : undefined}
-                      className={`dk-nav-item dk-nav-item--sub h-8 rounded-[14px] flex items-center gap-3 px-3 w-full ${isCurrent ? "is-active" : ""}`}>
-                      <div className="shrink-0">{isCurrent ? <IconFileDocBlue /> : <IconFileDoc />}</div>
-                      <span className="dk-nav-item__label truncate" style={{ ...f, fontWeight: isCurrent ? 600 : 500, fontSize: 13, letterSpacing: "-0.35px" }}>{form.title}</span>
-                    </button>
-                  );
-                })
-              : recentTemplates.map((t) => (
-                  <div key={t} className="h-8 rounded-[14px] flex items-center gap-3 px-3">
-                    <div className="shrink-0"><IconFileDoc /></div>
-                    <span className="truncate" style={{ ...f, fontWeight: 500, fontSize: 13, color: "#45556c", letterSpacing: "-0.35px" }}>{t}</span>
+        {/* 스크롤 영역 — 주요 메뉴·최근 서식·최근 대화를 하나로 묶는다(2026-09-18).
+            예전엔 주요 메뉴가 이 영역 밖에서 shrink-0로 고정돼 있었는데, 화면이 낮아지면
+            "최근 대화" 쪽만 스크롤되고 메뉴는 그대로 보이는 구조였다 — 이제는 헤더
+            (로고·접기 버튼, 위)만 고정하고 그 아래는 전부 이 하나의 세로 스크롤 안에서
+            함께 움직인다. 사이드바에는 현재 하단 고정 프로필 요소가 없어(계정 메뉴는
+            TopBar 우측 상단 ProfileMenuButton에 있다) 별도로 고정할 하단 영역은 없다.
+            overscrollBehavior: contain — 목록 끝까지 스크롤했을 때 메인 콘텐츠 쪽으로
+            스크롤이 전이되지 않게 한다(다른 화면의 filter-menu와 같은 패턴). */}
+        <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", overscrollBehavior: "contain" }}>
+          {/* 주요 메뉴 — 16px/500/line-height 24px, 아이콘(20px, "22px 내외" 범위 안)과
+              글자 간격 12px, 행 높이 48px, 행 사이 4px(gap-1). 활성 여부와 무관하게
+              굵기를 항상 500으로 고정한다(하나만 굵어지면 그 행만 폭이 달라져 목록이
+              흔들린다) — 활성 표시는 색·배경만 담당한다(.dk-nav-item.is-active, 아래
+              CSS). */}
+          <div className="flex flex-col gap-1 px-2 pt-1">
+            {[
+              { s: "home" as Screen, icon: <IconHome />, label: "홈" },
+              { s: "mywork" as Screen, icon: <IconWork />, label: "내 작업" },
+              { s: "favorites" as Screen, icon: <IconStar />, label: "즐겨찾기" },
+            ].map(({ s, icon, label }) => (
+              <button key={s} onClick={() => nav(s)}
+                aria-current={active(s) ? "page" : undefined}
+                aria-label={railed ? label : undefined}
+                title={railed ? label : undefined}
+                className={`dk-nav-item h-12 rounded-[14px] flex items-center w-full outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4f7bff] ${railed ? "justify-center" : "gap-3 px-3"} ${active(s) ? "is-active" : ""}`}>
+                {/* 아이콘·라벨 색 모두 CSS 가 담당한다(인라인 style 은 :hover 를 이긴다).
+                    아이콘은 currentColor 라 버튼의 color 를 따라간다. */}
+                {icon}
+                {!railed && (
+                  <span className="dk-nav-item__label" style={{ ...f, fontWeight: 500, fontSize: 16, lineHeight: "24px", letterSpacing: "-0.35px" }}>
+                    {label}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* 레일(아이콘만 접힘)에서는 이 아래를 전부 숨긴다 — 제목·파일명이 76px 폭에
+              들어가지 않는다(기존 동작 그대로, 자리만 옮겼다). */}
+          {!railed && (
+            <>
+              {/* 최근 서식 — 주요 메뉴와 28px(24~32px 범위), 섹션 라벨 13px/500/20,
+                  secondary 토큰. 라벨은 px-3로 위 메뉴 버튼의 아이콘 시작선(8+12=20px)과
+                  같은 기준선에 맞춘다. */}
+              <div className="px-3" style={{ marginTop: 28 }}>
+                <p style={{ ...f, fontWeight: 500, fontSize: 13, lineHeight: "20px", color: color.text.secondary, letterSpacing: "-0.2px" }}>최근 서식</p>
+              </div>
+              <div className="px-2" style={{ marginTop: 8 }}>
+                {/* recentForms 가 오면 클릭 가능한 목록, 없으면 지금까지의 정적 목록 그대로.
+                    서식명 14px/400/line-height 20px, 행 높이 40px(h-10). 아이콘 없는
+                    정적 목록도 아이콘 폭(20px)만큼 spacer로 비워 텍스트 시작점을 위
+                    메뉴·서식 목록과 통일한다. */}
+                {recentForms
+                  ? recentForms.map((form) => {
+                      const isCurrent = form.id === currentFormId;
+                      return (
+                        <button key={form.id} type="button"
+                          onClick={() => onSelectForm?.(form.id, form.title)}
+                          aria-current={isCurrent ? "page" : undefined}
+                          title={form.title}
+                          className={`dk-nav-item dk-nav-item--sub h-10 rounded-[14px] flex items-center gap-3 px-3 w-full outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4f7bff] ${isCurrent ? "is-active" : ""}`}>
+                          <div className="shrink-0">{isCurrent ? <IconFileDocBlue /> : <IconFileDoc />}</div>
+                          <span className="dk-nav-item__label truncate" style={{ ...f, fontWeight: 400, fontSize: 14, lineHeight: "20px", letterSpacing: "-0.2px" }}>{form.title}</span>
+                        </button>
+                      );
+                    })
+                  : recentTemplates.map((t) => (
+                      <div key={t} title={t} className="h-10 rounded-[14px] flex items-center gap-3 px-3">
+                        <div className="shrink-0"><IconFileDoc /></div>
+                        <span className="truncate" style={{ ...f, fontWeight: 400, fontSize: 14, lineHeight: "20px", color: "#45556c", letterSpacing: "-0.2px" }}>{t}</span>
+                      </div>
+                    ))}
+              </div>
+
+              {/* 최근 대화 — 최근 서식과 24px. "더 보기"·전용 여백 없이 recentChats
+                  전체를 그대로 이어서 보여준다(이 배열은 실제로도 처음부터 잘리지 않고
+                  전부 렌더링되고 있었다 — 서버 페이지네이션 API 자체가 이 앱에 없는
+                  정적 목업 데이터라 "다음 페이지 자동 로드"는 적용 대상이 없다. 아래
+                  최종 보고에 그대로 밝힌다). */}
+              <div className="px-3" style={{ marginTop: 24 }}>
+                <p style={{ ...f, fontWeight: 500, fontSize: 13, lineHeight: "20px", color: color.text.secondary, letterSpacing: "-0.2px" }}>최근 대화</p>
+              </div>
+              <div className="px-2 pb-2" style={{ marginTop: 8 }}>
+                {recentChats.map((c) => (
+                  <div key={c} title={c} className="h-10 rounded-[14px] flex items-center gap-3 px-3">
+                    {/* 아이콘 없는 행이라도 아이콘 폭(20px)만큼 spacer를 둬서, 텍스트
+                        시작점이 위 서식 목록(아이콘+간격 뒤)과 같은 x좌표에 오게 한다. */}
+                    <div className="shrink-0" style={{ width: 20 }} aria-hidden />
+                    <span className="truncate" style={{ ...f, fontWeight: 400, fontSize: 14, lineHeight: "20px", color: "#45556c", letterSpacing: "-0.2px" }}>{c}</span>
                   </div>
                 ))}
-          </div>
-          <div className="px-2 mt-2">
-            <div className="h-8 flex items-center px-2">
-              <span style={{ ...f, fontWeight: 600, fontSize: 11, color: "#90a1b9", letterSpacing: "0.275px" }}>최근 대화</span>
-            </div>
-            {recentChats.map((c) => (
-              <div key={c} className="h-8 rounded-[14px] flex items-center pl-3 pr-4">
-                <span className="truncate" style={{ ...f, fontWeight: 500, fontSize: 13, color: "#45556c", letterSpacing: "-0.35px" }}>{c}</span>
               </div>
-            ))}
-            <div className="flex items-center justify-center py-1.5">
-              <span style={{ ...f, fontWeight: 400, fontSize: 12, color: "#737373" }}>이전 대화 더 보기</span>
-            </div>
-          </div>
+            </>
+          )}
         </div>
-        )}
       </div>
       <style>{`
         /* 사이드바 메뉴 — 배경·이동·색만 전이시킨다(폰트/굵기/크기는 그대로).
@@ -1085,14 +1109,27 @@ function SidebarDrawer({ open, onClose, currentScreen, onNavigate, onSettingsOpe
  * 계정 팝업(위 SidebarDrawer 의 profileMenuOpen 블록)과 같은 스타일을 그대로 따른다 —
  * 다른 자리에 또 다른 프로필 메뉴 모양이 생기지 않도록. 크레딧 카드만 이 메뉴에 새로 얹는다.
  */
-function ProfileMenuButton({ onCreditClick, onStartTutorial, onSettingsOpen }: {
+/** 프로필 메뉴 항목 공통 클래스 — hover 배경 + 키보드 focus 링(이 버튼들엔 지금까지 둘 다 없었다). */
+const PROFILE_MENU_ROW_CLASS = "w-full flex items-center gap-3.5 px-5 py-3.5 outline-none transition-colors duration-150 hover:bg-[#f8fafc] focus-visible:bg-[#f8fafc] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4f7bff]";
+
+function ProfileMenuButton({ onCreditClick, onHistoryClick, onStartTutorial, onSettingsOpen }: {
   onCreditClick?: () => void;
+  /** 잔액 옆 "내역 보기 ›" — 설정 > 크레딧·사용 내역을 바로 연다. */
+  onHistoryClick?: () => void;
   onStartTutorial?: () => void;
   onSettingsOpen?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [creditBalance] = useCreditBalance();
+  // 이름 옆 플랜 배지 — 실제 구독 스토어 상태를 그대로 표시한다(조회 전에는 아무
+  // 배지도 달지 않고, 해지 예정이어도 이용 기간이 남아 있으면 그 플랜을 그대로 보여준다 —
+  // hasCurrentPlan이 "active"/"cancel_scheduled" 둘 다 포함하는 이유).
+  const subscription = useSubscription();
+  const currentPlan = findPlan(subscription.planId);
+  const hasCurrentPlan = subscription.status === "active" || subscription.status === "cancel_scheduled";
   const wrapRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(menuRef, open);
 
   useEffect(() => {
     if (!open) return;
@@ -1126,76 +1163,112 @@ function ProfileMenuButton({ onCreditClick, onStartTutorial, onSettingsOpen }: {
         aria-expanded={open}
         aria-label="최유정 계정 메뉴"
         title="최유정"
-        className="rounded-full overflow-hidden shrink-0 border border-[#c7d2fe]"
+        className="rounded-full overflow-hidden shrink-0 border border-[#c7d2fe] outline-none transition-shadow duration-150 hover:ring-2 hover:ring-offset-1 hover:ring-[#c7d2fe] focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#4f7bff]"
         style={{ width: 32, height: 32, background: "#e0e7ff" }}
       >
         <img alt="최유정" className="size-full object-cover" src={imgUserAvatar} />
       </button>
       {open && (
         <div
+          ref={menuRef}
           role="menu"
           aria-label="프로필"
-          className="absolute right-0 rounded-[20px] bg-white overflow-hidden"
+          className="profile-menu-pop absolute right-0 rounded-[20px] bg-white overflow-hidden"
           style={{ top: 42, width: 280, border: "1px solid #e2e8f0", boxShadow: "0px 8px 32px rgba(0,0,0,0.14)", zIndex: 60 }}
         >
           <div className="px-5 pt-5 pb-4">
-            <p style={{ ...f, fontWeight: 700, fontSize: 17, color: "#0a0a0a", letterSpacing: "-0.5px" }}>최유정</p>
+            <div className="flex items-center gap-2">
+              <p style={{ ...f, fontWeight: 700, fontSize: 17, color: "#0a0a0a", letterSpacing: "-0.5px" }}>최유정</p>
+              {/* 조회 전(아직 스토어를 안 읽었다는 뜻은 아니지만, 구독 여부를 확정하기
+                  전까지는)에는 배지를 달지 않는다 — Free를 임의로 못 박지 않는다. */}
+              {hasCurrentPlan && currentPlan && (
+                <span
+                  className="rounded-full px-2 py-0.5 shrink-0"
+                  style={{ ...f, fontWeight: 700, fontSize: 10.5, letterSpacing: "-0.1px", color: color.brand, background: color.surface.accent }}
+                >
+                  {currentPlan.name}
+                </span>
+              )}
+            </div>
             <p style={{ ...f, fontWeight: 400, fontSize: 13, color: "#9ca3af", marginTop: 2 }}>cyj2406@gmail.com</p>
           </div>
-          {/* 세로로 쌓는다 — 버튼을 옆에 붙이면(이전 레이아웃) "요금제 및 크레딧"처럼 문구가
-              길어질 때 카드 폭 안에서 줄바꿈되거나 왼쪽 잔액 영역이 눌렸다. 버튼을 전체 폭
-              한 줄로 따로 빼면 문구 길이와 무관하게 항상 한 줄로 안전하게 들어간다. */}
-          <div className="mx-5 mb-4 rounded-2xl flex flex-col gap-3" style={{ background: color.surface.accent, border: `1px solid ${color.border.default}`, padding: "12px 14px" }}>
-            <div>
-              <div style={{ ...f, fontWeight: 600, fontSize: 11.5, color: SUBTITLE_COLOR }}>내 크레딧</div>
-              <div className="mt-1 flex items-center gap-1.5">
-                <div className="rounded-full size-5 flex items-center justify-center shrink-0" style={{ background: color.brand }}>
-                  <span style={{ ...f, fontWeight: 700, fontSize: 10, color: "white" }}>C</span>
+          {/* 크레딧 영역 — 프로필/크레딧/일반 메뉴 세 영역을 구분선이 아니라 여백과 배경
+              차이로 그룹핑한다. 카드 배경은 브랜드 톤을 아주 옅게 쓰는 surface.accent,
+              테두리·그림자 없이 radius.card만 적용 — 강조는 배경색 하나로 충분하다.
+              내역 보기와 구매 버튼은 잔액 영역과 서로 독립된 클릭 요소다(영역 전체를
+              감싸는 버튼 아님). */}
+          <div className="px-5 pb-4">
+            <div
+              className="flex flex-col gap-3"
+              style={{ background: color.surface.accent, borderRadius: radius.card, padding: "14px 16px" }}
+            >
+              <div className="flex flex-col gap-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span style={typography.caption}>사용 가능 크레딧</span>
+                  {onHistoryClick && (
+                    <button
+                      type="button"
+                      onClick={() => { setOpen(false); onHistoryClick(); }}
+                      className="shrink-0 -my-1 -mr-1.5 px-1.5 py-1 rounded-md outline-none transition-colors hover:bg-black/[0.06] focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#4f7bff]"
+                      style={{ ...f, fontWeight: 600, fontSize: 12, color: color.brand, letterSpacing: "-0.2px" }}
+                    >
+                      내역 보기 ›
+                    </button>
+                  )}
                 </div>
-                <span style={{ ...f, fontWeight: 700, fontSize: 18, color: color.text.primary, letterSpacing: "-0.3px" }}>
+                <span
+                  className="truncate"
+                  style={{ ...f, fontWeight: 700, fontSize: 20, color: color.text.primary, letterSpacing: "-0.4px" }}
+                >
                   {creditBalance.toLocaleString()}
                 </span>
               </div>
+              <Button
+                variant="secondary"
+                size="md"
+                fullWidth
+                style={{ whiteSpace: "nowrap" }}
+                onClick={() => { setOpen(false); onCreditClick?.(); }}
+              >
+                요금제 및 크레딧
+              </Button>
             </div>
-            <Button
-              variant="primary"
-              size="md"
-              fullWidth
-              pill
-              style={{ whiteSpace: "nowrap" }}
-              onClick={() => { setOpen(false); onCreditClick?.(); }}
-            >
-              요금제 및 크레딧
-            </Button>
           </div>
-          <div className="h-px bg-[#f1f5f9]" />
           {menuTop.map(({ icon, label, onClick }) => (
-            <button key={label} onClick={onClick} className="w-full flex items-center gap-3.5 px-5 py-3.5">
+            <button key={label} onClick={onClick} className={PROFILE_MENU_ROW_CLASS}>
               <div className="shrink-0">{icon}</div>
               <span style={{ ...f, fontWeight: 500, fontSize: 14.5, color: "#1e293b", letterSpacing: "-0.3px" }}>{label}</span>
             </button>
           ))}
           <div className="h-px bg-[#f1f5f9]" />
           {menuMid.map(({ icon, label }) => (
-            <button key={label} className="w-full flex items-center gap-3.5 px-5 py-3.5">
+            <button key={label} className={PROFILE_MENU_ROW_CLASS}>
               <div className="shrink-0">{icon}</div>
               <span style={{ ...f, fontWeight: 500, fontSize: 14.5, color: "#1e293b", letterSpacing: "-0.3px" }}>{label}</span>
             </button>
           ))}
           <div className="h-px bg-[#f1f5f9]" />
-          <button className="w-full flex items-center gap-3.5 px-5 py-3.5 pb-5">
+          <button className={`${PROFILE_MENU_ROW_CLASS} pb-5`}>
             <LogOut size={19} strokeWidth={1.6} color="#9ca3af" />
             <span style={{ ...f, fontWeight: 500, fontSize: 14.5, color: "#1e293b", letterSpacing: "-0.3px" }}>로그아웃</span>
           </button>
         </div>
       )}
+      <style>{`
+        @keyframes profileMenuIn {
+          from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .profile-menu-pop { animation: profileMenuIn 160ms cubic-bezier(0.4, 0, 0.2, 1); transform-origin: top right; }
+        @media (prefers-reduced-motion: reduce) { .profile-menu-pop { animation: none; } }
+      `}</style>
     </div>
   );
 }
 
-function TopBar({ onMenuOpen, onBack, showBack, onCreditClick, onBellClick, bellRef, brand = true, onStartTutorial, onSettingsOpen }: {
+function TopBar({ onMenuOpen, onBack, showBack, onCreditClick, onHistoryClick, onBellClick, bellRef, brand = true, onStartTutorial, onSettingsOpen }: {
   onMenuOpen: () => void; onBack?: () => void; showBack?: boolean;
-  onCreditClick?: () => void; onBellClick?: () => void;
+  onCreditClick?: () => void; onHistoryClick?: () => void; onBellClick?: () => void;
   bellRef?: React.RefObject<HTMLButtonElement | null>;
   /**
    * 좌측의 햄버거 + 로고를 그릴지. 사이드바가 도킹된 데스크톱에서는 false —
@@ -1210,18 +1283,18 @@ function TopBar({ onMenuOpen, onBack, showBack, onCreditClick, onBellClick, bell
     <header className="h-14 flex items-center justify-between px-4 shrink-0 bg-[#f8fafc]">
       <div className="flex items-center gap-2">
         {showBack && onBack ? (
-          <button onClick={onBack} aria-label="뒤로 가기" className="flex items-center justify-center size-9 rounded-[10px]"><IconChevronLeft /></button>
+          <IconButton onClick={onBack} aria-label="뒤로 가기" className="flex items-center justify-center size-9"><IconChevronLeft /></IconButton>
         ) : brand ? (
-          <button onClick={onMenuOpen} className="flex items-center justify-center size-9 rounded-[10px] opacity-80"><IconMenu /></button>
+          <IconButton onClick={onMenuOpen} className="flex items-center justify-center size-9 opacity-80"><IconMenu /></IconButton>
         ) : null}
         {brand && <img alt="딸깍.net" className="h-[22px] w-auto object-contain" src={imgImageNet} />}
       </div>
       <div className="flex items-center gap-2">
-        <button ref={bellRef} onClick={onBellClick} className="relative size-9 flex items-center justify-center">
+        <IconButton ref={bellRef} onClick={onBellClick} shape="circle" aria-label="알림" className="relative size-9 flex items-center justify-center">
           <IconBell />
           <div className="absolute top-[6px] left-[22px] bg-[#2b7fff] rounded-full size-2" />
-        </button>
-        <ProfileMenuButton onCreditClick={onCreditClick} onStartTutorial={onStartTutorial} onSettingsOpen={onSettingsOpen} />
+        </IconButton>
+        <ProfileMenuButton onCreditClick={onCreditClick} onHistoryClick={onHistoryClick} onStartTutorial={onStartTutorial} onSettingsOpen={onSettingsOpen} />
       </div>
     </header>
   );
@@ -1434,10 +1507,10 @@ const COMPOSER_ANIM = "height 200ms ease";
 function ComposerCard({ variant = "focus", children }: { variant?: "focus" | "plain"; children: ReactNode }) {
   if (variant === "plain") {
     return (
-      <div
-        className="bg-white rounded-[20px]"
-        style={{ border: "1px solid #e8ecf2", boxShadow: "0px 2px 20px rgba(0,0,0,0.09)" }}
-      >
+      // border를 className으로 둬야 아래 :focus-within 규칙(theme.css)이 인라인 style보다
+      // 우선순위에서 밀리지 않는다 — 안의 textarea에 포커스가 가면 카드 테두리 전체가
+      // 살짝 강조되어, 지금까지 전혀 없던 "여기 입력 중" 표시가 생긴다.
+      <div className="composer-card-plain bg-white rounded-[20px] border border-[#e8ecf2] shadow-[0px_2px_20px_rgba(0,0,0,0.09)]">
         {children}
       </div>
     );
@@ -1454,15 +1527,39 @@ function ComposerCard({ variant = "focus", children }: { variant?: "focus" | "pl
 /** 컴포저 우상단 확대/축소 토글. 두 컴포저가 같은 버튼을 쓴다. */
 function ComposerExpandToggle({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
   return (
-    <button
-      type="button"
+    <IconButton
       onClick={onToggle}
       aria-label={expanded ? "입력창 축소" : "입력창 확대"}
       aria-expanded={expanded}
-      className="absolute top-2.5 right-2.5 size-8 rounded-[10px] flex items-center justify-center shrink-0"
+      className="absolute top-2.5 right-2.5 size-8 flex items-center justify-center shrink-0"
       style={{ color: "#475569", opacity: 0.45 }}
     >
       {expanded ? <Minimize2 size={16} strokeWidth={1.8} /> : <Maximize2 size={16} strokeWidth={1.8} />}
+    </IconButton>
+  );
+}
+
+/** 컴포저 전송 버튼 — 두 컴포저(홈/워크스페이스)가 같은 버튼을 쓴다. 배경이 항상
+ *  브랜드 블루라 Tailwind hover: 클래스가 안 먹는(인라인 style 우선) 문제를 Button.tsx와
+ *  같은 방식(React 상태로 배경 계산)으로 피한다. */
+function ComposerSendButton({ onClick }: { onClick?: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+  // Button.tsx와 같은 언어를 쓴다 — pressed는 hover보다 한 단계 더 어둡게(scale/이동 없음).
+  const bg = pressed ? "#2f56c9" : hovered ? color.brandHover : "#4f7bff";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="생성 요청 보내기"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => { setHovered(false); setPressed(false); }}
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
+      className="rounded-full size-[32px] flex items-center justify-center shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff]"
+      style={{ background: bg, transition: `background-color ${motion.fast}` }}
+    >
+      <IconSend />
     </button>
   );
 }
@@ -1595,7 +1692,7 @@ function ChatInputBox({ initialValue }: { initialValue?: string } = {}) {
           </div>
           <div className="flex items-center gap-1.5 px-3.5 pb-3.5 pt-2">
             <ComposerChips />
-            <button className="bg-[#4f7bff] rounded-full size-[32px] flex items-center justify-center shrink-0"><IconSend /></button>
+            <ComposerSendButton />
           </div>
       </ComposerCard>
       <style>{`
@@ -1982,14 +2079,23 @@ function FormsAIScreen({ activeTab, onTabChange, sortOption, onSortChange, scrol
 
 // ─── 화면 컴포넌트 ────────────────────────────────────────────────────────────
 
-function HomeScreen({ onSelectTask, onSearch, onHelp }: {
+function HomeScreen({ onSelectTask, onSearch, onHelp, autoFocusHelper, onAutoFocusHelperHandled }: {
   onSelectTask: (taskId: string) => void;
   onSearch: (query: string) => void;
   onHelp: () => void;
+  /** "요청 작성 도움받기"를 취소하고 홈으로 돌아왔을 때만 true — 도우미 버튼에 포커스를 되돌린다. */
+  autoFocusHelper?: boolean;
+  onAutoFocusHelperHandled?: () => void;
 }) {
   // 태블릿에서는 푸터가 화면 하단 고정이 아니라 콘텐츠 흐름 끝에 와야 하므로
   // 셸(App)이 아니라 스크롤 컨테이너인 이 main 안에서 렌더한다.
   const isTabletRange = useIsTabletRange();
+  // 카테고리 선택 — 다시 누르면 접힌다. 선택만으로는 이동·스크롤이 생기지 않는다
+  // (템플릿 목록으로 넘어가는 건 세부 기능 카드를 눌렀을 때뿐).
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const toggleGroup = (groupId: string) => setSelectedGroupId((v) => (v === groupId ? null : groupId));
+  const selectedGroup = TASK_GROUPS.find((g) => g.id === selectedGroupId) ?? null;
+
   return (
     <main
       className="flex-1 flex flex-col pb-6 overflow-y-auto"
@@ -2000,21 +2106,28 @@ function HomeScreen({ onSelectTask, onSearch, onHelp }: {
       {/* .home-stack — 모바일·데스크톱에서는 display:contents 라 아래 두 블록이 main 의 flex 흐름에
           그대로 참여한다(기존 배치 유지). 태블릿에서만 720px 축의 세로 중앙 정렬 컨테이너가 된다. */}
       <div className="home-stack">
-        {/* Heading */}
+        {/* Heading — 참고 디자인 문구 그대로("딸깍"만 브랜드 색). */}
         <div className="home-heading text-center">
-          <p className="leading-[1.25] whitespace-nowrap" style={{ ...f, fontWeight: 700, fontSize: "var(--hero-title-size)", letterSpacing: "var(--hero-title-tracking)" }}>
-            <span style={{ color: color.brand }}>딸깍</span>
-            <span style={{ color: "#0a0a0a" }}> 한 번이면, 작업은 더 빠르게</span>
-          </p>
-          <p className="home-sub" style={{ ...f, fontWeight: 500, fontSize: "var(--hero-sub-size)", color: SUBTITLE_COLOR, letterSpacing: "-0.3px", lineHeight: 1.6, wordBreak: "keep-all" }}>
-            만들고 싶은 작업을 고르면, 어울리는 서식을 보여드려요.
+          <p className="leading-[1.3]" style={{ ...f, fontWeight: 700, fontSize: "var(--hero-title-size)", letterSpacing: "var(--hero-title-tracking)", color: "#0a0a0a", wordBreak: "keep-all" }}>
+            <span style={{ color: color.brand }}>딸깍</span> 한 번이면, 작업은 더 빠르게
           </p>
         </div>
-        {/* 추천 서식 · 검색+도움받기 · 작업 고르기 — 전부 같은 폭(--home-container)에 맞추고,
-            섹션 사이는 --home-block-gap(44px) 하나로만 띄운다. */}
-        <div className="home-body w-full mx-auto flex flex-col" style={{ maxWidth: "var(--home-container)", gap: "var(--home-block-gap)" }}>
+        {/* 검색+도움받기+카테고리 · 바로 시작하기 좋은 템플릿 · 전체 기능 — 전부 같은 폭
+            (--home-container)에 맞춘다. 섹션 사이 간격은 여기(부모 flex gap)가 아니라 각
+            섹션 자신의 margin-top으로 관리한다(RecommendedCarousel의 --home-block-gap,
+            TaskGrid의 mt-10/wide:mt-16) — 위 섹션 padding-bottom과 중복 합산되지 않도록
+            한 곳(아래 섹션의 margin-top)에서만 정한다. */}
+        <div className="home-body w-full mx-auto flex flex-col" style={{ maxWidth: "var(--home-container)" }}>
+          <div className="flex flex-col items-center" style={{ gap: 24 }}>
+            <HomeSearch onSearch={onSearch} onHelp={onHelp} autoFocusHelper={autoFocusHelper} onAutoFocusHelperHandled={onAutoFocusHelperHandled} />
+            <CategoryQuickLinks selectedGroupId={selectedGroupId} onToggle={toggleGroup} />
+            {selectedGroup && (
+              <div className="w-full">
+                <CategoryFeatureStrip group={selectedGroup} onSelectTask={onSelectTask} />
+              </div>
+            )}
+          </div>
           <RecommendedCarousel onSelectTemplate={onSelectTask} />
-          <HomeSearch onSearch={onSearch} onHelp={onHelp} />
           <TaskGrid onSelectTask={onSelectTask} />
         </div>
       </div>
@@ -2409,6 +2522,9 @@ const notificationItems = [
 
 function NotificationsPanel({ onClose, onViewAll }: { onClose: () => void; onViewAll: () => void }) {
   const [items, setItems] = useState(notificationItems);
+  const [hoveredRow, setHoveredRow] = useState<number | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(panelRef, true);
 
   const markAllRead = () => setItems(items.map((it) => ({ ...it, read: true })));
 
@@ -2421,6 +2537,7 @@ function NotificationsPanel({ onClose, onViewAll }: { onClose: () => void; onVie
       />
       {/* 패널 */}
       <div
+        ref={panelRef}
         style={{
           position: "fixed", left: 0, right: 0, top: 56, zIndex: 41,
           background: "white",
@@ -2442,9 +2559,23 @@ function NotificationsPanel({ onClose, onViewAll }: { onClose: () => void; onVie
           <div className="flex flex-col px-4">
             {items.map((item, i) => (
               <div key={i}
+                role="button"
+                tabIndex={0}
                 onClick={() => setItems(items.map((it, j) => j === i ? { ...it, read: true } : it))}
-                className="flex gap-3 py-3.5 cursor-pointer"
-                style={{ borderBottom: i < items.length - 1 ? "1px solid #f1f5f9" : "none" }}>
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setItems(items.map((it, j) => j === i ? { ...it, read: true } : it));
+                  }
+                }}
+                onMouseEnter={() => setHoveredRow(i)}
+                onMouseLeave={() => setHoveredRow((v) => (v === i ? null : v))}
+                className="flex gap-3 py-3.5 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4f7bff]"
+                style={{
+                  borderBottom: i < items.length - 1 ? "1px solid #f1f5f9" : "none",
+                  background: hoveredRow === i ? "#f8fafc" : "transparent",
+                  transition: `background-color ${motion.fast}`,
+                }}>
                 {/* 아이콘 */}
                 <div className="shrink-0 mt-0.5">
                   <div className="size-8 rounded-full flex items-center justify-center" style={{ background: item.read ? "#f1f5f9" : "#eff6ff" }}>
@@ -2466,7 +2597,7 @@ function NotificationsPanel({ onClose, onViewAll }: { onClose: () => void; onVie
                   <ClampedText
                     text={item.body}
                     lines={2}
-                    style={{ ...f, fontWeight: 400, fontSize: 12, color: "#737373", lineHeight: 1.6, letterSpacing: "-0.2px" }}
+                    style={{ ...f, fontWeight: 400, fontSize: 12, color: color.text.secondary, lineHeight: 1.6, letterSpacing: "-0.2px" }}
                     toggleStyle={{ ...f, fontWeight: 600, fontSize: 11.5, color: "#4f7bff", letterSpacing: "-0.2px", marginTop: 4 }}
                   />
                 </div>
@@ -2494,7 +2625,9 @@ function NotificationsPopover({ anchorRef, onClose, onViewAll }: {
 }) {
   const [items, setItems] = useState(notificationItems);
   const [pos, setPos] = useState({ top: 64, right: 16, maxHeight: 560 });
+  const [hoveredRow, setHoveredRow] = useState<number | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(boxRef, true);
 
   const markAllRead = () => setItems(items.map((it) => ({ ...it, read: true })));
 
@@ -2561,9 +2694,23 @@ function NotificationsPopover({ anchorRef, onClose, onViewAll }: {
         {items.map((item, i) => (
           <div
             key={i}
+            role="button"
+            tabIndex={0}
             onClick={() => setItems(items.map((it, j) => (j === i ? { ...it, read: true } : it)))}
-            className="flex gap-3 px-5 py-4 cursor-pointer"
-            style={{ borderBottom: i < items.length - 1 ? "1px solid #f1f5f9" : "none", background: item.read ? "white" : "#f8fbff" }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setItems(items.map((it, j) => (j === i ? { ...it, read: true } : it)));
+              }
+            }}
+            onMouseEnter={() => setHoveredRow(i)}
+            onMouseLeave={() => setHoveredRow((v) => (v === i ? null : v))}
+            className="flex gap-3 px-5 py-4 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4f7bff]"
+            style={{
+              borderBottom: i < items.length - 1 ? "1px solid #f1f5f9" : "none",
+              background: hoveredRow === i ? "#f1f5f9" : item.read ? "white" : "#f8fbff",
+              transition: `background-color ${motion.fast}`,
+            }}
           >
             <div className="shrink-0 size-10 rounded-full flex items-center justify-center" style={{ background: item.read ? "#f1f5f9" : "#eff6ff" }}>
               <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
@@ -2582,7 +2729,7 @@ function NotificationsPopover({ anchorRef, onClose, onViewAll }: {
               <ClampedText
                 text={item.body}
                 lines={2}
-                style={{ ...f, fontWeight: 400, fontSize: 12.5, color: "#737373", lineHeight: 1.6, letterSpacing: "-0.2px", marginTop: 3 }}
+                style={{ ...f, fontWeight: 400, fontSize: 12.5, color: color.text.secondary, lineHeight: 1.6, letterSpacing: "-0.2px", marginTop: 3 }}
                 toggleStyle={{ ...f, fontWeight: 600, fontSize: 12, color: "#4f7bff", letterSpacing: "-0.2px", marginTop: 5 }}
               />
             </div>
@@ -2643,6 +2790,7 @@ const allNotificationItems = [
 
 function NotificationsAllScreen() {
   const [items, setItems] = useState(allNotificationItems);
+  const [hoveredRow, setHoveredRow] = useState<number | null>(null);
 
   const markAllRead = () => setItems(items.map((it) => ({ ...it, read: true })));
   const deleteAll = () => setItems([]);
@@ -2683,11 +2831,22 @@ function NotificationsAllScreen() {
           style={{ boxShadow: "0px 1px 4px rgba(0,0,0,0.04)" }}>
           {items.map((item, i) => (
             <div key={i}
+              role="button"
+              tabIndex={0}
               onClick={() => setItems(items.map((it, j) => j === i ? { ...it, read: true } : it))}
-              className="flex gap-3 px-4 py-4 cursor-pointer"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setItems(items.map((it, j) => j === i ? { ...it, read: true } : it));
+                }
+              }}
+              onMouseEnter={() => setHoveredRow(i)}
+              onMouseLeave={() => setHoveredRow((v) => (v === i ? null : v))}
+              className="flex gap-3 px-4 py-4 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#4f7bff]"
               style={{
                 borderBottom: i < items.length - 1 ? "1px solid #f1f5f9" : "none",
-                background: item.read ? "white" : "#fafbff",
+                background: hoveredRow === i ? "#f1f5f9" : item.read ? "white" : "#fafbff",
+                transition: `background-color ${motion.fast}`,
               }}>
               {/* 아이콘 */}
               <div className="shrink-0 mt-0.5">
@@ -2713,7 +2872,7 @@ function NotificationsAllScreen() {
                 <ClampedText
                   text={item.body}
                   lines={2}
-                  style={{ ...f, fontWeight: 400, fontSize: 12.5, color: "#737373", lineHeight: 1.65, letterSpacing: "-0.2px" }}
+                  style={{ ...f, fontWeight: 400, fontSize: 12.5, color: color.text.secondary, lineHeight: 1.65, letterSpacing: "-0.2px" }}
                   toggleStyle={{ ...f, fontWeight: 600, fontSize: 12, color: "#4f7bff", letterSpacing: "-0.2px", marginTop: 5 }}
                 />
               </div>
@@ -2721,133 +2880,6 @@ function NotificationsAllScreen() {
           ))}
         </div>
       )}
-      </div>
-    </main>
-  );
-}
-
-// ─── 크레딧 사용 내역 화면 ───────────────────────────────────────────────────────
-
-// 데스크톱(CardnewsWorkspaceV2)의 크레딧 사용 내역과 동일한 정의 — 탭 2종 · 유형 9종 · 목데이터
-const USAGE_FILTER = "사용 내역";
-const BALANCE_FILTER = "환불·충전 내역";
-const CREDIT_FILTERS = [USAGE_FILTER, BALANCE_FILTER];
-
-// 사용 유형 7가지 + 충전/환불 유형
-const USAGE_TYPES = ["이미지", "랜딩페이지", "동영상", "프레젠테이션", "오디오", "문서", "서식"] as const;
-const BALANCE_TYPES = ["충전", "환불"] as const;
-type CreditType = (typeof USAGE_TYPES)[number] | (typeof BALANCE_TYPES)[number];
-
-/** [예시] 이번 달 사용량 — 실제 정책·집계 로직이 없는 고정 예시 값. */
-const CREDIT_MONTHLY_USED = 2480;
-
-/**
- * [예시] 크레딧 증감 내역 — 각 행의 balance 는 그 시점의 스냅샷(예시 데이터)이다.
- * 공유 잔액(useCreditBalance)이 이후 바뀌어도 이 과거 내역까지 다시 맞추지 않는다 —
- * 실제 서비스라면 내역은 그 시점 그대로 남고 현재 잔액과는 별개로 조회되는 값이다.
- */
-const creditHistoryData: {
-  date: string;
-  type: CreditType;
-  details: string;
-  change: number;
-  balance: number;
-}[] = [
-  { date: "2026. 06. 22. 오전 10:02:11", type: "환불",         details: "동영상 생성 실패 크레딧 환불",   change: 1780,   balance: 11974710 },
-  { date: "2026. 06. 22. 오전 9:49:06",  type: "이미지",       details: "월급 빼고 다 오르는 물가 카드뉴스", change: -69,   balance: 11972930 },
-  { date: "2026. 06. 15. 오후 5:13:59",  type: "프레젠테이션", details: "2026 금융 트렌드 PPT 생성",      change: -185,   balance: 11972999 },
-  { date: "2026. 06. 15. 오후 5:13:36",  type: "문서",         details: "졸업논문 템플릿 작성 안내",       change: -74,    balance: 11973184 },
-  { date: "2026. 06. 15. 오후 5:13:33",  type: "동영상",       details: "브랜드 홍보 숏폼 영상 생성",      change: -106,   balance: 11973258 },
-  { date: "2026. 06. 15. 오후 5:13:29",  type: "이미지",       details: "이미지 템플릿 편집 정보",         change: -224,   balance: 11973364 },
-  { date: "2026. 06. 15. 오후 5:12:58",  type: "랜딩페이지",   details: "딸깍넷 랜딩페이지 생성",          change: -122,   balance: 11973588 },
-  { date: "2026. 06. 15. 오후 5:12:47",  type: "서식",         details: "세금계산서 템플릿 작성 내용 문의", change: -98,   balance: 11973710 },
-  { date: "2026. 06. 15. 오후 5:12:40",  type: "오디오",       details: "브랜드 BGM 30s 생성",             change: -119,   balance: 11973808 },
-  { date: "2026. 06. 15. 오후 5:12:19",  type: "충전",         details: "크레딧 카드 충전 (VVIP 패키지)",  change: 100000, balance: 11973927 },
-  { date: "2026. 06. 15. 오후 5:12:14",  type: "서식",         details: "내용증명서 템플릿 작성 문의",     change: -67,    balance: 11973997 },
-];
-
-
-
-function CreditHistoryScreen({ onTopUp }: { onTopUp: () => void }) {
-  const [activeTab, setActiveTab] = useState(0);
-  const [creditBalance] = useCreditBalance();
-
-  // 데스크톱과 동일하게 크레딧 변동 부호로 사용/환불·충전을 가른다
-  const filtered = creditHistoryData.filter(it =>
-    CREDIT_FILTERS[activeTab] === BALANCE_FILTER ? it.change > 0 : it.change < 0
-  );
-
-  return (
-    <main className="flex-1 flex flex-col overflow-y-auto" style={{ scrollbarWidth: "none" }}>
-      {/* 페이지 타이틀 */}
-      <div className="px-4 pt-5 pb-4">
-        <h1 style={typography.pageTitle}>크레딧 사용 내역</h1>
-      </div>
-
-      {/* 잔액 카드 — 요금제 페이지의 강조 카드와 같은 라운드·그림자(20px, cardEmphasis) */}
-      <div className="mx-4 mb-4 bg-white px-5 py-5"
-        style={{ borderRadius: radius.cardEmphasis, border: `1px solid ${color.border.default}`, boxShadow: shadow.cardEmphasis }}>
-        <p style={{ ...f, fontWeight: 500, fontSize: 12, color: color.text.muted, marginBottom: 2 }}>사용 가능한 크레딧</p>
-        <div className="flex items-center justify-between gap-3 mt-1">
-          <div>
-            <p style={{ ...f, fontWeight: 700, fontSize: 28, color: color.text.primary, letterSpacing: "-1.1px", lineHeight: 1.1 }}>
-              {creditBalance.toLocaleString()}
-            </p>
-            <p style={{ ...f, fontWeight: 400, fontSize: 12, color: color.text.muted, marginTop: 5 }}>
-              이번 달 사용한 크레딧: <span style={{ fontWeight: 600 }}>{CREDIT_MONTHLY_USED.toLocaleString()}</span>
-            </p>
-          </div>
-          {/* 다크 CTA — SettingsModal의 "요금제 및 크레딧 관리"와 같은 역할·같은 색(color.text.primary=#0a0a0a)이라
-              공용 Button(variant="dark")을 그대로 재사용한다. 기존엔 hover/focus-visible 표시가 전혀 없었다. */}
-          <Button variant="dark" size="md" onClick={onTopUp} className="shrink-0">
-            + 크레딧 충전
-          </Button>
-        </div>
-      </div>
-
-      {/* 필터 탭 + 총 건수 (데스크톱의 CATEGORY FILTERS 행) — "사용 내역/환불·충전 내역"은
-          같은 목록을 좁히는 필터라 탭(패널 전환)이 아니라 기존 ScrollableChips(필터 칩)를 그대로 쓴다. */}
-      <div className="mx-4 mb-3 pb-2 flex items-center justify-between gap-3" style={{ borderBottom: `1px solid ${color.border.default}` }}>
-        <ScrollableChips items={CREDIT_FILTERS} activeIndex={activeTab} onChange={setActiveTab} edgeClassName="" className="min-w-0" />
-        <span className="shrink-0" style={{ ...f, fontWeight: 700, fontSize: 11, color: color.text.muted, whiteSpace: "nowrap" }}>
-          총 {filtered.length}건
-        </span>
-      </div>
-
-      {/* 내역 리스트 — 그림자값(0px 1px 4px rgba(0,0,0,.04))이 shadow.card(0px 1px 3px rgba(0,0,0,.05))와
-          미세하게 달라 억지로 합치지 않고 그대로 둔다(라운드만 카드 강조 토큰과 일치해 교체). */}
-      <div className="flex flex-col mx-4 mb-6 bg-white overflow-hidden"
-        style={{ borderRadius: radius.cardEmphasis, border: `1px solid ${color.border.default}`, boxShadow: "0px 1px 4px rgba(0,0,0,0.04)" }}>
-        {filtered.map((item, i) => {
-          const positive = item.change > 0;
-          return (
-            <div key={i} className="px-4 py-4"
-              style={{ borderBottom: i < filtered.length - 1 ? "1px solid #f1f5f9" : "none" }}>
-              {/* 1행: 상세 내용 + 크레딧 변동 */}
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <p className="flex-1" style={{ ...f, fontWeight: 600, fontSize: 14, color: "#3b63f6", letterSpacing: "-0.35px", lineHeight: 1.3 }}>{item.details}</p>
-                <span style={{ ...f, fontWeight: 800, fontSize: 15, color: positive ? "#3b63f6" : "#ef4444", letterSpacing: "-0.4px", whiteSpace: "nowrap" }}>
-                  {positive ? "+" : ""}{item.change.toLocaleString()}
-                </span>
-              </div>
-              {/* 2행: 유형 뱃지 + 일시 + 잔액 */}
-              <div className="flex items-center gap-2">
-                <span className="shrink-0 inline-flex items-center rounded px-1.5 py-0.5"
-                  style={{
-                    ...f, fontWeight: 800, fontSize: 10, letterSpacing: "0.3px",
-                    background: positive ? color.surface.accent : "#f1f5f9",
-                    color: positive ? "#3b63f6" : "#475569",
-                  }}>
-                  {item.type}
-                </span>
-                <span className="truncate" style={{ ...f, fontWeight: 400, fontSize: 11.5, color: color.text.muted }}>{item.date}</span>
-                <span className="shrink-0" style={{ ...f, fontWeight: 700, fontSize: 12, color: color.text.primary, marginLeft: "auto" }}>
-                  {item.balance.toLocaleString()}
-                </span>
-              </div>
-            </div>
-          );
-        })}
       </div>
     </main>
   );
@@ -2890,12 +2922,7 @@ function WsChatInput({ onGenerate }: { onGenerate: () => void }) {
           <ComposerChips showUpload={false} />
 
           {/* 전송 버튼 — 스크롤 밖 고정 (onGenerate 동작 유지) */}
-          <button
-            onClick={onGenerate}
-            className="bg-[#4f7bff] rounded-full size-[32px] flex items-center justify-center shrink-0"
-          >
-            <IconSend />
-          </button>
+          <ComposerSendButton onClick={onGenerate} />
 
         </div>
       </ComposerCard>
@@ -5033,7 +5060,7 @@ function WorkspaceScreen({ category, templateName, fileType, onBack, onCreditCli
             히스토리(back)가 아니라 onBack 을 쓴다 — 이 앱은 라우터가 없어
             화면 전환이 히스토리에 쌓이지 않으므로 history.back() 은 앱 밖으로 나간다. */}
         {!isDesktop && (
-          <button onClick={onBack} aria-label="뒤로 가기" className="flex items-center justify-center size-9 rounded-[10px] shrink-0"><IconChevronLeft /></button>
+          <IconButton onClick={onBack} aria-label="뒤로 가기" className="flex items-center justify-center size-9 shrink-0"><IconChevronLeft /></IconButton>
         )}
         <p className="flex-1 truncate" style={{ ...f, fontWeight: 600, fontSize: 15, color: "#0a0a0a", letterSpacing: "-0.4px" }}>{templateName}</p>
       </header>
@@ -5247,12 +5274,27 @@ export default function App() {
    * 스택에 한 칸씩 쌓일 뿐) 순환하지 않고 뒤로 갈 때마다 정확히 한 단계씩 풀린다.
    */
   const [screenHistory, setScreenHistory] = useState<Screen[]>([]);
-  // "요금제 및 크레딧" 화면을 열 때 어느 탭으로 들어갈지. 프로필·설정에서 일반 진입하면
-  // 월 구독 탭, 크레딧 사용 내역의 "+ 크레딧 충전"에서는 추가 충전 탭으로 바로 연다.
+  // "요금제 및 크레딧" 구매 페이지를 열 때 어느 탭으로 들어갈지("월 구독 요금제" 기본,
+  // 설정의 "크레딧 충전"은 추가 충전 탭으로 바로 연다).
   const [pricingTab, setPricingTab] = useState<PricingTab>("subscription");
+  // 이미 "pricing" 화면에 머무는 중에 openPricing()을 다시 불러도 PricingPage가 확실히
+  // 그 탭으로 다시 열리도록 강제 리마운트시키는 키 — navigate()는 같은 화면으로의 이동을
+  // 스택에 쌓지 않으므로 pricingTab prop만으로는(이미 마운트된 컴포넌트의 내부 state라)
+  // 반영되지 않는다.
+  const [pricingNavKey, setPricingNavKey] = useState(0);
+  // 구독 완료 화면 문구 분기 — 미구독에서 새로 시작한 것과 기존 요금제를 바꾼 것은
+  // 사용자에게 다른 일이라 같은 "구독이 시작되었어요" 문구로 뭉뚱그리지 않는다.
+  const [wasPlanChange, setWasPlanChange] = useState(false);
   const [creditBalance] = useCreditBalance();
   const [notifOpen, setNotifOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 설정을 열 때 어느 탭으로 들어갈지("화면 설정" 기본, 프로필의 "내역 보기 ›"는 크레딧
+  // 내역 탭으로 바로 연다). 설정은 화면(screen)이 아니라 오버레이 모달이라 screenHistory
+  // 스택에 안 쌓인다 — 그래서 "구매 페이지를 설정에서 열었다가 돌아오면 설정을 다시
+  // 연다"를 이 두 상태로 직접 관리한다.
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab>("화면 설정");
+  const [settingsNavKey, setSettingsNavKey] = useState(0);
+  const [pendingSettingsReturnTab, setPendingSettingsReturnTab] = useState<SettingsTab | null>(null);
   // fileType — "템플릿 적용하기"로 들어온 카테고리(필터 탭)가 정한 결과물 형식.
   // 워드 → .docx / 한글 → .hwpx / 엑셀 → .xlsx / 논문 → .pdf / 영상 → .mp4
   const [workspace, setWorkspace] = useState<
@@ -5270,6 +5312,9 @@ export default function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [requestHandoff, setRequestHandoff] = useState<{ text: string; screen: Screen } | null>(null);
+  /** "요청 작성 도움받기"를 취소하고 홈으로 돌아왔을 때만 켜서, 홈의 도우미 버튼에 포커스를
+   *  되돌린다 — 완료(다른 화면으로 이동)나 그냥 홈에 들어올 때는 켜지 않는다. */
+  const [focusHelperCta, setFocusHelperCta] = useState(false);
 
   const openTaskTemplates = (taskId: string) => { setSelectedTaskId(taskId); navigate("task-templates"); };
   const openSearch = (query: string) => { setSearchQuery(query); navigate("search"); };
@@ -5314,8 +5359,23 @@ export default function App() {
   };
 
   /** 상단바 뒤로 가기 — 스택에 쌓인 "떠나기 직전 화면"으로 돌아간다. 스택이 비어 있으면
-   *  (예: 튜토리얼이 navigate 를 거치지 않고 화면을 강제로 바꾼 경우) 기존과 같이 홈으로. */
+   *  (예: 튜토리얼이 navigate 를 거치지 않고 화면을 강제로 바꾼 경우) 기존과 같이 홈으로.
+   *
+   *  설정에서 구매 페이지(요금제 변경/크레딧 충전)를 열고 온 상태(pendingSettingsReturnTab)면
+   *  일반 스택 대신 설정을 그 탭으로 다시 연다 — 설정은 화면이 아니라 오버레이라
+   *  screenHistory만으로는 "설정으로 돌아가기"를 표현할 수 없어서다. */
   const goBack = () => {
+    if (pendingSettingsReturnTab) {
+      const tab = pendingSettingsReturnTab;
+      setPendingSettingsReturnTab(null);
+      setScreenHistory((h) => {
+        if (h.length === 0) { setScreen("home"); return h; }
+        setScreen(h[h.length - 1]);
+        return h.slice(0, -1);
+      });
+      openSettingsAt(tab);
+      return;
+    }
     setScreenHistory((h) => {
       if (h.length === 0) { setScreen("home"); return h; }
       setScreen(h[h.length - 1]);
@@ -5323,8 +5383,26 @@ export default function App() {
     });
   };
 
-  /** 프로필/설정/크레딧 부족 등, 앱 어디서든 "요금제 및 크레딧" 화면을 여는 단일 진입로. */
-  const openPricing = (tab: PricingTab) => { setPricingTab(tab); navigate("pricing"); };
+  /** 프로필/설정/크레딧 부족 등, 앱 어디서든 "요금제 및 크레딧" 구매 페이지를 여는
+   *  단일 진입로. 설정을 거치지 않은 일반 진입이라 pendingSettingsReturnTab은 그대로
+   *  둔다(설정 쪽 헬퍼가 따로 채운다). */
+  const openPricing = (tab: PricingTab) => { setPricingTab(tab); setPricingNavKey((k) => k + 1); navigate("pricing"); };
+
+  /** 설정의 특정 탭을 바로 여는 단일 진입로(프로필의 "내역 보기 ›" 등). */
+  const openSettingsAt = (tab: SettingsTab) => {
+    setSettingsInitialTab(tab);
+    setSettingsNavKey((k) => k + 1);
+    setSettingsOpen(true);
+  };
+
+  /** 설정 탭에서 "요금제 변경"/"크레딧 충전"을 눌렀을 때 — 설정을 닫고 구매 페이지를
+   *  열되, 되돌아올 탭을 기억해 둔다(구매 완료/취소 후 goBack·"구독 정보 확인"이
+   *  같은 설정 탭으로 되돌아가게 한다 — 진입 경로 보존). */
+  const goToPurchaseFromSettings = (pricingSubTab: PricingTab, returnTab: SettingsTab) => {
+    setSettingsOpen(false);
+    setPendingSettingsReturnTab(returnTab);
+    openPricing(pricingSubTab);
+  };
 
   /**
    * 워크스페이스에 들어가면 사이드바를 아이콘 레일로 접고, 나오면 다시 편다.
@@ -5337,7 +5415,7 @@ export default function App() {
   const inWorkspace = !!workspace;
   useEffect(() => { setSidebarCollapsed(inWorkspace); }, [inWorkspace]);
 
-  const isSubScreen = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai", "credit-history", "notifications-all", "search", "task-templates", "request-help", "pricing"].includes(screen);
+  const isSubScreen = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai", "notifications-all", "search", "task-templates", "request-help", "pricing", "subscription-complete"].includes(screen);
 
   // 튜토리얼 다시 보기 — 홈으로 돌아가 1단계부터 다시 실행한다(중복 실행 방지)
   const startTutorial = () => {
@@ -5401,6 +5479,7 @@ export default function App() {
     /* 데스크톱은 가로 2단 — 도킹 사이드바 + 본문 컬럼. 그보다 좁으면 사이드바가
        오버레이 드로어라 자리를 차지하지 않고, 본문 컬럼 혼자 폭을 전부 쓴다. */
     <div className="bg-[#f8fafc] h-[100dvh] w-full flex overflow-hidden" style={f}>
+      <ToastHost />
       <SidebarDrawer
         variant={isDesktop ? "docked" : "drawer"}
         open={isDesktop || drawerOpen}
@@ -5409,7 +5488,7 @@ export default function App() {
         onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
         currentScreen={screen}
         onNavigate={navigate}
-        onSettingsOpen={() => setSettingsOpen(true)}
+        onSettingsOpen={() => openSettingsAt("화면 설정")}
         onStartTutorial={startTutorial}
       />
       {/* 본문 컬럼 — 워크스페이스가 이 안에서 absolute 로 덮으므로 relative 가 필요하다 */}
@@ -5420,13 +5499,20 @@ export default function App() {
         showBack={isSubScreen}
         brand={!isDesktop}
         onCreditClick={() => openPricing("subscription")}
+        onHistoryClick={() => openSettingsAt("크레딧")}
         onBellClick={() => setNotifOpen((v) => !v)}
         bellRef={bellRef}
         onStartTutorial={startTutorial}
-        onSettingsOpen={() => setSettingsOpen(true)}
+        onSettingsOpen={() => openSettingsAt("화면 설정")}
       />
       {screen === "home" && (
-        <HomeScreen onSelectTask={openTaskTemplates} onSearch={openSearch} onHelp={() => navigate("request-help")} />
+        <HomeScreen
+          onSelectTask={openTaskTemplates}
+          onSearch={openSearch}
+          onHelp={() => navigate("request-help")}
+          autoFocusHelper={focusHelperCta}
+          onAutoFocusHelperHandled={() => setFocusHelperCta(false)}
+        />
       )}
       {screen === "search" && (
         <SearchResultsScreen initialQuery={searchQuery} onBack={() => navigate("home")} onOpenTemplate={openTemplate} />
@@ -5436,7 +5522,7 @@ export default function App() {
       )}
       {screen === "request-help" && (
         <RequestHelpScreen
-          onBack={() => navigate("home")}
+          onBack={() => { setFocusHelperCta(true); navigate("home"); }}
           onComplete={(text, wsCategory) => {
             const target = REQUEST_HELP_SCREEN[wsCategory];
             setRequestHandoff({ text, screen: target });
@@ -5530,14 +5616,33 @@ export default function App() {
       {/* 태블릿(768~1199px)에서는 HomeScreen 이 스크롤 흐름 끝에서 직접 렌더한다. */}
       {screen === "home" && !isTabletRange && <Footer />}
       {screen === "notifications-all" && <NotificationsAllScreen />}
-      {screen === "credit-history" && (
-        <CreditHistoryScreen onTopUp={() => openPricing("topup")} />
-      )}
-      {/* 요금제 및 크레딧 — 기존 크레딧 충전 모달(CreditModal/CreditBottomSheet) 대신 전용
-          페이지 하나로 통합했다. 진입 탭은 pricingTab(프로필·설정은 구독 탭, 크레딧 사용
-          내역의 "+ 크레딧 충전"은 추가 충전 탭)으로 정한다. */}
+      {/* 요금제 및 크레딧 — 크레딧(잔액+내역)과 구독·결제(구 "구독 및 결제 관리" 화면)를
+          탭 두 개로 한 페이지에서 다룬다(같은 내용을 보여주는 화면을 두 곳에 두지 않음).
+          진입 탭·구매 화면은 pricingTab으로 정하고(프로필·크레딧 클릭은 크레딧 탭,
+          결제 실패 알림·"구독 및 결제 관리"는 구독·결제 탭, "다시 구독하기"/"크레딧
+          충전"은 구매 화면으로 바로 연다), pricingNavKey를 key로 넘겨 이미 이 화면에
+          머무는 중에 다시 openPricing()을 불러도 매번 그 탭/화면으로 확실히 연다. */}
       {screen === "pricing" && (
-        <PricingPage initialTab={pricingTab} onHistoryClick={() => navigate("credit-history")} />
+        <PricingPage
+          key={pricingNavKey}
+          initialTab={pricingTab}
+          onSubscribed={(result) => { setWasPlanChange(result.isPlanChange); navigate("subscription-complete"); }}
+        />
+      )}
+      {/* 구독 직후 완료 화면 — PricingPage 에서 구독 확정 시(mock) 여기로 넘어온다.
+          "구독 정보 확인"은 이제 별도 화면이 아니라 설정 > 구독·결제다. 이 구매가
+          설정에서 시작된 것이면(pendingSettingsReturnTab) 완료 후에도 그 탭으로 바로
+          이어지도록 소비하고, 아닌 일반 진입이면 처음부터 구독·결제 탭을 연다. */}
+      {screen === "subscription-complete" && (
+        <SubscriptionCompletePage
+          isPlanChange={wasPlanChange}
+          onStart={() => navigate("home")}
+          onViewDetails={() => {
+            const returnTab = pendingSettingsReturnTab ?? "구독 및 결제";
+            setPendingSettingsReturnTab(null);
+            openSettingsAt(returnTab);
+          }}
+        />
       )}
       {/* 워크스페이스 — 본문 컬럼만 덮는다(사이드바는 옆에 그대로 남는다).
           TopBar 까지 덮는 것은 지금과 같다. */}
@@ -5560,8 +5665,11 @@ export default function App() {
       <TutorialTour isOpen={tutorialOpen} steps={tutorialSteps} onClose={() => { setTutorialOpen(false); setScreen("home"); }} />
       {settingsOpen && (
         <SettingsModal
+          key={settingsNavKey}
+          initialTab={settingsInitialTab}
           onClose={() => setSettingsOpen(false)}
-          onPricingOpen={() => { setSettingsOpen(false); openPricing("subscription"); }}
+          onOpenTopUp={() => goToPurchaseFromSettings("topup", "크레딧")}
+          onOpenPlanChange={() => goToPurchaseFromSettings("subscription", "구독 및 결제")}
         />
       )}
       {/* 서식 채우기 — 데스크톱 3단. TopBar·사이드바까지 덮는 전체 화면이라 최상단에 얹는다.
@@ -5581,7 +5689,7 @@ export default function App() {
               onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
               currentScreen={screen}
               onNavigate={navigate}
-              onSettingsOpen={() => setSettingsOpen(true)}
+              onSettingsOpen={() => openSettingsAt("화면 설정")}
               onStartTutorial={startTutorial}
               recentForms={formsCards.slice(0, 4).map((c) => ({ id: c.id, title: c.title }))}
               currentFormId={fillTarget.id}

@@ -1,20 +1,33 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import { color, f } from "@/app/styleTokens";
 import type { TaskTemplate } from "@/app/data/tasks";
 
-/** 서식 카드 — hover·focus 시에만 "이 템플릿 사용" CTA 가 뜬다. 검색 결과·작업별 템플릿 목록이 함께 쓴다. */
-export default function TemplateResultCard({ template, onOpen, ctaLabel = "이 템플릿 사용" }: {
+/** 서식 카드 — hover·focus 시에만 "이 템플릿 사용" CTA 가 뜬다. 검색 결과·작업별 템플릿 목록이 함께 쓴다.
+ *  `selected`를 주면(요청 작성 도우미의 "다른 템플릿 선택" 후보 목록처럼 여러 장 중 하나를 고르는
+ *  자리에서) 브랜드 테두리 + 체크 배지로 현재 선택된 카드를 표시한다 — 넘기지 않으면(기존 화면들)
+ *  이전과 동일하게 아무 표시도 없다. */
+export default function TemplateResultCard({ template, onOpen, ctaLabel = "이 템플릿 사용", selected }: {
   template: TaskTemplate;
   onOpen: () => void;
   ctaLabel?: string;
+  selected?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="group flex flex-col text-left rounded-[14px] overflow-hidden bg-white"
-      style={{ border: "1px solid #e2e8f0" }}
+      className="group relative flex flex-col text-left rounded-[14px] overflow-hidden bg-white"
+      style={{ border: selected ? `1.5px solid ${color.brand}` : "1px solid #e2e8f0" }}
     >
+      {selected && (
+        <span
+          aria-hidden
+          className="absolute top-2 left-2 z-[1] flex items-center justify-center rounded-full"
+          style={{ width: 20, height: 20, background: color.brand, color: "#fff" }}
+        >
+          <Check size={12} strokeWidth={3} />
+        </span>
+      )}
       <div
         className="relative w-full flex items-center justify-center"
         style={{ aspectRatio: "4 / 3", background: "repeating-linear-gradient(135deg,#EEF0FF 0 8px,#E4E9FF 8px 16px)" }}

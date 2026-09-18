@@ -1,18 +1,27 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
-import { color, f, pageContainerWidth, typography } from "@/app/styleTokens";
+import { PageContainer, PageHeader } from "@/app/components/common/PageContainer";
+import { showToast } from "@/app/components/common/Toast";
 import { Tabs, tabPanelProps, type TabItem } from "@/app/components/common/Tabs";
-import { useCreditBalance } from "@/app/state/creditBalance";
+import {
+  addPaymentMethod, addTopup, chargeFirstPaymentWithTossPayments, chargeTopupWithTossPayments,
+  commitDefaultPaymentMethod, findPlan, previewNextBillingDateLabel, registerCardWithTossPayments,
+  subscribeToPlan, switchDefaultPaymentMethod, useSubscription,
+} from "@/app/state/subscription";
 
-import { UsageSummary } from "./UsageSummary";
+import { PurchasePolicyAccordion } from "./PolicyAccordion";
+import { PurchaseConfirmDialog, type PurchaseConfirmResult } from "./PurchaseConfirmDialog";
 import { SubscriptionTab } from "./SubscriptionTab";
 import { TopUpTab } from "./TopUpTab";
-import { PurchaseConfirmDialog } from "./PurchaseConfirmDialog";
-import {
-  USAGE_EXAMPLE_SNAPSHOTS, USAGE_EXAMPLE_LABELS, type UsageExampleState,
-  type PurchaseIntent, type PlanExample, type CreditPackage,
-} from "./pricingData";
+import { SUBSCRIPTION_POLICY_ITEMS, TOPUP_POLICY_ITEMS, type CreditPackage, type PlanExample, type PurchaseIntent } from "./pricingData";
 
+/**
+ * 요금제 및 크레딧 — 상품 비교·구매 "전용" 페이지(프로필 > 요금제 및 크레딧).
+ * 관리 기능(잔액·내역·구독·결제 수단·해지)은 여기 없다 — 전부 설정
+ * (크레딧·사용 내역 / 구독·결제 탭)으로 옮겼다. 이 페이지는 "무엇을 살지 고르고
+ * 결제 확인까지" 만 다룬다 — 그래서 큰 잔액 카드나 결제 수단 관리, 해지가 본문에
+ * 길게 나열되지 않는다.
+ */
 export type PricingTab = "subscription" | "topup";
 
 const TABS: TabItem[] = [
@@ -20,119 +29,140 @@ const TABS: TabItem[] = [
   { value: "topup", label: "추가 크레딧 충전" },
 ];
 
-/**
- * 구독자 예시 상태 스위처 노출 조건 — TabletMiniEditor.tsx 의 DEV_PANEL 과 달리
- * `import.meta.env.DEV` 를 함께 걸어 둔다. 그쪽은 배포된 미리보기 링크에서도
- * ?devpanel=1 로 확인해야 해서 의도적으로 프로덕션 번들에 남겨 두지만, 여기는
- * 프로덕션 빌드에서는 ?devpanel=1 을 붙여도 절대 나타나면 안 된다는 요구가 있어
- * 빌드 시점 조건을 반드시 함께 건다 — `vite build` 결과물에서는 import.meta.env.DEV
- * 가 false 로 정적 치환되어 이 스위처 코드 자체가 트리셰이킹으로 빠진다.
- */
-const DEV_PANEL = import.meta.env.DEV
-  && typeof window !== "undefined"
-  && new URLSearchParams(window.location.search).get("devpanel") === "1";
-
-function UsageExampleDevPanel({ state, onChange }: { state: UsageExampleState; onChange: (s: UsageExampleState) => void }) {
-  const states = Object.keys(USAGE_EXAMPLE_LABELS) as UsageExampleState[];
-  return (
-    <div className="rounded-[12px] px-3.5 py-3 flex flex-col gap-2" style={{ background: "#fffbeb", border: "1px solid #fde68a" }}>
-      <span style={{ ...f, fontWeight: 700, fontSize: 11.5, color: "#92400e" }}>
-        [개발용] 이용 현황 예시 상태 — ?devpanel=1 일 때만 보임
-      </span>
-      <div className="flex flex-wrap gap-1.5">
-        {states.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => onChange(s)}
-            className="rounded-full px-3 py-1"
-            style={{
-              ...f, fontWeight: 600, fontSize: 11.5,
-              border: `1px solid ${state === s ? color.brand : color.border.default}`,
-              background: state === s ? color.surface.accent : "white",
-              color: state === s ? color.brand : "#6b7280",
-            }}
-          >
-            {USAGE_EXAMPLE_LABELS[s]}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function PricingPage({
   initialTab = "subscription",
-  onHistoryClick,
+  onSubscribed,
 }: {
   initialTab?: PricingTab;
-  onHistoryClick: () => void;
+  /** 구독하기/요금제 변경 결제가 확정된 직후(로컬 mock) 호출 — 구독 완료 화면으로
+   *  이동시키는 데 쓴다. isPlanChange로 "신규 시작"과 "기존 변경"을 구분해 전달한다. */
+  onSubscribed: (result: { isPlanChange: boolean }) => void;
 }) {
   const [tab, setTab] = useState<PricingTab>(initialTab);
   const [confirmIntent, setConfirmIntent] = useState<PurchaseIntent | null>(null);
-  // 개발용 구독자 예시 상태 — 기본값은 항상 "미구독"(=실제 공유 잔액을 그대로 보여주는 상태).
-  const [usageExampleState, setUsageExampleState] = useState<UsageExampleState>("unsubscribed");
+  const policyAccordionRef = useRef<HTMLDivElement>(null);
 
-  const [liveBalance] = useCreditBalance();
-  const snapshot = USAGE_EXAMPLE_SNAPSHOTS[usageExampleState];
+  /** 구독 확인창의 "구독·해지·환불 정책 보기" — 새 페이지/모달을 만들지 않고, 이미
+   *  이 페이지에 있는 "결제 전에 확인해 주세요" 정책 아코디언으로 스크롤한다. 확인창을
+   *  먼저 닫고(겹쳐서 뜬 채로 배경이 스크롤되면 어색하다) 다음 프레임에 스크롤한다. */
+  const handleViewPolicy = () => {
+    setConfirmIntent(null);
+    requestAnimationFrame(() => {
+      policyAccordionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  const subscription = useSubscription();
+  const currentPlanId = subscription.status === "active" || subscription.status === "cancel_scheduled" ? subscription.planId : null;
 
   const handleSelectPlan = (plan: PlanExample) => {
-    if (snapshot.planId === plan.id) return;
-    setConfirmIntent({ kind: "subscription", title: plan.name, credits: plan.monthlyCredits, priceLabel: plan.priceLabel, periodLabel: "매월" });
+    if (currentPlanId === plan.id) return;
+    setConfirmIntent({
+      kind: "subscription", title: plan.name, credits: plan.monthlyCredits, priceLabel: plan.priceLabel,
+      periodLabel: "매월", nextBillingDateLabel: previewNextBillingDateLabel(), planId: plan.id,
+      isPlanChange: currentPlanId !== null,
+    });
   };
 
   const handleConfirmTopUp = (pkg: CreditPackage) => {
-    setConfirmIntent({ kind: "topup", title: `${pkg.amount.toLocaleString()} 크레딧 패키지`, credits: pkg.amount, priceLabel: pkg.price });
+    setConfirmIntent({ kind: "topup", title: `${pkg.amount.toLocaleString()} 크레딧 패키지`, credits: pkg.amount, priceLabel: pkg.price, package: pkg });
+  };
+
+  /**
+   * 구독 시작/변경 — 카드 등록(빌링키 발급)과 첫 결제 승인은 서로 다른 서버 응답이다.
+   * 카드가 없으면 확인창의 CTA를 누른 이 시점에 곧바로 Toss 카드 등록·인증 흐름으로
+   * 연결한다(성공해도 아직 구독 아님), 그다음 첫 결제를 승인받아야만 subscribeToPlan()
+   * 으로 실제 구독을 활성화한다 — 카드 등록 성공 자체를 구독/결제 성공으로 취급하지
+   * 않는다. 확인창에서 기본 카드가 아닌 다른(이미 등록됐거나 방금 새로 등록한) 카드를
+   * 골랐으면(selectedPaymentMethodId) 실제 청구 전에 그 카드를 이 구독의 기본
+   * 결제수단으로 먼저 확정한다 — "카드를 고르는 것"과 "그 카드로 실제 청구·커밋하는
+   * 것"을 분리해 confirm 버튼을 누르기 전까지는 아무것도 바뀌지 않는다. 이 앱엔 구독이
+   * 하나뿐이라(다중 구독 없음) 다른 구독에 영향을 줄 여지 자체가 없다. isPlanChange는
+   * 확인 시점(currentPlanId 유무)에 미리 정해 두고 완료 콜백까지 그대로 들고 간다.
+   */
+  const handleConfirmSubscription = async (planId: string, isPlanChange: boolean, selectedPaymentMethodId?: string): Promise<PurchaseConfirmResult> => {
+    const plan = findPlan(planId);
+    if (!plan) return { success: false, message: "요금제 정보를 찾을 수 없습니다." };
+
+    if (!subscription.paymentMethod) {
+      const cardResult = await registerCardWithTossPayments();
+      if (cardResult.status === "cancelled") return { success: false };
+      if (cardResult.status === "failure") return { success: false, message: "카드 등록에 실패했습니다. 다시 시도해주세요." };
+      addPaymentMethod(cardResult.card, { makeDefault: true });
+    } else if (selectedPaymentMethodId && selectedPaymentMethodId !== subscription.paymentMethod.paymentMethodId) {
+      const switchResult = await switchDefaultPaymentMethod(selectedPaymentMethodId);
+      if (!switchResult.success) return { success: false, message: "결제 수단을 변경하지 못했습니다. 다시 시도해주세요." };
+      commitDefaultPaymentMethod(selectedPaymentMethodId);
+    }
+
+    const chargeResult = await chargeFirstPaymentWithTossPayments(plan);
+    if (chargeResult.status === "cancelled") return { success: false };
+    if (chargeResult.status === "failure") return { success: false, message: "결제에 실패했습니다. 다시 시도해주세요." };
+
+    subscribeToPlan(planId);
+    setConfirmIntent(null);
+    onSubscribed({ isPlanChange });
+    return { success: true };
+  };
+
+  const handleConfirmTopup = async (pkg: CreditPackage): Promise<PurchaseConfirmResult> => {
+    const chargeResult = await chargeTopupWithTossPayments(pkg);
+    if (chargeResult.status === "cancelled") return { success: false };
+    if (chargeResult.status === "failure") return { success: false, message: "결제에 실패했습니다. 다시 시도해주세요." };
+
+    addTopup(pkg);
+    setConfirmIntent(null);
+    showToast("크레딧이 충전되었습니다");
+    return { success: true };
+  };
+
+  const handleConfirm = (selectedPaymentMethodId?: string): Promise<PurchaseConfirmResult> => {
+    if (!confirmIntent) return Promise.resolve({ success: false });
+    if (confirmIntent.kind === "subscription" && confirmIntent.planId) return handleConfirmSubscription(confirmIntent.planId, !!confirmIntent.isPlanChange, selectedPaymentMethodId);
+    if (confirmIntent.kind === "topup" && confirmIntent.package) return handleConfirmTopup(confirmIntent.package);
+    return Promise.resolve({ success: false });
   };
 
   return (
-    <main className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
-      {/* 컨테이너 폭 — 홈 화면이 데스크톱(1200px 이상)에서 쓰는 --home-container 상한과
-          같은 값(pageContainerWidth)을 쓴다. 760px 고정이던 첫 버전은 1440px 화면에서
-          카드 3개가 좁게 눌리고 오른쪽에 빈 공간만 넓게 남았다. */}
-      <div
-        className="w-full mx-auto px-4 md:px-6 pt-5 pb-12 flex flex-col gap-6"
-        style={{ maxWidth: pageContainerWidth }}
-      >
-        {/* ① 제목 */}
-        <div>
-          <h1 style={typography.pageTitle}>요금제 및 크레딧</h1>
-          <p style={{ ...f, fontWeight: 400, fontSize: 13.5, color: color.text.faint, marginTop: 4 }}>
-            내 요금제와 크레딧을 한곳에서 관리하세요.
-          </p>
-        </div>
+    <>
+      <PageContainer>
+        <PageHeader title="요금제 및 크레딧" description="필요한 요금제와 크레딧을 골라 구매하세요." />
 
-        {/* ② 내 이용 현황 — 탭이 바뀌어도 유지 */}
-        <UsageSummary liveBalance={liveBalance} snapshot={snapshot} />
-
-        {/* ③ 탭 */}
         <Tabs items={TABS} value={tab} onChange={(v) => setTab(v as PricingTab)} />
 
-        {/* ④ 탭 콘텐츠 — tabPanelProps 가 role="tabpanel"/id/aria-labelledby 를 탭 버튼과 맞물린다. */}
-        <div {...tabPanelProps(tab)}>
+        {/* gap-14(56px) — 카드/패키지 목록과 "결제(구매) 전에 확인해 주세요" 사이 간격.
+            이 정책 안내는 pricing 선택의 핵심 UI가 아니라 결제 전 보조 정보라, 카드
+            묶음과 같은 그룹처럼 붙어 보이지 않도록 충분한 section 간격(48~64px 범위)을
+            둔다 — 이 div의 자식은 정확히 둘(카드 영역, 정책 아코디언)뿐이라 gap 하나로
+            그 사이 간격만 관리해도 다른 곳과 중복 합산되지 않는다. */}
+        <div {...tabPanelProps(tab)} className="flex flex-col gap-14">
           {tab === "subscription" ? (
-            <SubscriptionTab currentPlanId={snapshot.planId} onSelectPlan={handleSelectPlan} />
+            <>
+              <SubscriptionTab currentPlanId={currentPlanId} onSelectPlan={handleSelectPlan} />
+              <div ref={policyAccordionRef}>
+                <PurchasePolicyAccordion title="결제 전에 확인해 주세요" items={SUBSCRIPTION_POLICY_ITEMS} />
+              </div>
+            </>
           ) : (
-            <TopUpTab onConfirmPurchase={handleConfirmTopUp} />
+            <>
+              <TopUpTab onConfirmPurchase={handleConfirmTopUp} />
+              <PurchasePolicyAccordion title="구매 전에 확인해 주세요" items={TOPUP_POLICY_ITEMS} />
+            </>
           )}
         </div>
-
-        {/* ⑤ 크레딧 사용 내역 링크 */}
-        <button
-          type="button"
-          onClick={onHistoryClick}
-          className="self-start"
-          style={{ ...f, fontWeight: 600, fontSize: 13, color: color.brand, letterSpacing: "-0.2px" }}
-        >
-          크레딧 사용 내역 보기 →
-        </button>
-
-        {DEV_PANEL && <UsageExampleDevPanel state={usageExampleState} onChange={setUsageExampleState} />}
-      </div>
+      </PageContainer>
 
       {confirmIntent && (
-        <PurchaseConfirmDialog intent={confirmIntent} onClose={() => setConfirmIntent(null)} />
+        <PurchaseConfirmDialog
+          intent={confirmIntent}
+          currentPaymentMethod={subscription.paymentMethod}
+          onClose={() => setConfirmIntent(null)}
+          onConfirm={handleConfirm}
+          onViewPolicy={confirmIntent.kind === "subscription" ? handleViewPolicy : undefined}
+        />
       )}
-    </main>
+    </>
   );
 }
+
+export default PricingPage;

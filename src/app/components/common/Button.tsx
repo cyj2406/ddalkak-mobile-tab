@@ -2,7 +2,7 @@ import { forwardRef, useState } from "react";
 import type { ButtonHTMLAttributes } from "react";
 import { Loader2 } from "lucide-react";
 
-import { color, controlHeight, f, radius } from "@/app/styleTokens";
+import { color, controlHeight, f, motion, radius } from "@/app/styleTokens";
 
 /**
  * 공용 버튼 — 요금제/크레딧 페이지와 프로필·설정 진입점에서 반복되던
@@ -41,10 +41,10 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   pill?: boolean;
 }
 
-const VARIANT_STYLE: Record<ButtonVariant, { bg: string; hoverBg: string; text: string; border?: string }> = {
-  primary: { bg: color.brand, hoverBg: color.brandHover, text: "#ffffff" },
-  dark: { bg: color.text.primary, hoverBg: "#1f1f1f", text: "#ffffff" },
-  secondary: { bg: color.surface.default, hoverBg: color.surface.subtle, text: "#334155", border: color.border.default },
+const VARIANT_STYLE: Record<ButtonVariant, { bg: string; hoverBg: string; pressedBg: string; text: string; border?: string }> = {
+  primary: { bg: color.brand, hoverBg: color.brandHover, pressedBg: "#3357c9", text: "#ffffff" },
+  dark: { bg: color.text.primary, hoverBg: "#1f1f1f", pressedBg: "#2b2b2b", text: "#ffffff" },
+  secondary: { bg: color.surface.default, hoverBg: color.surface.subtle, pressedBg: "#f1f5f9", text: "#334155", border: color.border.default },
 };
 
 /** disabled 일 때는 variant 와 무관하게 같은 "비활성" 톤 하나로 통일한다(요금제 카드의 "현재 이용 중" 등). */
@@ -62,15 +62,18 @@ const DISABLED_STYLE: { bg: string; text: string; border?: string } = { bg: "#f1
 const FOCUS_RING_CLASS = "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff]";
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = "primary", size = "lg", fullWidth, loading, pill, disabled, className, style, children, onMouseEnter, onMouseLeave, ...props },
+  { variant = "primary", size = "lg", fullWidth, loading, pill, disabled, className, style, children, onMouseEnter, onMouseLeave, onMouseDown, onMouseUp, ...props },
   ref,
 ) {
   const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
   const isDisabled = !!disabled || !!loading;
   const variantStyle = VARIANT_STYLE[variant];
   const tone = isDisabled ? DISABLED_STYLE : variantStyle;
   const height = controlHeight[size];
-  const bg = !isDisabled && hovered ? variantStyle.hoverBg : tone.bg;
+  // Pressed(클릭 중)가 Hover보다 우선한다 — 누르는 순간의 짧은 피드백이 필요해서다.
+  const bg = isDisabled ? tone.bg : pressed ? variantStyle.pressedBg : hovered ? variantStyle.hoverBg : tone.bg;
+  const releasePress = () => setPressed(false);
 
   return (
     <button
@@ -79,8 +82,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={isDisabled}
       aria-busy={loading || undefined}
       onMouseEnter={(e) => { setHovered(true); onMouseEnter?.(e); }}
-      onMouseLeave={(e) => { setHovered(false); onMouseLeave?.(e); }}
-      className={["outline-none transition-colors duration-150", FOCUS_RING_CLASS, fullWidth ? "w-full" : "", className]
+      onMouseLeave={(e) => { setHovered(false); releasePress(); onMouseLeave?.(e); }}
+      onMouseDown={(e) => { setPressed(true); onMouseDown?.(e); }}
+      onMouseUp={(e) => { releasePress(); onMouseUp?.(e); }}
+      className={["outline-none", FOCUS_RING_CLASS, fullWidth ? "w-full" : "", className]
         .filter(Boolean).join(" ")}
       style={{
         ...f,
@@ -99,6 +104,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         fontSize: size === "lg" ? 14 : 13.5,
         letterSpacing: "-0.3px",
         cursor: isDisabled ? "default" : "pointer",
+        transition: `background-color ${motion.fast}, border-color ${motion.fast}`,
         ...style,
       }}
       {...props}

@@ -4,7 +4,7 @@ import { ScrollableChips, tabIdFor } from "@/app/components/common/ScrollableChi
  * 공용 탭 — 콘텐츠를 완전히 갈아 끼우는 2~3개짜리 상단 탭(요금제 페이지의
  * "월 구독 요금제 / 추가 크레딧 충전" 등)에 쓴다.
  *
- * 새로 그리지 않고 기존 ScrollableChips(outline variant)를 그대로 감쌌다 — 필터 칩과
+ * 새로 그리지 않고 기존 ScrollableChips(underline variant)를 그대로 감쌌다 — 필터 칩과
  * 같은 렌더링 로직을 중복 구현하지 않기 위해서다. `role="tablist"`를 넘겨 진짜 탭
  * 접근성(role=tablist/tab, aria-selected, 롤빙 tabIndex, 방향키/Home/End 이동)을 켠다 —
  * 구현은 ScrollableChips 안에 있고, 그 컴포넌트를 필터 용도로 쓰는 다른 화면(크레딧
@@ -44,8 +44,9 @@ export function Tabs({
       items={items.map((item) => item.label)}
       activeIndex={activeIndex}
       onChange={(i) => onChange(items[i].value)}
-      variant="outline"
+      variant="underline"
       edgeClassName=""
+      className="inline-flex w-auto"
       role="tablist"
       panelIds={items.map((item) => item.value)}
       centerActiveOnChange
