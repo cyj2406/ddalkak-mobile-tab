@@ -64,6 +64,11 @@ import car14 from "@/assets/home/car/c14.png";
 import car15 from "@/assets/home/car/c15.png";
 import car16 from "@/assets/home/car/c16.png";
 
+// 4개는 "바로 시작하기 좋은 템플릿" 캐러셀(car13~16, 위)이 이미 같은 원본 이미지를
+// 쓰고 있어 새 파일로 중복 저장하지 않고 그 import를 그대로 재사용한다(번들에도
+// 같은 파일이 중복 포함되지 않는다) — 아래 TASK_TEMPLATES에서 car13~16을 cover로 쓴다.
+import templatePptProposal from "@/assets/home/templates/ppt-proposal.jpeg";
+
 export type TaskStatus = "available" | "soon";
 
 export interface Task {
@@ -211,16 +216,30 @@ export interface TaskTemplate {
   meta: string;
   /** 출력 형식 */
   format: string;
+  /** 실제 표지 미리보기 이미지 — 지금은 전 템플릿이 undefined다(실제 표지 자산이
+   *  프로젝트 어디에도 없다, 2026-09-17 확인). 값이 생기면 이 필드만 채우면
+   *  "요청 작성 도우미"의 미리보기가 자동으로 실제 이미지를 쓰게 된다 — "미리보기
+   *  준비 중"을 화면에 직접 박아두지 않는다. */
+  cover?: string;
+  /** cover가 실제 결과물이 아니라 참고용 예시 표지일 때만 true — 이때만 "표지는
+   *  예시 이미지예요" 안내를 보여준다. cover가 없으면(현재 전부) 의미 없다. */
+  coverIsExample?: boolean;
+  /** cover의 실제 가로:세로 비율("9:16"/"1:1"/"3:2"/"16:9" 등) — meta의 "정사각형/
+   *  세로형/가로형" 문구와 항상 같은 형태를 가리켜야 한다(2026-09-18, 예시 표지
+   *  5개를 붙이면서 추가). cover가 없으면 의미 없다. */
+  aspectRatio?: string;
 }
 
-const T = (taskId: string, title: string, use: string, meta: string, format: string): TaskTemplate =>
-  ({ taskId, title, use, meta, format });
+const T = (
+  taskId: string, title: string, use: string, meta: string, format: string,
+  extra?: { cover?: string; coverIsExample?: boolean; aspectRatio?: string },
+): TaskTemplate => ({ taskId, title, use, meta, format, ...extra });
 
 export const TASK_TEMPLATES: TaskTemplate[] = [
   T("photo", "뷰티 제품 광고 이미지", "제품을 SNS 광고 이미지로 알릴 때", "이미지 · 정사각형", "PNG"),
   T("photo", "버터떡 유튜브 썸네일", "영상 썸네일을 눈에 띄게 만들 때", "이미지 · 정사각형", "PNG"),
-  T("photo", "SNS 광고 배너", "가로형 광고 배너가 필요할 때", "이미지 · 가로형", "JPG"),
-  T("cardnews", "단색 카드형 카드뉴스", "간결한 소식을 여러 장으로 전할 때", "카드뉴스 · 정사각형", "PNG"),
+  T("photo", "SNS 광고 배너", "가로형 광고 배너가 필요할 때", "이미지 · 가로형", "JPG", { cover: car15, coverIsExample: true, aspectRatio: "3:2" }),
+  T("cardnews", "단색 카드형 카드뉴스", "간결한 소식을 여러 장으로 전할 때", "카드뉴스 · 정사각형", "PNG", { cover: car14, coverIsExample: true, aspectRatio: "1:1" }),
   T("cardnews", "포토 Q&A 카드뉴스", "질문과 답을 사진과 함께 전할 때", "카드뉴스 · 정사각형", "PNG"),
   T("product", "스마트스토어 상세페이지", "상품 특징을 길게 설명할 때", "상세페이지 · 세로형", "JPG"),
   T("product", "쿠팡 상품 상세페이지", "쇼핑몰 상세페이지를 빠르게 만들 때", "상세페이지 · 세로형", "JPG"),
@@ -232,12 +251,12 @@ export const TASK_TEMPLATES: TaskTemplate[] = [
   T("leaflet", "행사 홍보 안내문", "행사를 한 장으로 알릴 때", "안내문 · 정사각형", "PDF"),
   T("thesis", "논문 초록 초안", "논문 구성과 초록을 잡을 때", "문서 · 세로형", "PDF"),
   T("visa", "결혼이민자 가족 초청장", "가족을 국내로 초청할 때", "서류 · 세로형", "DOCX"),
-  T("ppt", "사업계획 발표자료", "투자자에게 사업을 설명할 때", "발표자료 · 와이드", "PPTX"),
+  T("ppt", "사업계획 발표자료", "투자자에게 사업을 설명할 때", "발표자료 · 와이드", "PPTX", { cover: templatePptProposal, coverIsExample: true, aspectRatio: "16:9" }),
   T("ppt", "분기 실적 보고", "분기 성과를 팀에 보고할 때", "발표자료 · 와이드", "PPTX"),
   T("webppt", "제품 소개 웹 발표자료", "링크 하나로 발표를 공유할 때", "발표자료 · 와이드", "PPTX"),
   T("excel", "거래처 견적 표", "금액과 항목을 정리해 보낼 때", "표 · 가로형", "XLSX"),
-  T("shortform", "숏폼 홍보 영상", "짧게 눈길을 끄는 홍보가 필요할 때", "영상 · 세로형", "MP4"),
-  T("youtube", "유튜브 설명 영상", "가로형으로 차분히 설명할 때", "영상 · 가로형", "MP4"),
+  T("shortform", "숏폼 홍보 영상", "짧게 눈길을 끄는 홍보가 필요할 때", "영상 · 세로형", "MP4", { cover: car13, coverIsExample: true, aspectRatio: "9:16" }),
+  T("youtube", "유튜브 설명 영상", "가로형으로 차분히 설명할 때", "영상 · 가로형", "MP4", { cover: car16, coverIsExample: true, aspectRatio: "3:2" }),
 ];
 
 export function templatesForTask(taskId: string): TaskTemplate[] {

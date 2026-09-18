@@ -5,7 +5,6 @@ import { TASK_GROUPS, getTaskById, templatesForTask, visibleTasksOf, type Task, 
 import { Button } from "@/app/components/common/Button";
 import { Modal } from "@/app/components/common/Modal";
 import { Badge } from "@/app/components/common/Badge";
-import TemplateResultCard from "./TemplateResultCard";
 import type { WorkspaceCategory } from "@/app/App";
 
 const DRAFT_KEY = "ddalkkak.requestHelp.draft";
@@ -325,37 +324,161 @@ function QuestionField({
   );
 }
 
-/** "다른 템플릿 선택" — 기존 TemplateResultCard(썸네일+이름+형식)를 그대로 재사용해
- *  후보를 보여주고, 카드를 누르면 그 자리에서 바로 선택·닫힘까지 끝난다(별도 확정
- *  버튼 없음 — 다른 화면들이 이미 "누르면 바로 적용"으로 동작하는 것과 같은 패턴).
- *  닫기(X·바깥 클릭)만으로는 아무것도 바뀌지 않으니 취소 시 기존 선택이 유지된다. */
-function TemplatePickerModal({
+/**
+ * 사용할 템플릿 드롭다운 — 별도 선택 모달 대신 카드 안에서 바로 템플릿을 바꾼다
+ * (2026-09-18). TaskSelectField(위, "만들 작업" 콤보박스)와 같은 패턴을 그대로
+ * 따른다 — 그룹 없는 단일 목록이라 그만큼만 단순하다: 트리거 버튼 + 절대 위치
+ * listbox, 최대 높이 320 + 스크롤, 선택 항목 체크 표시, Escape/바깥 클릭으로 닫힘
+ * (선택은 바뀌지 않음), 방향키로 옵션 간 포커스 이동. shadcn Select(ui/select.tsx)는
+ * 이 프로젝트 어디서도 실제로 쓰이지 않고 브랜드 토큰과 연결돼 있지도 않아(design-
+ * system.md) 새로 채택하지 않고, 이미 이 화면에서 검증된 콤보박스 패턴을 재사용한다.
+ */
+function TemplateSelectField({
   templates,
   selectedIdx,
   onSelect,
-  onClose,
 }: {
   templates: TaskTemplate[];
   selectedIdx: number;
   onSelect: (idx: number) => void;
-  onClose: () => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const current = templates[selectedIdx] ?? templates[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => { if (!wrapRef.current?.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(false); triggerRef.current?.focus(); } };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const moveFocus = (fromIdx: number, dir: 1 | -1) => {
+    const nextIdx = (fromIdx + dir + templates.length) % templates.length;
+    document.getElementById(`template-option-${nextIdx}`)?.focus();
+  };
+
   return (
-    <Modal onClose={onClose} ariaLabel="템플릿 선택" maxWidth={640}>
-      {() => (
-        <div style={{ padding: "24px 26px 26px" }}>
-          <p style={{ ...f, fontWeight: 800, fontSize: 17, color: "#0a0a0a", letterSpacing: "-0.4px" }}>다른 템플릿 선택</p>
-          <p className="mt-1.5 mb-5" style={{ ...f, fontWeight: 500, fontSize: 13, color: SUBTITLE_COLOR }}>
-            원하는 템플릿을 고르면 바로 적용돼요.
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {templates.map((t, i) => (
-              <TemplateResultCard key={t.title} template={t} selected={i === selectedIdx} ctaLabel="선택" onOpen={() => onSelect(i)} />
-            ))}
-          </div>
+    <div ref={wrapRef} className="relative">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="w-full flex items-center gap-2.5 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff]"
+        style={{ height: 46, padding: "0 14px", background: "#fbfcfe", border: "1px solid #e2e8f0" }}
+      >
+        <span className="flex-1 min-w-0 truncate text-left" style={{ ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a" }}>
+          {current.title}
+        </span>
+        <ChevronDown size={16} color="#94a3b8" className="shrink-0" style={{ transform: open ? "rotate(180deg)" : "none" }} aria-hidden />
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          aria-label="사용할 템플릿 선택"
+          className="absolute left-0 right-0 mt-1.5 rounded-xl overflow-y-auto z-20"
+          style={{ maxHeight: 320, background: "#fff", border: "1px solid #e2e8f0", boxShadow: "0px 8px 32px rgba(0,0,0,0.14)" }}
+        >
+          {templates.map((t, i) => {
+            const isSelected = i === selectedIdx;
+            return (
+              <button
+                key={t.title}
+                id={`template-option-${i}`}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                onClick={() => { onSelect(i); setOpen(false); triggerRef.current?.focus(); }}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown") { e.preventDefault(); moveFocus(i, 1); }
+                  if (e.key === "ArrowUp") { e.preventDefault(); moveFocus(i, -1); }
+                }}
+                className="w-full flex items-center gap-2.5 text-left outline-none transition-colors"
+                style={{ padding: "9px 14px", background: isSelected ? color.surface.accent : "transparent" }}
+              >
+                <span className="flex-1 min-w-0 truncate" style={{ ...f, fontWeight: isSelected ? 700 : 500, fontSize: 13.5, color: "#0a0a0a" }}>{t.title}</span>
+                {isSelected && <Check size={14} color={color.brand} strokeWidth={3} className="shrink-0" aria-hidden />}
+              </button>
+            );
+          })}
         </div>
       )}
-    </Modal>
+    </div>
+  );
+}
+
+/** 템플릿 미리보기 — 실제 cover가 있으면 원본 비율 그대로(contain) 보여주고, 세로형
+ *  이미지가 카드를 지나치게 늘리지 않도록 높이를 max-height로 제한한다. 로딩에
+ *  실패하면(onError) 깨진 이미지 아이콘 대신 같은 "미리보기 준비 중" 자리로 되돌아간다.
+ *  cover가 없으면(현재 전 템플릿) 항상 이 상태다. */
+const TEMPLATE_PREVIEW_PLACEHOLDER = (
+  <div className="absolute inset-0 flex items-center justify-center">
+    <span style={{ ...f, fontWeight: 500, fontSize: 12, color: "#94a3b8" }}>미리보기 준비 중</span>
+  </div>
+);
+
+/** 실제 표지(cover)가 있을 때만 그리는 두 겹 이미지 — 뒤(블러+어둡게, cover로 박스
+ *  전체를 채움)로 남는 여백을 메우고, 앞(원본 비율 그대로, contain)에 또렷한 원본을
+ *  올린다. `key={src}`로 부모(TemplatePreview)가 템플릿이 바뀔 때마다 이 컴포넌트를
+ *  새로 마운트하므로 로딩 상태가 템플릿마다 자연히 초기화되고, loaded 전환 때마다
+ *  opacity 트랜지션(짧은 fade)이 매번 다시 재생된다. 로딩 중·실패 시에는 이미지
+ *  대신 같은 "미리보기 준비 중" 자리로 돌아간다(새 스켈레톤을 따로 만들지 않는다). */
+function TemplateCoverImage({ src, alt }: { src: string; alt: string }) {
+  const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
+
+  if (status === "error") return TEMPLATE_PREVIEW_PLACEHOLDER;
+
+  return (
+    <>
+      {status === "loading" && TEMPLATE_PREVIEW_PLACEHOLDER}
+      <div
+        aria-hidden
+        className="absolute inset-0"
+        style={{
+          backgroundImage: `url(${src})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          filter: "blur(18px) brightness(0.75)",
+          transform: "scale(1.12)",
+          opacity: status === "loaded" ? 1 : 0,
+          transition: "opacity 200ms ease",
+        }}
+      />
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        onLoad={() => setStatus("loaded")}
+        onError={() => setStatus("error")}
+        className="absolute inset-0 w-full h-full"
+        style={{ objectFit: "contain", opacity: status === "loaded" ? 1 : 0, transition: "opacity 200ms ease" }}
+      />
+    </>
+  );
+}
+
+/** 미리보기 박스 — 가로 폭(카드 내부 너비)·높이(200px)·모서리(12px)·테두리를 항상
+ *  고정해, 템플릿을 바꿔도(세로형↔가로형) 카드 레이아웃이 흔들리지 않는다. 실제
+ *  렌더링(비율 유지·contain·블러 배경)은 TemplateCoverImage가 맡고, 이 컴포넌트는
+ *  cover 유무와 박스 크기만 책임진다. key={template.cover}로 템플릿이 바뀔 때마다
+ *  자식을 새로 마운트해 로딩·fade 상태를 초기화한다. */
+function TemplatePreview({ template }: { template: TaskTemplate }) {
+  return (
+    <div
+      className="relative shrink-0 overflow-hidden"
+      style={{ marginTop: 18, height: 200, borderRadius: 12, background: color.surface.subtle, border: `1px solid ${color.border.default}` }}
+    >
+      {template.cover ? <TemplateCoverImage key={template.cover} src={template.cover} alt={template.title} /> : TEMPLATE_PREVIEW_PLACEHOLDER}
+    </div>
   );
 }
 
@@ -489,7 +612,6 @@ export default function RequestHelpScreen({
   const [step, setStep] = useState(0);
   const [errors, setErrors] = useState<{ task?: string; topic?: string; content?: string }>({});
   const [templateIdx, setTemplateIdx] = useState(0);
-  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [applyChoiceOpen, setApplyChoiceOpen] = useState(false);
   const [appliedBannerOpen, setAppliedBannerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -519,7 +641,6 @@ export default function RequestHelpScreen({
   // 는 여기서 건드리지 않는다(답변 보존).
   useEffect(() => {
     setTemplateIdx(0);
-    setTemplatePickerOpen(false);
     setAppliedBannerOpen(false);
     undoSnapshotRef.current = null;
   }, [draft.taskId]);
@@ -702,34 +823,28 @@ export default function RequestHelpScreen({
         )}
 
         {step === 1 && selectedTask && (
-          // PC: grid + items-stretch로 두 카드의 상하 테두리를 맞춘다(내용이 더 긴 "정리한
-          // 요청" 카드 기준). 모바일은 세로로 쌓이고 각 카드가 내용만큼의 높이를 갖는다.
-          <div className={isDesktopSplit ? "grid gap-5 items-stretch" : "flex flex-col gap-5"} style={isDesktopSplit ? { gridTemplateColumns: "1fr 2fr" } : undefined}>
-            {/* A. 추천 템플릿 — 실제 미리보기·이름·형식 정보만, 긴 설명은 없앴다.
-                h-full + flex-col로 늘어난 카드 높이 안에서 버튼을 항상 하단에 고정한다
-                (미리보기 이미지를 늘려서 높이를 맞추지 않는다). */}
-            <div className="rounded-[22px] flex flex-col h-full" style={{ background: "#fff", border: "1px solid #e2e8f0", padding: 20 }}>
-              <p style={{ ...f, fontWeight: 700, fontSize: 15, color: "#0a0a0a" }}>추천 템플릿</p>
+          // PC: grid + items-start — 두 카드가 위쪽만 맞춰 나란히 놓이고, 각자 내용
+          // 만큼만 높이를 갖는다(2026-09-18: 오른쪽 "정리한 요청"에 맞춰 왼쪽 카드
+          // 외곽을 억지로 늘리던 items-stretch/h-full을 없앴다 — "표지는 예시" 안내를
+          // 지운 뒤로 왼쪽 카드 아래에 큰 빈 여백만 남았었다). 모바일은 기존처럼
+          // 세로로 쌓인다.
+          <div className={isDesktopSplit ? "grid gap-5 items-start" : "flex flex-col gap-5"} style={isDesktopSplit ? { gridTemplateColumns: "1fr 2fr" } : undefined}>
+            {/* A. 사용할 템플릿 — 별도 선택 모달 대신 드롭다운으로 그 자리에서 바로
+                바꾼다(2026-09-18). 제목 → 드롭다운 → 미리보기 → 이름 → 메타 정보
+                순으로, 위에서 아래로 강조가 낮아진다. 카드는 내용만큼만 높이를
+                갖는다(오른쪽 카드와 외곽을 맞추지 않는다). */}
+            <div className="rounded-[22px] flex flex-col" style={{ background: "#fff", border: "1px solid #e2e8f0", padding: 20 }}>
+              <p style={{ ...f, fontWeight: 700, fontSize: 15, color: "#0a0a0a" }}>사용할 템플릿</p>
               {templates.length > 0 && template ? (
                 <>
-                  {/* 실제 표지 이미지가 없는 서식(현재 모든 템플릿이 이 상태)은 큰 사선
-                      패턴 대신 작은 중립 배경 + 안내 문구만 준다 — 카드 높이도 그만큼
-                      줄어든다. */}
-                  <div
-                    className="mt-3 flex items-center justify-center shrink-0"
-                    style={{ height: 96, borderRadius: 12, background: color.surface.subtle, border: `1px solid ${color.border.default}` }}
-                  >
-                    <span style={{ ...f, fontWeight: 500, fontSize: 12, color: "#94a3b8" }}>미리보기 준비 중</span>
+                  <div className="mt-3">
+                    <TemplateSelectField templates={templates} selectedIdx={templateIdx} onSelect={setTemplateIdx} />
                   </div>
+                  <TemplatePreview template={template} />
                   <div className="mt-3.5">
                     <p style={{ ...f, fontWeight: 700, fontSize: 13.5, color: "#0a0a0a" }}>{template.title}</p>
                     <p className="mt-1" style={{ ...f, fontWeight: 500, fontSize: 12, color: SUBTITLE_COLOR }}>{template.meta} · {template.format}</p>
                   </div>
-                  {templates.length > 1 && (
-                    <Button variant="secondary" size="md" fullWidth onClick={() => setTemplatePickerOpen(true)} className="mt-auto pt-3.5">
-                      다른 템플릿 선택
-                    </Button>
-                  )}
                 </>
               ) : (
                 <p className="mt-3" style={{ ...f, fontWeight: 500, fontSize: 13, color: SUBTITLE_COLOR, lineHeight: 1.6 }}>
@@ -742,7 +857,7 @@ export default function RequestHelpScreen({
                 대상·목적/꼭 담을 내용/형식·주의사항)로 정리한다. 실제 전달 텍스트는
                 아래에서 그대로 buildRequestText(동일 draft/selectedTask/template)로
                 만든다 — 화면 표시 형태만 다를 뿐 같은 입력 데이터에서 나온다. */}
-            <div className="rounded-[22px] h-full" style={{ background: "#fff", border: "1px solid #e2e8f0", padding: 20 }}>
+            <div className="rounded-[22px]" style={{ background: "#fff", border: "1px solid #e2e8f0", padding: 20 }}>
               <p style={{ ...f, fontWeight: 700, fontSize: 18, color: "#0a0a0a", letterSpacing: "-0.3px" }}>정리한 요청</p>
               <div className="mt-5">
                 <RequestSummary task={selectedTask} template={template} draft={draft} />
@@ -821,14 +936,6 @@ export default function RequestHelpScreen({
         </Modal>
       )}
 
-      {templatePickerOpen && templates.length > 0 && (
-        <TemplatePickerModal
-          templates={templates}
-          selectedIdx={templateIdx}
-          onSelect={(i) => { setTemplateIdx(i); setTemplatePickerOpen(false); }}
-          onClose={() => setTemplatePickerOpen(false)}
-        />
-      )}
     </main>
   );
 }
