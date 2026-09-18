@@ -38,7 +38,6 @@ import HomeSearch from "@/app/components/home/HomeSearch";
 import { CategoryQuickLinks } from "@/app/components/home/CategoryQuickLinks";
 import { CategoryFeatureStrip } from "@/app/components/home/CategoryFeatureStrip";
 import SearchResultsScreen from "@/app/components/home/SearchResultsScreen";
-import TaskTemplateScreen from "@/app/components/home/TaskTemplateScreen";
 import RequestHelpScreen from "@/app/components/home/RequestHelpScreen";
 import { getTaskById, TASK_GROUPS, type TaskTemplate } from "@/app/data/tasks";
 // [formfill 임시] ?formfill=1 확인용. 컴포넌트 단품 확인 화면이라 3단 레이아웃과 별개로 남겨둔다.
@@ -52,7 +51,7 @@ import { SettingsBillingTab } from "@/app/components/settings/SettingsBillingTab
 
 
 // ─── 타입 ──────────────────────────────────────────────────────────────────────
-type Screen = "home" | "image-ai" | "landing-ai" | "forms-ai" | "forms-fill" | "docs-ai" | "audio-ai" | "ppt-ai" | "video-ai" | "favorites" | "mywork" | "notifications-all" | "search" | "task-templates" | "request-help" | "pricing" | "subscription-complete";
+type Screen = "home" | "image-ai" | "landing-ai" | "forms-ai" | "forms-fill" | "docs-ai" | "audio-ai" | "ppt-ai" | "video-ai" | "favorites" | "mywork" | "notifications-all" | "search" | "request-help" | "pricing" | "subscription-complete";
 export type WorkspaceCategory = "docs" | "ppt" | "video" | "landing" | "image" | "detail";
 const WS_LABEL: Record<WorkspaceCategory, string> = { docs: "문서", ppt: "PPT", video: "영상", landing: "랜딩페이지", image: "이미지", detail: "상세페이지" };
 const WS_COLOR: Record<WorkspaceCategory, string> = { docs: "#3B82F6", ppt: "#8B5CF6", video: "#EF4444", landing: "#22C55E", image: "#F59E0B", detail: "#EC4899" };
@@ -5307,16 +5306,14 @@ export default function App() {
       fileType: resolveFileType(tabLabel, CATEGORY_FILE_TYPE[category]),
     });
 
-  // 홈 — 작업 고르기에서 고른 작업(템플릿 목록 화면 대상), 검색어, 요청 작성 도움받기가
-  // 완성한 요청문. screen 문자열만으로는 "어떤 작업/검색어인지"를 담을 수 없어 따로 든다.
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  // 홈 — 검색어, 요청 작성 도움받기가 완성한 요청문. screen 문자열만으로는 "어떤
+  // 검색어인지"를 담을 수 없어 따로 든다.
   const [searchQuery, setSearchQuery] = useState("");
   const [requestHandoff, setRequestHandoff] = useState<{ text: string; screen: Screen } | null>(null);
   /** "요청 작성 도움받기"를 취소하고 홈으로 돌아왔을 때만 켜서, 홈의 도우미 버튼에 포커스를
    *  되돌린다 — 완료(다른 화면으로 이동)나 그냥 홈에 들어올 때는 켜지 않는다. */
   const [focusHelperCta, setFocusHelperCta] = useState(false);
 
-  const openTaskTemplates = (taskId: string) => { setSelectedTaskId(taskId); navigate("task-templates"); };
   const openSearch = (query: string) => { setSearchQuery(query); navigate("search"); };
   const openTemplate = (template: TaskTemplate) => {
     const task = getTaskById(template.taskId);
@@ -5415,7 +5412,7 @@ export default function App() {
   const inWorkspace = !!workspace;
   useEffect(() => { setSidebarCollapsed(inWorkspace); }, [inWorkspace]);
 
-  const isSubScreen = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai", "notifications-all", "search", "task-templates", "request-help", "pricing", "subscription-complete"].includes(screen);
+  const isSubScreen = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai", "notifications-all", "search", "request-help", "pricing", "subscription-complete"].includes(screen);
 
   // 튜토리얼 다시 보기 — 홈으로 돌아가 1단계부터 다시 실행한다(중복 실행 방지)
   const startTutorial = () => {
@@ -5507,7 +5504,10 @@ export default function App() {
       />
       {screen === "home" && (
         <HomeScreen
-          onSelectTask={openTaskTemplates}
+          // 카드(전체 기능·대표 카테고리·바로 시작하기 캐러셀)를 눌러도 더 이상 아무
+          // 화면도 열지 않는다(2026-09-18, "템플릿을 골라 주세요" 목록 화면 제거) —
+          // 검색 결과에서 템플릿을 여는 openTemplate과는 다른, 이 진입로만 없앤다.
+          onSelectTask={() => {}}
           onSearch={openSearch}
           onHelp={() => navigate("request-help")}
           autoFocusHelper={focusHelperCta}
@@ -5516,9 +5516,6 @@ export default function App() {
       )}
       {screen === "search" && (
         <SearchResultsScreen initialQuery={searchQuery} onBack={() => navigate("home")} onOpenTemplate={openTemplate} />
-      )}
-      {screen === "task-templates" && selectedTaskId && (
-        <TaskTemplateScreen taskId={selectedTaskId} onBack={() => navigate("home")} onOpenTemplate={openTemplate} />
       )}
       {screen === "request-help" && (
         <RequestHelpScreen
