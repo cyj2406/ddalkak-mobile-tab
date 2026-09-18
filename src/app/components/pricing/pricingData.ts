@@ -28,8 +28,10 @@ export type CreditPackage = (typeof CREDIT_PACKAGES)[number];
 
 /**
  * [예시] 월 구독 요금제 — 요금제명·가격·설명·혜택은 이용 안내 시안 기준.
- * monthlyCredits 는 아직 원가 검토 전이라 null(미정)로 둔다 — 임의의 숫자를
- * 만들어 넣지 않고, 화면에는 "원가 검토 후 확정"으로 그대로 노출한다.
+ * monthlyCredits는 2026-09-18에 결정한 규칙대로 "가격 1원 = 크레딧 1개"를 그대로
+ * 적용한다 — CREDIT_PACKAGES(위, 추가 충전)도 이미 같은 1:1 규칙이라 새 규칙이
+ * 아니라 기존 관례를 구독 크레딧에도 맞춘 것이다. 화면(SubscriptionTab 등)은 이
+ * 필드 값을 그대로 보여주므로 여기 숫자만 바꾸면 된다.
  */
 export interface PlanExample {
   id: string;
@@ -54,7 +56,7 @@ export const PLAN_EXAMPLES: PlanExample[] = [
     name: "라이트",
     description: "필요할 때 가볍게 사용하는 분",
     priceLabel: "₩9,900",
-    monthlyCredits: null,
+    monthlyCredits: 9900,
     perks: ["문서·콘텐츠 제작 시작", "기본 월 크레딧 제공 예정", "크레딧 범위 내 기능 이용"],
   },
   {
@@ -62,7 +64,7 @@ export const PLAN_EXAMPLES: PlanExample[] = [
     name: "스탠다드",
     description: "매주 문서와 콘텐츠를 만드는 분",
     priceLabel: "₩29,900",
-    monthlyCredits: null,
+    monthlyCredits: 29900,
     perks: ["일상 업무와 콘텐츠 제작", "라이트보다 넉넉한 제공량", "크레딧 범위 내 기능 이용"],
     recommended: true,
   },
@@ -71,7 +73,7 @@ export const PLAN_EXAMPLES: PlanExample[] = [
     name: "프로",
     description: "여러 작업을 꾸준히 진행하는 분",
     priceLabel: "₩49,900",
-    monthlyCredits: null,
+    monthlyCredits: 49900,
     perks: ["문서·발표·홍보물 집중 제작", "스탠다드보다 높은 제공량", "크레딧 범위 내 기능 이용"],
   },
   {
@@ -79,7 +81,7 @@ export const PLAN_EXAMPLES: PlanExample[] = [
     name: "맥스",
     description: "많은 결과물을 제작하는 분",
     priceLabel: "₩79,900",
-    monthlyCredits: null,
+    monthlyCredits: 79900,
     perks: ["많은 작업량을 위한 플랜", "4개 플랜 중 가장 높은 제공량", "크레딧 범위 내 기능 이용"],
   },
 ];
