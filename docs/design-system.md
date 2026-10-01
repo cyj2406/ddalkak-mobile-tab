@@ -605,6 +605,20 @@ Hover·focus·selected·disabled 색 로직 자체는 건드리지 않았다(값
 - **폰트 디자인 품질(가변 폰트 800/900 마스터 보간의 시각적 정교함)** — 브라우저
   API로는 확인 불가능한 영역이라 미확인으로 남긴다.
 
+## 템플릿 선택 (2026-10-01)
+
+요청 도우미 2단계는 왼쪽 "사용할 템플릿"(35%, `SelectedTemplateCard`: 선택한 템플릿 이미지·이름·설명 하나)과
+오른쪽 "정리한 요청"(65%)이다. 여러 템플릿 비교는 "템플릿 변경" 선택창(`TemplatePickerDialog`: 데스크톱 최대 1280×910 고정(화면 기준, 여백 24px; 본문만 스크롤),
+모바일 전체 화면, 동일 규격 카드 그리드 `TemplateGrid`(썸네일 4:3 contain), 하단 취소/이 템플릿 적용)이 맡고, 크게 보기는 같은 창의 상세 화면으로 전환한다.
+새 토큰은 없고 기존 `color`/`radius`/`Button`만 재사용한다. 이미지는 `width:100%; height:auto`로 자르지 않으며,
+카드 테두리는 선택 전후 모두 2px(색만 변경). `?templatePreview=1`일 때만 `templatePreviewSamples.ts`의
+미확인 출처 샘플 이미지가 목록에 덧붙는다(실제 템플릿 아님).
+
+## 작업 카드 제목·카테고리 버튼 굵기 (2026-10-01)
+
+홈 작업 카드(`TaskGrid`의 grid·strip·compact) 제목은 모두 600·`color.text.primary`·자간 -0.1px(크기 유지).
+상단 카테고리 버튼은 기본 500, 선택 600(색·테두리로도 구분). Pretendard Variable(45~920)이 실제 로드돼 합성 굵기 아님.
+
 ## AI 작업 규칙 (CLAUDE.md에서 참조)
 
 - 새 화면을 만들기 전에 이 문서와 `src/app/styleTokens.ts`, `src/app/components/common/`을 먼저 확인한다.

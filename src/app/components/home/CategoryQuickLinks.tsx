@@ -4,11 +4,12 @@ import { ChevronRight } from "lucide-react";
 import { categoryButtonClassName, color, f, motion, typography } from "@/app/styleTokens";
 import { TASK_GROUPS } from "@/app/data/tasks";
 
-/** 홈 대표 카테고리로 노출할 5개 — 나머지(오디오/웹페이지)는 바로가기 없이 "전체 기능"에서만 보인다.
+/** 홈 대표 카테고리로 노출할 6개 — 나머지(오디오)는 바로가기 없이 "전체 기능"에서만 보인다.
  *  이름·아이콘·이동 경로는 여기서 새로 적지 않고 TASK_GROUPS(전체 기능과 같은 원본)에서 가져온다.
  *  각 대표 카테고리의 일러스트는 그 분류의 첫 작업 카드 것을 그대로 쓴다(참고 디자인의 REP 매핑과 동일:
- *  이미지→사진·그림, 문서→워드 문서, 발표자료→AI 발표자료, 표·데이터→엑셀, 영상→유튜브 영상). */
-const QUICK_GROUP_IDS = ["image", "doc", "deck", "data", "video"];
+ *  이미지→사진·그림, 문서→워드 문서, 발표자료→이미지형 발표자료, 표·데이터→엑셀, 영상→숏폼·홍보 영상,
+ *  웹페이지→랜딩페이지). */
+const QUICK_GROUP_IDS = ["image", "doc", "deck", "data", "video", "web"];
 
 /** 홈은 window 가 아니라 <main class="overflow-y-auto">가 실제 스크롤 컨테이너다 —
  *  window.scrollTo는 아무 일도 하지 않는다(body 높이가 뷰포트와 같아 window 자체는
@@ -61,7 +62,7 @@ function CategoryButton({
       }}
     >
       <img src={illustration} alt="" draggable={false} className="block shrink-0" style={{ width: 30, height: 30, objectFit: "contain" }} />
-      <span className={categoryButtonClassName} style={{ ...f, fontWeight: 500, color: selected ? color.brand : typography.body.color, letterSpacing: "-0.2px" }}>
+      <span className={categoryButtonClassName} style={{ ...f, fontWeight: selected ? 600 : 500, color: selected ? color.brand : typography.body.color, letterSpacing: "-0.2px" }}>
         {label}
       </span>
     </button>

@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, Check, CheckCircle2, ChevronDown, FileText } from "lucide-react";
+import { ArrowRight, Check, ChevronDown } from "lucide-react";
+import { showToast } from "@/app/components/common/Toast";
 import { color, f, SUBTITLE_COLOR } from "@/app/styleTokens";
-import { TASK_GROUPS, getTaskById, templatesForTask, visibleTasksOf, type Task, type TaskTemplate } from "@/app/data/tasks";
+import { TASK_GROUPS, getTaskById, templateKey, templatesForTask, visibleTasksOf, type Task, type TaskTemplate } from "@/app/data/tasks";
+import { isTemplatePreviewMode, previewSamplesFor } from "@/app/data/templatePreviewSamples";
+import { SelectedTemplateCard } from "@/app/components/home/SelectedTemplateCard";
 import { Button } from "@/app/components/common/Button";
 import { Modal } from "@/app/components/common/Modal";
 import { Badge } from "@/app/components/common/Badge";
 import type { WorkspaceCategory } from "@/app/App";
+import blankTemplateWide from "@/assets/home/templates/blank-template-wide.png";
+import blankTemplateSquare from "@/assets/home/templates/blank-template-square.png";
+import blankTemplatePortrait from "@/assets/home/templates/blank-template-portrait.png";
 
 const DRAFT_KEY = "ddalkkak.requestHelp.draft";
 
@@ -118,7 +124,7 @@ function buildRequestText(task: Task | undefined, template: TaskTemplate | undef
 const FLAT_TASKS = TASK_GROUPS.flatMap((g) => visibleTasksOf(g).map((task) => ({ task, groupId: g.id })));
 const SELECTABLE_TASK_IDS = FLAT_TASKS.filter((x) => x.task.status !== "soon").map((x) => x.task.id);
 
-/** 2단계 "템플릿/정리한 요청" 카드 — 데스크톱은 1/3+2/3 가로 분할, 그 아래는 세로로 접힌다. */
+/** 2단계 "템플릿/정리한 요청" 카드 — 데스크톱은 35%+65% 가로 분할, 그 아래는 세로로 접힌다. */
 function useIsDesktopSplit() {
   const [match, setMatch] = useState(() => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches);
   useEffect(() => {
@@ -324,196 +330,6 @@ function QuestionField({
   );
 }
 
-/**
- * 사용할 템플릿 드롭다운 — 별도 선택 모달 대신 카드 안에서 바로 템플릿을 바꾼다
- * (2026-09-18). TaskSelectField(위, "만들 작업" 콤보박스)와 같은 패턴을 그대로
- * 따른다 — 그룹 없는 단일 목록이라 그만큼만 단순하다: 트리거 버튼 + 절대 위치
- * listbox, 최대 높이 320 + 스크롤, 선택 항목 체크 표시, Escape/바깥 클릭으로 닫힘
- * (선택은 바뀌지 않음), 방향키로 옵션 간 포커스 이동. shadcn Select(ui/select.tsx)는
- * 이 프로젝트 어디서도 실제로 쓰이지 않고 브랜드 토큰과 연결돼 있지도 않아(design-
- * system.md) 새로 채택하지 않고, 이미 이 화면에서 검증된 콤보박스 패턴을 재사용한다.
- */
-function TemplateSelectField({
-  templates,
-  selectedIdx,
-  onSelect,
-}: {
-  templates: TaskTemplate[];
-  selectedIdx: number;
-  onSelect: (idx: number) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const current = templates[selectedIdx] ?? templates[0];
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: PointerEvent) => { if (!wrapRef.current?.contains(e.target as Node)) setOpen(false); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(false); triggerRef.current?.focus(); } };
-    document.addEventListener("pointerdown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  const moveFocus = (fromIdx: number, dir: 1 | -1) => {
-    const nextIdx = (fromIdx + dir + templates.length) % templates.length;
-    document.getElementById(`template-option-${nextIdx}`)?.focus();
-  };
-
-  return (
-    <div ref={wrapRef} className="relative">
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className="w-full flex items-center gap-2.5 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff]"
-        style={{ height: 46, padding: "0 14px", background: "#fbfcfe", border: "1px solid #e2e8f0" }}
-      >
-        <span className="flex-1 min-w-0 truncate text-left" style={{ ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a" }}>
-          {current.title}
-        </span>
-        <ChevronDown size={16} color="#94a3b8" className="shrink-0" style={{ transform: open ? "rotate(180deg)" : "none" }} aria-hidden />
-      </button>
-
-      {open && (
-        <div
-          role="listbox"
-          aria-label="사용할 템플릿 선택"
-          className="absolute left-0 right-0 mt-1.5 rounded-xl overflow-y-auto z-20"
-          style={{ maxHeight: 320, background: "#fff", border: "1px solid #e2e8f0", boxShadow: "0px 8px 32px rgba(0,0,0,0.14)" }}
-        >
-          {templates.map((t, i) => {
-            const isSelected = i === selectedIdx;
-            return (
-              <button
-                key={t.title}
-                id={`template-option-${i}`}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                onClick={() => { onSelect(i); setOpen(false); triggerRef.current?.focus(); }}
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowDown") { e.preventDefault(); moveFocus(i, 1); }
-                  if (e.key === "ArrowUp") { e.preventDefault(); moveFocus(i, -1); }
-                }}
-                className="w-full flex items-center gap-2.5 text-left outline-none transition-colors"
-                style={{ padding: "9px 14px", background: isSelected ? color.surface.accent : "transparent" }}
-              >
-                <span className="flex-1 min-w-0 truncate" style={{ ...f, fontWeight: isSelected ? 700 : 500, fontSize: 13.5, color: "#0a0a0a" }}>{t.title}</span>
-                {isSelected && <Check size={14} color={color.brand} strokeWidth={3} className="shrink-0" aria-hidden />}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** 템플릿 미리보기 — 실제 cover가 있으면 원본 비율 그대로(contain) 보여주고, 세로형
- *  이미지가 카드를 지나치게 늘리지 않도록 높이를 max-height로 제한한다. 로딩에
- *  실패하면(onError) 깨진 이미지 아이콘 대신 같은 "미리보기 준비 중" 자리로 되돌아간다.
- *  cover가 없으면(현재 전 템플릿) 항상 이 상태다. */
-const TEMPLATE_PREVIEW_PLACEHOLDER = (
-  <div className="absolute inset-0 flex items-center justify-center">
-    <span style={{ ...f, fontWeight: 500, fontSize: 12, color: "#94a3b8" }}>미리보기 준비 중</span>
-  </div>
-);
-
-/** 실제 표지(cover)가 있을 때만 그리는 두 겹 이미지 — 뒤(블러+어둡게, cover로 박스
- *  전체를 채움)로 남는 여백을 메우고, 앞(원본 비율 그대로, contain)에 또렷한 원본을
- *  올린다. `key={src}`로 부모(TemplatePreview)가 템플릿이 바뀔 때마다 이 컴포넌트를
- *  새로 마운트하므로 로딩 상태가 템플릿마다 자연히 초기화되고, loaded 전환 때마다
- *  opacity 트랜지션(짧은 fade)이 매번 다시 재생된다. 로딩 중·실패 시에는 이미지
- *  대신 같은 "미리보기 준비 중" 자리로 돌아간다(새 스켈레톤을 따로 만들지 않는다). */
-function TemplateCoverImage({ src, alt }: { src: string; alt: string }) {
-  const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
-
-  if (status === "error") return TEMPLATE_PREVIEW_PLACEHOLDER;
-
-  return (
-    <>
-      {status === "loading" && TEMPLATE_PREVIEW_PLACEHOLDER}
-      <div
-        aria-hidden
-        className="absolute inset-0"
-        style={{
-          backgroundImage: `url(${src})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          filter: "blur(18px) brightness(0.75)",
-          transform: "scale(1.12)",
-          opacity: status === "loaded" ? 1 : 0,
-          transition: "opacity 200ms ease",
-        }}
-      />
-      <img
-        src={src}
-        alt={alt}
-        loading="lazy"
-        onLoad={() => setStatus("loaded")}
-        onError={() => setStatus("error")}
-        className="absolute inset-0 w-full h-full"
-        style={{ objectFit: "contain", opacity: status === "loaded" ? 1 : 0, transition: "opacity 200ms ease" }}
-      />
-    </>
-  );
-}
-
-/** 미리보기 박스 — 가로 폭(카드 내부 너비)·높이(200px)·모서리(12px)·테두리를 항상
- *  고정해, 템플릿을 바꿔도(세로형↔가로형) 카드 레이아웃이 흔들리지 않는다. 실제
- *  렌더링(비율 유지·contain·블러 배경)은 TemplateCoverImage가 맡고, 이 컴포넌트는
- *  cover 유무와 박스 크기만 책임진다. key={template.cover}로 템플릿이 바뀔 때마다
- *  자식을 새로 마운트해 로딩·fade 상태를 초기화한다. */
-function TemplatePreview({ template }: { template: TaskTemplate }) {
-  return (
-    <div
-      className="relative shrink-0 overflow-hidden"
-      style={{ marginTop: 18, height: 200, borderRadius: 12, background: color.surface.subtle, border: `1px solid ${color.border.default}` }}
-    >
-      {template.cover ? <TemplateCoverImage key={template.cover} src={template.cover} alt={template.title} /> : TEMPLATE_PREVIEW_PLACEHOLDER}
-    </div>
-  );
-}
-
-/** 예시 채우기 — 중립 회색(옅은 배경+회색 텍스트) 조합이 활성 상태에서도 비활성처럼
- *  보인다는 피드백에 따라 브랜드 보조(옅은 브랜드 배경 + 브랜드 텍스트 + 얇은 브랜드
- *  테두리) 톤으로 바꿨다 — Badge의 tone="brand"(surface.accent 배경 + brand 텍스트)와
- *  같은 기존 토큰 짝을 그대로 재사용한다. 그래도 "템플릿·요청 확인"(다음 단계, 진한
- *  brand 채움)보다는 확실히 낮은 강조를 유지해야 해서 채움 버튼으로 바꾸지 않는다 —
- *  옅은 배경 + 얇은 테두리 조합 자체가 이미 그 위계 차이를 만든다. 진짜 비활성(작업
- *  미선택·예시 없음)일 때만 opacity로 흐려지고, 그 외엔 항상 이 브랜드 톤 그대로다. */
-function ExampleFillButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
-  const [hovered, setHovered] = useState(false);
-  const active = !disabled && hovered;
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      className="inline-flex items-center gap-1.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-      style={{
-        height: 38, padding: "0 14px",
-        background: active ? "rgba(79,123,255,0.12)" : color.surface.accent,
-        border: `1px solid ${active ? color.border.focus : "rgba(79,123,255,0.35)"}`,
-        color: color.brand,
-        cursor: disabled ? "default" : "pointer",
-      }}
-    >
-      <FileText size={15} strokeWidth={1.8} aria-hidden />
-      <span style={{ ...f, fontWeight: 500, fontSize: 14 }}>예시 채우기</span>
-    </button>
-  );
-}
-
 /** "정리한 요청" 안의 항목 하나 — 라벨(작은 중간 회색) + 값(읽기 쉬운 진한 중립색),
  *  `big`이면 값을 한 단계 크게(주제 전용) 보여준다. */
 function SummaryField({ label, value, big }: { label: string; value: string; big?: boolean }) {
@@ -558,7 +374,7 @@ function RequestSummary({ task, template, draft }: { task: Task; template: TaskT
       <div>
         <p style={{ ...f, fontWeight: 600, fontSize: 13.5, color: "#64748b", letterSpacing: "-0.2px" }}>작업 · 템플릿</p>
         <p className="mt-1.5" style={{ ...f, fontWeight: 500, fontSize: 13.5, color: "#64748b" }}>
-          {task.label}{template ? ` · ${template.title}` : ""}
+          {task.label} · {template ? template.title : "템플릿 없이 시작"}
         </p>
       </div>
 
@@ -609,23 +425,30 @@ export default function RequestHelpScreen({
       ? { taskId: initialTaskId, topic: "", audience: "", purpose: "", content: "", notes: "" }
       : loadDraft()
   );
+  const isDesktopSplit = useIsDesktopSplit();
   const [step, setStep] = useState(0);
   const [errors, setErrors] = useState<{ task?: string; topic?: string; content?: string }>({});
-  const [templateIdx, setTemplateIdx] = useState(0);
+  // 선택한 템플릿 — undefined: 아직 안 고름(첫 템플릿이 기본), null: 자유 구성, 문자열: templateKey.
+  const [selectedKey, setSelectedKey] = useState<string | null | undefined>(undefined);
   const [applyChoiceOpen, setApplyChoiceOpen] = useState(false);
-  const [appliedBannerOpen, setAppliedBannerOpen] = useState(false);
+  const exampleBtnRef = useRef<HTMLButtonElement>(null);
+  // 예시 적용 직전 입력(before)과 적용한 예시 값(applied) — 있을 때만 "되돌리기"를 보여 주고, 현재 입력이
+  // applied와 다르면(적용 후 수정함) 되돌리기 전에 확인한다.
+  const [exampleUndo, setExampleUndo] = useState<{ before: Omit<Draft, "taskId">; applied: Omit<Draft, "taskId"> } | null>(null);
+  const [undoConfirmOpen, setUndoConfirmOpen] = useState(false);
+  const undoBtnRef = useRef<HTMLButtonElement>(null);
   const [submitting, setSubmitting] = useState(false);
-  const undoSnapshotRef = useRef<Omit<Draft, "taskId"> | null>(null);
-  const bannerTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const isDesktopSplit = useIsDesktopSplit();
   const taskTriggerRef = useRef<HTMLButtonElement>(null);
   const topicRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
 
   const selectedTask = draft.taskId ? getTaskById(draft.taskId) : undefined;
-  const templates = useMemo(() => (draft.taskId ? templatesForTask(draft.taskId) : []), [draft.taskId]);
-  const template = templates[templateIdx] ?? templates[0];
+  const templates = useMemo(
+    () => (draft.taskId ? [...templatesForTask(draft.taskId), ...(isTemplatePreviewMode() ? previewSamplesFor(draft.taskId) : [])] : []),
+    [draft.taskId],
+  );
+  const template = selectedKey === null ? undefined : templates.find((t) => templateKey(t) === selectedKey) ?? templates[0];
   const examples = draft.taskId ? TASK_EXAMPLES[draft.taskId] ?? [] : [];
 
   useEffect(() => {
@@ -640,12 +463,9 @@ export default function RequestHelpScreen({
   // 템플릿 해제 → 새 작업의 템플릿으로 다시 추천) — topic/audience/purpose/content/notes
   // 는 여기서 건드리지 않는다(답변 보존).
   useEffect(() => {
-    setTemplateIdx(0);
-    setAppliedBannerOpen(false);
-    undoSnapshotRef.current = null;
+    setSelectedKey(undefined);
+    setExampleUndo(null);
   }, [draft.taskId]);
-
-  useEffect(() => () => clearTimeout(bannerTimer.current), []);
 
   const setField = (key: "topic" | "audience" | "purpose" | "content" | "notes") => (value: string) =>
     setDraft((d) => ({ ...d, [key]: value.slice(0, LIMITS[key]) }));
@@ -672,13 +492,15 @@ export default function RequestHelpScreen({
   const applyExample = () => {
     const active = examples[0];
     if (!active) return;
-    undoSnapshotRef.current = { topic: draft.topic, audience: draft.audience, purpose: draft.purpose, content: draft.content, notes: draft.notes };
-    setDraft((d) => ({ ...d, topic: active.topic, content: active.content, audience: active.audience }));
+    const before = { topic: draft.topic, audience: draft.audience, purpose: draft.purpose, content: draft.content, notes: draft.notes };
+    // 예시 데이터에는 목적·형식이 없어, 이전 입력이 예시와 섞이지 않게 두 항목은 비운다(일관된 한 세트).
+    const applied = { topic: active.topic, audience: active.audience, purpose: "", content: active.content, notes: "" };
+    setDraft((d) => ({ ...d, ...applied }));
+    setExampleUndo({ before, applied });
     setErrors({});
     setApplyChoiceOpen(false);
-    setAppliedBannerOpen(true);
-    clearTimeout(bannerTimer.current);
-    bannerTimer.current = setTimeout(() => setAppliedBannerOpen(false), 8000);
+    requestAnimationFrame(() => exampleBtnRef.current?.focus({ preventScroll: true }));
+    showToast("예시를 채웠어요. 내 상황에 맞게 수정해 주세요.");
   };
 
   const requestApplyExample = () => {
@@ -689,11 +511,22 @@ export default function RequestHelpScreen({
   };
 
   const undoApply = () => {
-    if (!undoSnapshotRef.current) return;
-    setDraft((d) => ({ ...d, ...undoSnapshotRef.current! }));
-    undoSnapshotRef.current = null;
-    setAppliedBannerOpen(false);
-    clearTimeout(bannerTimer.current);
+    if (!exampleUndo) return;
+    setDraft((d) => ({ ...d, ...exampleUndo.before }));
+    setExampleUndo(null);
+    setUndoConfirmOpen(false);
+    setErrors({});
+    showToast("예시 적용 전으로 되돌렸어요.");
+    // 되돌리기 버튼이 사라지므로 바로 옆 "예시로 채우기"로 포커스를 옮긴다.
+    requestAnimationFrame(() => exampleBtnRef.current?.focus({ preventScroll: true }));
+  };
+
+  const requestUndo = () => {
+    if (!exampleUndo) return;
+    const a = exampleUndo.applied;
+    const edited = (["topic", "audience", "purpose", "content", "notes"] as const).some((k) => draft[k] !== a[k]);
+    if (edited) setUndoConfirmOpen(true);
+    else undoApply();
   };
 
   const finish = () => {
@@ -745,27 +578,43 @@ export default function RequestHelpScreen({
                 이미 읽기 좋은 너비로 잡혀 있어 추가 제한을 두지 않는다. */}
             <div className="flex flex-col gap-6">
               <div>
-                <div className="flex items-center justify-between gap-3 flex-wrap mb-2.5">
-                  <div className="flex items-center gap-2">
-                    <span style={QUESTION_LABEL_STYLE}>만들 작업</span>
-                  </div>
-                  {/* 예시 채우기 — 작업 미선택 시 비활성, 이미 입력이 있으면 확인 모달을 거친다. */}
-                  <ExampleFillButton disabled={!draft.taskId || examples.length === 0} onClick={requestApplyExample} />
+                <div className="mb-2.5">
+                  <span style={QUESTION_LABEL_STYLE}>만들 작업</span>
                 </div>
-                <TaskSelectField taskId={draft.taskId} onSelect={selectTask} error={errors.task} triggerRef={taskTriggerRef} />
+                {/* 예시 채우기는 "선택한 작업의 예시"라 작업 선택 바로 옆(같은 높이 46px)에 둔다 — 별도 줄을 만들지
+                    않고, 작업을 고르기 전에는 비활성이라는 의존 관계가 위치로 드러난다. */}
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <TaskSelectField taskId={draft.taskId} onSelect={selectTask} error={errors.task} triggerRef={taskTriggerRef} />
+                  </div>
+                  <Button
+                    ref={exampleBtnRef}
+                    type="button"
+                    variant="secondary"
+                    size="md"
+                    className="shrink-0 whitespace-nowrap"
+                    disabled={!draft.taskId || examples.length === 0}
+                    onClick={requestApplyExample}
+                    title={draft.taskId ? "선택한 작업의 예시로 전체 입력을 채워요" : "만들 작업을 먼저 선택해 주세요"}
+                    style={{ height: 46, padding: "0 14px", fontSize: 13.5 }}
+                  >
+                    예시로 채우기
+                  </Button>
+                  {/* 되돌리기 — 예시를 적용한 뒤에만, 같은 줄에 작은 텍스트 버튼으로(입력란을 밀지 않는다). */}
+                  {exampleUndo && (
+                    <button
+                      ref={undoBtnRef}
+                      type="button"
+                      onClick={requestUndo}
+                      className="shrink-0 whitespace-nowrap rounded-lg outline-none transition-colors hover:bg-[#f1f5f9] focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
+                      style={{ ...f, fontWeight: 600, fontSize: 13, height: 46, padding: "0 8px", background: "transparent", border: 0, color: color.brand, cursor: "pointer" }}
+                    >
+                      되돌리기
+                    </button>
+                  )}
+                </div>
                 {errors.task && <span role="alert" className="block mt-1.5" style={FIELD_ERROR_STYLE}>{errors.task}</span>}
               </div>
-
-              {appliedBannerOpen && (
-                <div className="flex items-center gap-2.5 rounded-xl" style={{ background: color.surface.accent, border: "1px solid #bfdbfe", padding: "10px 14px" }}>
-                  <CheckCircle2 size={16} color={color.brand} className="shrink-0" aria-hidden />
-                  <span style={{ ...f, fontWeight: 600, fontSize: 12.5, color: "#0a0a0a" }}>예시를 채웠어요. 실제 내용에 맞게 바꿔 주세요.</span>
-                  <span className="flex-1" />
-                  <button type="button" onClick={undoApply} style={{ ...f, fontWeight: 700, fontSize: 12.5, color: color.brand, background: "transparent", border: 0, cursor: "pointer" }}>
-                    되돌리기
-                  </button>
-                </div>
-              )}
 
               <QuestionField
                 id="req-topic"
@@ -823,35 +672,11 @@ export default function RequestHelpScreen({
         )}
 
         {step === 1 && selectedTask && (
-          // PC: grid + items-start — 두 카드가 위쪽만 맞춰 나란히 놓이고, 각자 내용
-          // 만큼만 높이를 갖는다(2026-09-18: 오른쪽 "정리한 요청"에 맞춰 왼쪽 카드
-          // 외곽을 억지로 늘리던 items-stretch/h-full을 없앴다 — "표지는 예시" 안내를
-          // 지운 뒤로 왼쪽 카드 아래에 큰 빈 여백만 남았었다). 모바일은 기존처럼
-          // 세로로 쌓인다.
-          <div className={isDesktopSplit ? "grid gap-5 items-start" : "flex flex-col gap-5"} style={isDesktopSplit ? { gridTemplateColumns: "1fr 2fr" } : undefined}>
-            {/* A. 사용할 템플릿 — 별도 선택 모달 대신 드롭다운으로 그 자리에서 바로
-                바꾼다(2026-09-18). 제목 → 드롭다운 → 미리보기 → 이름 → 메타 정보
-                순으로, 위에서 아래로 강조가 낮아진다. 카드는 내용만큼만 높이를
-                갖는다(오른쪽 카드와 외곽을 맞추지 않는다). */}
-            <div className="rounded-[22px] flex flex-col" style={{ background: "#fff", border: "1px solid #e2e8f0", padding: 20 }}>
-              <p style={{ ...f, fontWeight: 700, fontSize: 15, color: "#0a0a0a" }}>사용할 템플릿</p>
-              {templates.length > 0 && template ? (
-                <>
-                  <div className="mt-3">
-                    <TemplateSelectField templates={templates} selectedIdx={templateIdx} onSelect={setTemplateIdx} />
-                  </div>
-                  <TemplatePreview template={template} />
-                  <div className="mt-3.5">
-                    <p style={{ ...f, fontWeight: 700, fontSize: 13.5, color: "#0a0a0a" }}>{template.title}</p>
-                    <p className="mt-1" style={{ ...f, fontWeight: 500, fontSize: 12, color: SUBTITLE_COLOR }}>{template.meta} · {template.format}</p>
-                  </div>
-                </>
-              ) : (
-                <p className="mt-3" style={{ ...f, fontWeight: 500, fontSize: 13, color: SUBTITLE_COLOR, lineHeight: 1.6 }}>
-                  이 작업에 맞는 템플릿이 아직 없어요. 템플릿 없이 진행할 수 있어요.
-                </p>
-              )}
-            </div>
+          // PC: 왼쪽 템플릿 35% + 오른쪽 정리한 요청 65%, items-start로 위쪽만 맞춘다(높이를
+          // 억지로 늘리지 않는다 — 템플릿 이미지 비율에 따라 왼쪽 높이가 달라진다). 모바일은
+          // 템플릿 → 요청 순으로 쌓인다. 여러 템플릿 비교는 "템플릿 변경" 선택창이 맡는다.
+          <div className={isDesktopSplit ? "grid gap-5 items-start" : "flex flex-col gap-5"} style={isDesktopSplit ? { gridTemplateColumns: "minmax(0,35fr) minmax(0,65fr)" } : undefined}>
+            <SelectedTemplateCard templates={templates} template={template} onApply={setSelectedKey} />
 
             {/* B. 정리한 요청 — 같은 굵기로 나열하던 문장을 항목별(주제/작업·템플릿/
                 대상·목적/꼭 담을 내용/형식·주의사항)로 정리한다. 실제 전달 텍스트는
@@ -918,18 +743,33 @@ export default function RequestHelpScreen({
       </div>
 
       {applyChoiceOpen && (
-        <Modal onClose={() => setApplyChoiceOpen(false)} ariaLabel="예시 적용 확인" maxWidth={400}>
+        <Modal onClose={() => { setApplyChoiceOpen(false); exampleBtnRef.current?.focus({ preventScroll: true }); }} ariaLabel="예시 적용 확인" maxWidth={400}>
           {(close) => (
             <div style={{ padding: "24px 26px 22px" }}>
-              <p style={{ ...f, fontWeight: 800, fontSize: 17, color: "#0a0a0a", letterSpacing: "-0.4px" }}>
-                작성한 내용을 선택한 작업의 예시로 바꿀까요?
-              </p>
+              <p style={{ ...f, fontWeight: 800, fontSize: 17, color: "#0a0a0a", letterSpacing: "-0.4px" }}>입력한 내용을 예시로 바꿀까요?</p>
               <p className="mt-2.5" style={{ ...f, fontWeight: 500, fontSize: 13, color: SUBTITLE_COLOR, lineHeight: 1.6 }}>
-                지금까지 적은 주제·내용·대상이 예시 내용으로 바뀌어요. 적용 후에도 되돌릴 수 있어요.
+                작성한 내용이 선택한 작업의 예시로 바뀝니다.
               </p>
               <div className="flex gap-2.5 mt-5">
                 <Button variant="secondary" fullWidth onClick={close}>취소</Button>
                 <Button variant="primary" fullWidth onClick={applyExample}>예시로 바꾸기</Button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {undoConfirmOpen && (
+        <Modal onClose={() => { setUndoConfirmOpen(false); undoBtnRef.current?.focus({ preventScroll: true }); }} ariaLabel="예시 되돌리기 확인" maxWidth={400}>
+          {(close) => (
+            <div style={{ padding: "24px 26px 22px" }}>
+              <p style={{ ...f, fontWeight: 800, fontSize: 17, color: "#0a0a0a", letterSpacing: "-0.4px" }}>예시 적용 전으로 돌아갈까요?</p>
+              <p className="mt-2.5" style={{ ...f, fontWeight: 500, fontSize: 13, color: SUBTITLE_COLOR, lineHeight: 1.6 }}>
+                이후 수정한 내용은 사라집니다.
+              </p>
+              <div className="flex gap-2.5 mt-5">
+                <Button variant="secondary" fullWidth onClick={close}>취소</Button>
+                <Button variant="primary" fullWidth onClick={undoApply}>되돌리기</Button>
               </div>
             </div>
           )}

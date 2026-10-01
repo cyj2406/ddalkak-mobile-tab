@@ -68,6 +68,25 @@ import car16 from "@/assets/home/car/c16.png";
 // 쓰고 있어 새 파일로 중복 저장하지 않고 그 import를 그대로 재사용한다(번들에도
 // 같은 파일이 중복 포함되지 않는다) — 아래 TASK_TEMPLATES에서 car13~16을 cover로 쓴다.
 import templatePptProposal from "@/assets/home/templates/ppt-proposal.jpeg";
+import productHero1 from "@/assets/home/templates/product-hero-1.jpg";
+import productHero2 from "@/assets/home/templates/product-hero-2.jpg";
+import productHero3 from "@/assets/home/templates/product-hero-3.jpg";
+import attachedShortform1 from "@/assets/home/templates/task/video-1.png";
+import attachedShortform2 from "@/assets/home/templates/task/video-2.png";
+import attachedExcel1 from "@/assets/home/templates/task/excel-1.png";
+import attachedExcel2 from "@/assets/home/templates/task/excel-2.png";
+import attachedPpt1 from "@/assets/home/templates/task/ppt-1.png";
+import attachedPpt2 from "@/assets/home/templates/task/ppt-2.png";
+import attachedImgslide1 from "@/assets/home/templates/task/imgslide-1.jpeg";
+import attachedImgslide2 from "@/assets/home/templates/task/imgslide-2.jpeg";
+import attachedHangul1 from "@/assets/home/templates/task/hangul-1.png";
+import attachedHangul2 from "@/assets/home/templates/task/hangul-2.png";
+import attachedThesis1 from "@/assets/home/templates/task/thesis-1.png";
+import attachedThesis2 from "@/assets/home/templates/task/thesis-2.png";
+import attachedLeaflet1 from "@/assets/home/templates/task/leaflet-1.jpeg";
+import attachedLeaflet2 from "@/assets/home/templates/task/leaflet-2.jpeg";
+import attachedAppintro1 from "@/assets/home/templates/task/landing-1.png";
+import attachedAppintro2 from "@/assets/home/templates/task/landing-2.png";
 
 export type TaskStatus = "available" | "soon";
 
@@ -126,7 +145,7 @@ export const TASK_GROUPS: TaskGroup[] = [
       { id: "photo", label: "사진·그림", desc: "사진과 일러스트", status: "available", icon: Image, illustration: artPhoto, illustrationArt: { w: 123, right: 2.9, bottom: -3.2 }, wsCategory: "image", tabLabel: "전체" },
       { id: "cardnews", label: "카드뉴스", desc: "여러 장의 SNS 소식", status: "available", icon: GalleryHorizontal, illustration: artCardnews, illustrationArt: { w: 131, right: -2.4, bottom: -5.5 }, wsCategory: "image", tabLabel: "전체" },
       { id: "product", label: "상품 상세페이지", desc: "상품 소개와 판매", status: "available", icon: ShoppingBag, illustration: artProduct, illustrationArt: { w: 120, right: -6.4, bottom: 4.0 }, wsCategory: "detail", tabLabel: "전체" },
-      { id: "imgslide", label: "이미지 슬라이드", desc: "이미지로 보는 발표", status: "available", icon: Images, illustration: artImgslide, wsCategory: "image", tabLabel: "전체", hiddenFromListing: true },
+      { id: "leaflet", label: "브로셔", desc: "세로형 홍보 브로셔", status: "available", icon: Newspaper, illustration: artLeaflet, illustrationArt: { w: 125.5, right: 5.5, bottom: -5.7 }, wsCategory: "docs", tabLabel: "전체" },
     ],
   },
   {
@@ -136,9 +155,8 @@ export const TASK_GROUPS: TaskGroup[] = [
     tasks: [
       { id: "word", label: "워드 문서", desc: "보고서와 제안서", status: "available", icon: FileText, illustration: artWord, illustrationArt: { w: 132, right: -6.0, bottom: -2.5 }, wsCategory: "docs", tabLabel: "워드" },
       { id: "hangul", label: "한글 문서", desc: "공문과 신청서", status: "available", icon: FileSignature, illustration: artHangul, illustrationArt: { w: 122, right: -3.9, bottom: 2.6 }, wsCategory: "docs", tabLabel: "한글" },
-      { id: "leaflet", label: "홍보 안내문", desc: "한 장으로 전하는 소개", status: "available", icon: Newspaper, illustration: artLeaflet, wsCategory: "docs", tabLabel: "전체", hiddenFromListing: true },
       { id: "thesis", label: "논문 초안", desc: "논문 구성과 초안", status: "available", icon: GraduationCap, illustration: artThesis, illustrationArt: { w: 127, right: -3.9, bottom: -0.5 }, wsCategory: "docs", tabLabel: "논문" },
-      { id: "visa", label: "비자·체류 서류", desc: "비자와 체류 신청서", status: "available", icon: IdCard, illustration: artVisa, illustrationScale: 1.04, illustrationArt: { w: 104, right: 12.7, bottom: 2.9 }, wsCategory: "docs", tabLabel: "전체" },
+      { id: "visa", label: "비자·체류 서류", desc: "비자와 체류 신청서", status: "available", icon: IdCard, illustration: artVisa, illustrationScale: 1.04, illustrationArt: { w: 104, right: 12.7, bottom: 2.9 }, wsCategory: "docs", tabLabel: "전체", hiddenFromListing: true },
     ],
   },
   {
@@ -146,10 +164,11 @@ export const TASK_GROUPS: TaskGroup[] = [
     name: "발표자료",
     icon: Presentation,
     tasks: [
-      { id: "ppt", label: "AI 발표자료", desc: "AI로 만드는 발표자료", status: "available", icon: Presentation, illustration: artPpt, illustrationArt: { w: 124, right: 2.6, bottom: -10.9 }, illustrationScale: 1.06, wsCategory: "ppt", tabLabel: "전체" },
+      { id: "imgslide", label: "이미지형 발표자료", desc: "이미지로 보는 발표", status: "available", icon: Images, illustration: artImgslide, illustrationArt: { w: 115.5, right: 7.1, bottom: -5.6 }, wsCategory: "image", tabLabel: "전체" },
+      { id: "ppt", label: "PPT 발표자료", desc: "AI로 만드는 발표자료", status: "available", icon: Presentation, illustration: artPpt, illustrationArt: { w: 124, right: 2.6, bottom: -10.9 }, illustrationScale: 1.06, wsCategory: "ppt", tabLabel: "전체" },
       { id: "webppt", label: "웹 발표자료", desc: "웹에서 넘기는 발표", status: "available", icon: MonitorPlay, illustration: artWebppt, illustrationScale: 1.04, illustrationArt: { w: 123, right: 1.4, bottom: -2.1 }, wsCategory: "ppt", tabLabel: "전체" },
-      { id: "typo", label: "PPT 오타 확인", desc: "틀린 글자 찾기", status: "soon", icon: SpellCheck, illustration: artTypo, illustrationArt: { w: 138, right: -3.8, bottom: -12.5 } },
-      { id: "ppttrans", label: "PPT 번역", desc: "다른 언어로 바꾸기", status: "soon", icon: Languages, illustration: artPpttrans, illustrationArt: { w: 118, right: 4.6, bottom: 0.3 } },
+      { id: "typo", label: "PPT 검수", desc: "오타·맞춤법 확인", status: "available", icon: SpellCheck, illustration: artTypo, illustrationArt: { w: 119.5, right: 5.2, bottom: -5.5 } },
+      { id: "ppttrans", label: "PPT 번역", desc: "다른 언어로 바꾸기", status: "soon", icon: Languages, illustration: artPpttrans, illustrationArt: { w: 118, right: 4.6, bottom: 0.3 }, hiddenFromListing: true },
     ],
   },
   {
@@ -166,7 +185,7 @@ export const TASK_GROUPS: TaskGroup[] = [
     icon: Clapperboard,
     tasks: [
       { id: "shortform", label: "숏폼·홍보 영상", desc: "짧은 홍보 영상", status: "available", icon: Clapperboard, illustration: artShortform, illustrationScale: 0.94, illustrationArt: { w: 130, right: -17.6, bottom: -0.9 }, wsCategory: "video", tabLabel: "영상" },
-      { id: "youtube", label: "유튜브 영상", desc: "가로형 설명 영상", status: "available", icon: Youtube, illustration: artYoutube, illustrationScale: 1.08, illustrationArt: { w: 105, right: 10.0, bottom: -0.5 }, wsCategory: "video", tabLabel: "유튜브영상" },
+      { id: "youtube", label: "슬라이드 영상", desc: "사진으로 만드는 영상", status: "soon", icon: Youtube, illustration: artYoutube, illustrationArt: { w: 106.6, right: 10.3, bottom: -2.1 } },
     ],
   },
   {
@@ -174,7 +193,7 @@ export const TASK_GROUPS: TaskGroup[] = [
     name: "웹페이지",
     icon: Smartphone,
     tasks: [
-      { id: "appintro", label: "앱 소개 페이지", desc: "앱 기능과 장점", status: "soon", icon: Smartphone, illustration: artAppintro, illustrationScale: 1.04, illustrationArt: { w: 113, right: 8.8, bottom: -1.8 } },
+      { id: "appintro", label: "랜딩페이지", desc: "서비스·이벤트 소개 페이지", status: "available", icon: Smartphone, illustration: artAppintro, illustrationArt: { w: 179.2, right: -23.4, bottom: -30.0 }, wsCategory: "landing", tabLabel: "전체" },
       { id: "bizpage", label: "업체 홍보 페이지", desc: "업체와 서비스 소개", status: "soon", icon: Store, illustration: artBizpage, hiddenFromListing: true },
       { id: "eventpage", label: "행사 안내 페이지", desc: "일정과 참여 방법", status: "soon", icon: CalendarDays, illustration: artEventpage, hiddenFromListing: true },
     ],
@@ -228,19 +247,32 @@ export interface TaskTemplate {
    *  세로형/가로형" 문구와 항상 같은 형태를 가리켜야 한다(2026-09-18, 예시 표지
    *  5개를 붙이면서 추가). cover가 없으면 의미 없다. */
   aspectRatio?: string;
+  /** cover의 실제 픽셀 크기 — 카드 목록(TemplateGallery)이 이미지를 불러오기 전부터
+   *  자리를 확보하고(레이아웃 이동 방지)하는 데 쓴다. */
+  coverSize?: { width: number; height: number };
+  /** 극단적으로 긴 상세페이지처럼 cover를 그대로 목록에 쓰기 어려울 때의 대표 썸네일.
+   *  없으면 목록도 cover를 그대로(자르지 않고) 쓴다. 확대 보기는 항상 cover/pages 원본. */
+  thumb?: string;
+  thumbSize?: { width: number; height: number };
+  /** 여러 페이지짜리 템플릿의 페이지별 원본 이미지. 2장 이상일 때만 확대 보기에 페이지 이동이 뜬다. */
+  pages?: string[];
 }
 
 const T = (
   taskId: string, title: string, use: string, meta: string, format: string,
-  extra?: { cover?: string; coverIsExample?: boolean; aspectRatio?: string },
+  extra?: Partial<Pick<TaskTemplate, "cover" | "coverIsExample" | "aspectRatio" | "coverSize" | "thumb" | "thumbSize" | "pages">>,
 ): TaskTemplate => ({ taskId, title, use, meta, format, ...extra });
 
 export const TASK_TEMPLATES: TaskTemplate[] = [
-  T("photo", "뷰티 제품 광고 이미지", "제품을 SNS 광고 이미지로 알릴 때", "이미지 · 정사각형", "PNG"),
-  T("photo", "버터떡 유튜브 썸네일", "영상 썸네일을 눈에 띄게 만들 때", "이미지 · 정사각형", "PNG"),
-  T("photo", "SNS 광고 배너", "가로형 광고 배너가 필요할 때", "이미지 · 가로형", "JPG", { cover: car15, coverIsExample: true, aspectRatio: "3:2" }),
-  T("cardnews", "단색 카드형 카드뉴스", "간결한 소식을 여러 장으로 전할 때", "카드뉴스 · 정사각형", "PNG", { cover: car14, coverIsExample: true, aspectRatio: "1:1" }),
+  T("photo", "뷰티 제품 광고 이미지", "제품을 SNS 광고 이미지로 알릴 때", "이미지 · 정사각형", "PNG", { cover: car1, coverIsExample: true, aspectRatio: "1:1", coverSize: { width: 700, height: 700 } }),
+  T("photo", "버터떡 유튜브 썸네일", "영상 썸네일을 눈에 띄게 만들 때", "이미지 · 정사각형", "PNG", { cover: car12, coverIsExample: true, aspectRatio: "16:9", coverSize: { width: 1000, height: 562 } }),
+  T("photo", "SNS 광고 배너", "가로형 광고 배너가 필요할 때", "이미지 · 가로형", "JPG", { cover: car15, coverIsExample: true, aspectRatio: "3:2", coverSize: { width: 1536, height: 1024 } }),
+  T("cardnews", "단색 카드형 카드뉴스", "간결한 소식을 여러 장으로 전할 때", "카드뉴스 · 정사각형", "PNG", { cover: car14, coverIsExample: true, aspectRatio: "1:1", coverSize: { width: 1080, height: 1080 } }),
   T("cardnews", "포토 Q&A 카드뉴스", "질문과 답을 사진과 함께 전할 때", "카드뉴스 · 정사각형", "PNG"),
+  // 상세페이지 템플릿 이미지(첨부 파일 01_hero (1)~(3)) — 파일에 제목이 없어 파일명으로 표시한다.
+  T("product", "01_hero (1)", "", "상세페이지 · 세로형", "JPG", { cover: productHero1, aspectRatio: "9:16", coverSize: { width: 720, height: 1456 } }),
+  T("product", "01_hero (2)", "", "상세페이지 · 세로형", "JPG", { cover: productHero2, aspectRatio: "2:3", coverSize: { width: 832, height: 1264 } }),
+  T("product", "01_hero (3)", "", "상세페이지 · 세로형", "JPG", { cover: productHero3, aspectRatio: "2:3", coverSize: { width: 832, height: 1280 } }),
   T("product", "스마트스토어 상세페이지", "상품 특징을 길게 설명할 때", "상세페이지 · 세로형", "JPG"),
   T("product", "쿠팡 상품 상세페이지", "쇼핑몰 상세페이지를 빠르게 만들 때", "상세페이지 · 세로형", "JPG"),
   T("imgslide", "제품 소개 이미지 슬라이드", "이미지로 넘겨 보여줄 때", "슬라이드 · 정사각형", "PNG"),
@@ -251,12 +283,31 @@ export const TASK_TEMPLATES: TaskTemplate[] = [
   T("leaflet", "행사 홍보 안내문", "행사를 한 장으로 알릴 때", "안내문 · 정사각형", "PDF"),
   T("thesis", "논문 초록 초안", "논문 구성과 초록을 잡을 때", "문서 · 세로형", "PDF"),
   T("visa", "결혼이민자 가족 초청장", "가족을 국내로 초청할 때", "서류 · 세로형", "DOCX"),
-  T("ppt", "사업계획 발표자료", "투자자에게 사업을 설명할 때", "발표자료 · 와이드", "PPTX", { cover: templatePptProposal, coverIsExample: true, aspectRatio: "16:9" }),
+  T("ppt", "사업계획 발표자료", "투자자에게 사업을 설명할 때", "발표자료 · 와이드", "PPTX", { cover: templatePptProposal, coverIsExample: true, aspectRatio: "16:9", coverSize: { width: 640, height: 360 } }),
   T("ppt", "분기 실적 보고", "분기 성과를 팀에 보고할 때", "발표자료 · 와이드", "PPTX"),
   T("webppt", "제품 소개 웹 발표자료", "링크 하나로 발표를 공유할 때", "발표자료 · 와이드", "PPTX"),
   T("excel", "거래처 견적 표", "금액과 항목을 정리해 보낼 때", "표 · 가로형", "XLSX"),
-  T("shortform", "숏폼 홍보 영상", "짧게 눈길을 끄는 홍보가 필요할 때", "영상 · 세로형", "MP4", { cover: car13, coverIsExample: true, aspectRatio: "9:16" }),
-  T("youtube", "유튜브 설명 영상", "가로형으로 차분히 설명할 때", "영상 · 가로형", "MP4", { cover: car16, coverIsExample: true, aspectRatio: "3:2" }),
+  T("shortform", "숏폼 홍보 영상", "짧게 눈길을 끄는 홍보가 필요할 때", "영상 · 세로형", "MP4", { cover: car13, coverIsExample: true, aspectRatio: "9:16", coverSize: { width: 360, height: 640 } }),
+  T("youtube", "유튜브 설명 영상", "가로형으로 차분히 설명할 때", "영상 · 가로형", "MP4", { cover: car16, coverIsExample: true, aspectRatio: "3:2", coverSize: { width: 1335, height: 860 } }),
+  // 첨부 이미지(작업별 1·2번) — "사용할 템플릿" 썸네일과 "템플릿 변경" 모달이 같은 목록(templatesForTask)을
+  // 쓰므로 여기 한 곳에서만 연결한다. 파일명 앞부분이 가리키는 작업에 연결했고, 파일에 제목이 없어 파일명을
+  // 제목으로 쓴다. 이름이 불명확해 연결하지 않은 파일: 문서1·2, 슬라이드 발표자료1·2.
+  T("shortform", "영상1", "", "영상 · 세로형", "", { cover: attachedShortform1, coverSize: { width: 400, height: 711 } }),
+  T("shortform", "영상2", "", "영상 · 세로형", "", { cover: attachedShortform2, coverSize: { width: 400, height: 711 } }),
+  T("excel", "엑셀1", "", "표 · 세로형", "", { cover: attachedExcel1, coverSize: { width: 480, height: 672 } }),
+  T("excel", "엑셀2", "", "표 · 세로형", "", { cover: attachedExcel2, coverSize: { width: 480, height: 672 } }),
+  T("ppt", "피피티1", "", "발표자료 · 와이드", "", { cover: attachedPpt1, coverSize: { width: 1280, height: 720 } }),
+  T("ppt", "피피티2", "", "발표자료 · 와이드", "", { cover: attachedPpt2, coverSize: { width: 1200, height: 675 } }),
+  T("imgslide", "이미지형 발표자료1", "", "슬라이드", "", { cover: attachedImgslide1, coverSize: { width: 640, height: 360 } }),
+  T("imgslide", "이미지형 발표자료2", "", "슬라이드", "", { cover: attachedImgslide2, coverSize: { width: 640, height: 904 } }),
+  T("hangul", "한글1", "", "문서 · 세로형", "", { cover: attachedHangul1, coverSize: { width: 480, height: 672 } }),
+  T("hangul", "한글2", "", "문서 · 세로형", "", { cover: attachedHangul2, coverSize: { width: 480, height: 672 } }),
+  T("thesis", "논문1", "", "문서 · 세로형", "", { cover: attachedThesis1, coverSize: { width: 480, height: 672 } }),
+  T("thesis", "논문2", "", "문서 · 세로형", "", { cover: attachedThesis2, coverSize: { width: 480, height: 672 } }),
+  T("leaflet", "브로셔1", "", "안내문 · 세로형", "", { cover: attachedLeaflet1, coverSize: { width: 640, height: 904 } }),
+  T("leaflet", "브로셔2", "", "안내문 · 세로형", "", { cover: attachedLeaflet2, coverSize: { width: 640, height: 904 } }),
+  T("appintro", "랜딩1", "", "웹페이지 · 와이드", "", { cover: attachedAppintro1, coverSize: { width: 2560, height: 1440 } }),
+  T("appintro", "랜딩2", "", "웹페이지 · 와이드", "", { cover: attachedAppintro2, coverSize: { width: 2560, height: 1440 } }),
 ];
 
 export function templatesForTask(taskId: string): TaskTemplate[] {
@@ -324,3 +375,7 @@ export const CAROUSEL_COVERS: CarouselCover[] = [
   { taskId: "leaflet", title: "클리닉 이벤트 홍보물", cat: "문서", format: "PDF", cover: car15, ratio: 1536 / 1024 },
   { taskId: "youtube", title: "K-POP 인기곡 모음 영상", cat: "영상", format: "MP4", cover: car16, ratio: 1335 / 860 },
 ];
+
+/** 템플릿 하나를 가리키는 선택 키 — 템플릿에 별도 id 필드가 없어(작업 안에서 title이 유일)
+ *  taskId+title로 만든다. 목록 순서가 바뀌거나 필터로 가려져도 선택이 유지되게 인덱스 대신 쓴다. */
+export const templateKey = (t: Pick<TaskTemplate, "taskId" | "title">) => `${t.taskId}::${t.title}`;

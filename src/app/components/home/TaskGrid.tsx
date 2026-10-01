@@ -126,20 +126,20 @@ export function TaskCard({
     >
       <span
         className="relative z-[1] min-w-0 block"
-        style={{ maxWidth: compact ? undefined : "56%" }}
+        style={{ maxWidth: compact ? undefined : "56%", wordBreak: "keep-all" }}
       >
-        {/* 이름 — "전체 기능"(grid)만 2026-09-18에 16px/500/line-height 24px로 낮췄다
-            (기존 15px/700은 다른 텍스트보다 과하게 굵어 보였다). strip("세부 기능 줄")·
-            compact(요청 작성 도우미 1단계, 이번 범위 밖)는 기존 값(16px/800, 14.5px/800)
-            그대로 둔다. */}
+        {/* 이름 — 모든 카드 변형(grid·strip·compact)을 600(Semibold)·text.primary로 통일했다
+            (2026-10-01: strip의 800이 파스텔 배경·일러스트에 비해 무거워 보였다). 크기는 그대로
+            두고 자간만 -0.2px → -0.1px로 완화했다. Pretendard Variable(45~920)이 실제 로드돼
+            600은 합성 굵기가 아니다. */}
         <span
-          className="block"
+          className="block overflow-hidden text-ellipsis whitespace-nowrap"
           style={{
             ...f,
-            fontWeight: strip || compact ? 800 : 500,
+            fontWeight: 600,
             fontSize: compact ? 14.5 : 16,
-            color: soon ? "#6b7280" : "#0a0a0a",
-            letterSpacing: "-0.2px",
+            color: soon ? "#6b7280" : color.text.primary,
+            letterSpacing: "-0.1px",
             lineHeight: strip || compact ? "1.4" : "24px",
           }}
         >
