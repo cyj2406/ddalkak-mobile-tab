@@ -484,7 +484,7 @@ function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
     {
       id: "시스템" as const,
       label: "시스템",
-      desc: "운영체제 설정을\n자동으로 따릅니다.",
+      desc: "운영체제 설정을 자동으로 따릅니다.",
       icon: <Monitor size={18} strokeWidth={1.7} />,
     },
     {
@@ -641,15 +641,26 @@ function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
                   {themeCards.map((tc) => (
                     <button
                       key={tc.id}
+                      type="button"
                       onClick={() => setTheme(tc.id)}
-                      className="h-full flex flex-col rounded-[16px] overflow-hidden border-2 transition-all duration-150"
+                      aria-pressed={theme === tc.id}
+                      // 위: 아이콘 + 이름 + 한 줄 설명 / 아래: 미리보기 — 선택지마다 무엇이 다른지 글로도 알 수 있게(2026-10-02).
+                      className="h-full flex flex-col gap-3 rounded-[16px] border-2 p-3 text-left transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff]"
                       style={{
                         borderColor: theme === tc.id ? "#0a0a0a" : "#e2e8f0",
                         background: theme === tc.id ? "#fafafa" : "white",
                       }}
                     >
+                      {/* 좁은 화면(3열이 좁음)에서는 아이콘을 위로 올려 설명이 카드 폭을 다 쓰게 한다. */}
+                      <div className="flex flex-col items-start gap-2 sm:flex-row sm:gap-2.5">
+                        <span className="shrink-0 size-8 rounded-[10px] flex items-center justify-center" style={{ background: "#f1f5f9", color: theme === tc.id ? "#0a0a0a" : "#64748b" }}>{tc.icon}</span>
+                        <span className="min-w-0">
+                          <span className="block" style={{ ...f, fontWeight: 600, fontSize: 13.5, color: "#0a0a0a", letterSpacing: "-0.2px" }}>{tc.label}</span>
+                          <span className="block mt-0.5" style={{ ...f, fontWeight: 400, fontSize: 12, color: "#64748b", letterSpacing: "-0.2px", lineHeight: 1.45, wordBreak: "keep-all" }}>{tc.desc}</span>
+                        </span>
+                      </div>
                       {/* preview */}
-                      <div className="w-full bg-[#f1f5f9] relative" style={{ paddingBottom: "80%" }}>
+                      <div className="mt-auto w-full rounded-[10px] border border-[#e2e8f0] relative overflow-hidden" style={{ paddingBottom: "68%", background: tc.id === "다크" ? "#f1f4f9" : "#f8fafc" }}>
                         <div className="absolute inset-0 p-2 flex flex-col gap-1.5">
                           <div className="flex items-center gap-1">
                             <div className="size-2 rounded-full bg-[#22c55e]" />
@@ -668,11 +679,6 @@ function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
                             </div>
                           </div>
                         </div>
-                      </div>
-                      {/* label */}
-                      <div className="px-2 py-2.5 flex items-center gap-1.5">
-                        <span style={{ color: theme === tc.id ? "#0a0a0a" : "#9ca3af" }}>{tc.icon}</span>
-                        <span style={{ ...f, fontWeight: 600, fontSize: 12, color: theme === tc.id ? "#0a0a0a" : "#6b7280", letterSpacing: "-0.2px" }}>{tc.label}</span>
                       </div>
                     </button>
                   ))}
