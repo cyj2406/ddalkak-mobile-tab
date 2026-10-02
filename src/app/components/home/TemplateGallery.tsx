@@ -27,20 +27,19 @@ const isBlank = (t: TaskTemplate) => t.taskId === "__blank__";
 
 const GAP = 16;
 const MIN_CARD = 200;
-const MAX_CARD = 240;
-const MAX_COLS = 5;
+const MAX_COLS = 6;
 /** 이 개수를 넘으면 검색창을 보여 주고, 한 번에 이만큼씩만 그린 뒤 "더 보기"로 늘린다. */
 const SEARCH_THRESHOLD = 8;
 const PAGE_SIZE = 20;
 
-/** 목록 너비 → 열 수와 카드 너비. 카드 너비는 200~240px을 목표로 하고, 240을 넘지 않게 제한해
- *  카드가 적어도 왼쪽부터 놓인다. 모바일(좁은 폭)은 2열, 그보다 좁으면 1열. */
+/** 목록 너비 → 열 수와 카드 너비. 카드가 최소 200px 이상이 되는 최대 열 수(최대 6열)를 고르고, 카드 너비는
+ *  가용 폭을 균등하게 나눠 목록이 모달 폭을 꽉 채운다(검색창도 같은 폭). 모바일은 2열, 그보다 좁으면 1열. */
 function layoutFor(width: number) {
-  if (width <= 0) return { cols: 2, colW: MAX_CARD };
+  if (width <= 0) return { cols: 2, colW: MIN_CARD };
   let cols = Math.min(MAX_COLS, Math.floor((width + GAP) / (MIN_CARD + GAP)));
   if (cols < 2) cols = width >= 296 ? 2 : 1; // 모바일: 카드 약 140px까지 허용해 2열 유지
-  const colW = Math.min(MAX_CARD, Math.floor((width - GAP * (cols - 1)) / cols));
-  return { cols, colW: cols === 1 ? Math.min(width, MAX_CARD * 1.5) : colW };
+  // 열 수를 정한 뒤 카드 너비는 가용 폭을 균등하게 나눠 채운다 — 오른쪽에 빈 공간이 남지 않는다(2026-10-02).
+  return { cols, colW: Math.floor((width - GAP * (cols - 1)) / cols) };
 }
 
 /** 목록에 쓰는 이미지 — 별도 대표 썸네일이 있으면 그것, 없으면 cover 원본을 그대로(자르지 않고). */
@@ -168,7 +167,7 @@ export function TemplateGrid({
   return (
     <div>
       {showSearch && (
-        <label className="mb-4 flex items-center gap-2 rounded-xl" style={{ height: 40, padding: "0 12px", border: `1px solid ${color.border.default}`, background: color.surface.default, maxWidth: 360 }}>
+        <label className="mb-4 flex items-center gap-2 rounded-xl" style={{ height: 40, padding: "0 12px", border: `1px solid ${color.border.default}`, background: color.surface.default }}>
           <Search size={15} color="#94a3b8" aria-hidden />
           <input
             value={query}

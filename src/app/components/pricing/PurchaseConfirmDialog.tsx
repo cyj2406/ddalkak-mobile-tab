@@ -387,6 +387,11 @@ export function PurchaseConfirmDialog({
             )}
 
 
+            {/* 카드 미등록 — 결제 버튼은 막지 않고(누르면 등록 흐름 → 결제), 버튼 바로 위에서 그 순서를 알린다. */}
+            {!hasPaymentMethod && (
+              <p className="px-6 mt-5 -mb-2" style={PG_NOTICE_STYLE}>카드 등록 후 결제가 진행됩니다.</p>
+            )}
+
             {/* "닫기"는 짧은 고정 폭, CTA가 나머지 공간을 다 쓰게 해서 문구가 줄바꿈되지 않게 한다.
                 두 버튼 모두 size="lg"라 높이가 같다. */}
             <div className="flex gap-2.5 px-6 pt-5 pb-6">
