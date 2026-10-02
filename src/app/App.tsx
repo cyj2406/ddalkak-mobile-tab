@@ -68,8 +68,8 @@ function IconClose() {
 function IconChevronLeft() {
   return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d="M12.5 15L7.5 10L12.5 5" stroke="#0A0A0A" strokeWidth="1.5" /></svg>;
 }
-function IconBell() {
-  return <svg width="20" height="20" fill="none" viewBox="0 0 20 20"><P d={svgPaths.p1c3efea0} stroke={color.text.secondary} strokeWidth="1.5" /><P d={svgPaths.p25877f40} stroke={color.text.secondary} strokeWidth="1.5" /></svg>;
+function IconBell({ size = 20 }: { size?: number } = {}) {
+  return <svg width={size} height={size} fill="none" viewBox="0 0 20 20"><P d={svgPaths.p1c3efea0} stroke={color.text.secondary} strokeWidth="1.5" /><P d={svgPaths.p25877f40} stroke={color.text.secondary} strokeWidth="1.5" /></svg>;
 }
 // 사이드바 메뉴 아이콘은 상태(비활성/호버/활성)에 따라 색이 바뀌므로 currentColor 를 쓴다.
 // 다른 곳에서 쓸 때는 감싸는 요소에 color 를 지정하면 된다.
@@ -353,6 +353,8 @@ type MemoryFilter = "전체" | "사실" | "요약";
 
 // 설정 콘텐츠의 공통 섹션 헤더(제목 → 설명 → 컨트롤 순서를 모든 탭에서 동일하게 유지).
 // 모듈 스코프에 두어야 리렌더 때 입력 포커스가 끊기지 않는다.
+const NOTIF_PREF_KEY = "ddalkkak.settings.taskDoneNotif";
+
 function SettingsSectionHead({ title, desc }: { title: string; desc?: string }) {
   return (
     <div>
@@ -388,7 +390,44 @@ function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
   // 같은 useIsDesktop 패턴).
   const isDesktop = useIsDesktop();
   const [theme, setTheme] = useState<"시스템" | "라이트" | "다크">("시스템");
-  const [notifEnabled, setNotifEnabled] = useState(false);
+  // 작업 완료 알림 — 사용자의 "켜기" 의사(notifPref, localStorage)와 브라우저 권한(notifPerm)을
+  // 따로 들고, 화면의 ON은 둘 다 참일 때만 보여 준다(권한이 없는데 ON으로 보이지 않게).
+  const notifSupported = typeof window !== "undefined" && "Notification" in window;
+  const readPerm = (): NotificationPermission | "unsupported" => (notifSupported ? Notification.permission : "unsupported");
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission | "unsupported">(readPerm);
+  const [notifPref, setNotifPref] = useState(() => {
+    try { return window.localStorage.getItem(NOTIF_PREF_KEY) === "1"; } catch { return false; }
+  });
+  const [notifRequesting, setNotifRequesting] = useState(false);
+  const notifEnabled = notifPref && notifPerm === "granted";
+  const saveNotifPref = (v: boolean) => {
+    setNotifPref(v);
+    try { window.localStorage.setItem(NOTIF_PREF_KEY, v ? "1" : "0"); } catch { /* 저장 불가 환경 — 이번 세션 상태만 유지 */ }
+  };
+  // 브라우저 설정에서 권한을 바꾸고 돌아와도 바로 반영되게 — permissions API 변경 이벤트 + 창 포커스 시 다시 읽기.
+  useEffect(() => {
+    if (!notifSupported) return;
+    const sync = () => setNotifPerm(Notification.permission);
+    window.addEventListener("focus", sync);
+    let status: PermissionStatus | null = null;
+    navigator.permissions?.query({ name: "notifications" as PermissionName }).then((st) => { status = st; st.onchange = sync; }).catch(() => {});
+    return () => { window.removeEventListener("focus", sync); if (status) status.onchange = null; };
+  }, [notifSupported]);
+  const toggleNotif = async () => {
+    if (notifRequesting) return;
+    if (notifEnabled) { saveNotifPref(false); return; }
+    if (!notifSupported) return;
+    if (Notification.permission === "granted") { setNotifPerm("granted"); saveNotifPref(true); return; }
+    if (Notification.permission === "denied") { setNotifPerm("denied"); return; } // 다시 물을 수 없다 — 아래 안내만 보인다.
+    setNotifRequesting(true);
+    try {
+      const result = await Notification.requestPermission();
+      setNotifPerm(result);
+      if (result === "granted") saveNotifPref(true);
+    } finally {
+      setNotifRequesting(false);
+    }
+  };
   const contentRef = React.useRef<HTMLDivElement>(null);
 
   // 메모리 탭 — 검색어 / 필터 / 사실 목록(개별·전체 삭제, 추가)
@@ -640,10 +679,11 @@ function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
                 </div>
               </section>
 
-              {/* 언어 — 테마와 분리된 별도 섹션 */}
-              <section className="flex flex-col gap-3.5">
+              {/* 언어 — 선택지 하나짜리 설정이라 "왼쪽 제목·설명 / 오른쪽 컨트롤" 가로 행으로 둔다
+                  (테마처럼 넓은 카드가 필요한 설정만 세로로 쌓는다). 좁은 화면에서는 세로로 접힌다. */}
+              <section className="flex flex-col gap-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
                 <SettingsSectionHead title="언어" desc="언어를 전환합니다." />
-                <div className="relative wide:max-w-[360px]">
+                <div className="relative w-full sm:w-[200px] shrink-0">
                   <select
                     className="w-full h-11 bg-white border border-[#e2e8f0] rounded-[14px] px-4 pr-10 appearance-none outline-none"
                     style={{ ...f, fontWeight: 500, fontSize: 14, color: "#0a0a0a" }}
@@ -680,10 +720,17 @@ function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
                     이미지·문서·랜딩페이지 등 생성 작업이 끝나면 알려드립니다.
                   </p>
                 </div>
-                {/* toggle */}
+                {/* toggle — 켤 때 권한이 아직 없으면 브라우저 권한 요청이 바로 이어진다(별도 버튼 없음).
+                    허용된 경우에만 ON으로 바뀐다. */}
                 <button
-                  onClick={() => setNotifEnabled((v) => !v)}
-                  className="shrink-0 relative w-11 h-6 rounded-full transition-colors duration-200 mt-1"
+                  type="button"
+                  role="switch"
+                  aria-checked={notifEnabled}
+                  aria-label="작업 완료 알림"
+                  aria-busy={notifRequesting}
+                  disabled={notifRequesting || notifPerm === "unsupported"}
+                  onClick={toggleNotif}
+                  className="shrink-0 relative w-11 h-6 rounded-full transition-colors duration-200 mt-1 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff] disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ background: notifEnabled ? "#0a0a0a" : "#d1d5db" }}
                 >
                   <div
@@ -692,14 +739,17 @@ function SettingsModal({ initialTab, onClose, onOpenTopUp, onOpenPlanChange }: {
                   />
                 </button>
               </div>
-              {/* 권한 요청 — 데스크톱에서는 내용 폭을 전부 차지하지 않는다 */}
-              <button
-                className="w-full wide:w-auto wide:self-start wide:px-6 h-12 rounded-[14px] flex items-center justify-center gap-2"
-                style={{ background: "#0a0a0a" }}
-              >
-                <Bell size={16} strokeWidth={1.8} color="white" />
-                <span style={{ ...f, fontWeight: 600, fontSize: 14, color: "white", letterSpacing: "-0.3px" }}>알림 권한 요청</span>
-              </button>
+              {/* 권한 상태 안내 — 차단됐거나 지원하지 않을 때만, 토글 카드 바로 아래 한 줄로. */}
+              {notifPerm === "denied" && (
+                <p role="status" style={{ ...f, fontWeight: 400, fontSize: 13, color: "#4b5262", letterSpacing: "-0.2px", lineHeight: 1.6 }}>
+                  브라우저에서 알림이 차단돼 있어요. 주소창 왼쪽의 사이트 정보 아이콘을 눌러 알림을 ‘허용’으로 바꾼 뒤 다시 켜 주세요.
+                </p>
+              )}
+              {notifPerm === "unsupported" && (
+                <p role="status" style={{ ...f, fontWeight: 400, fontSize: 13, color: "#4b5262", letterSpacing: "-0.2px", lineHeight: 1.6 }}>
+                  이 브라우저는 알림을 지원하지 않아요.
+                </p>
+              )}
             </div>
           )}
 
@@ -1162,10 +1212,13 @@ function ProfileMenuButton({ onCreditClick, onHistoryClick, onStartTutorial, onS
         aria-expanded={open}
         aria-label="최유정 계정 메뉴"
         title="최유정"
-        className="rounded-full overflow-hidden shrink-0 border border-[#c7d2fe] outline-none transition-shadow duration-150 hover:ring-2 hover:ring-offset-1 hover:ring-[#c7d2fe] focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#4f7bff]"
-        style={{ width: 32, height: 32, background: "#e0e7ff" }}
+        // 터치 영역 44×44(투명), 보이는 아바타는 32px — 크기를 키우지 않고 누르기 쉬운 영역만 넓힌다.
+        className="group size-11 flex items-center justify-center rounded-full shrink-0 outline-none"
+        style={{ background: "transparent" }}
       >
-        <img alt="최유정" className="size-full object-cover" src={imgUserAvatar} />
+        <span className="block rounded-full overflow-hidden border border-[#c7d2fe] transition-shadow duration-150 group-hover:ring-2 group-hover:ring-offset-1 group-hover:ring-[#c7d2fe] group-focus-visible:ring-2 group-focus-visible:ring-offset-1 group-focus-visible:ring-[#4f7bff]" style={{ width: 32, height: 32, background: "#e0e7ff" }}>
+          <img alt="" className="size-full object-cover" src={imgUserAvatar} />
+        </span>
       </button>
       {open && (
         <div
@@ -1279,19 +1332,23 @@ function TopBar({ onMenuOpen, onBack, showBack, onCreditClick, onHistoryClick, o
   onSettingsOpen?: () => void;
 }) {
   return (
-    <header className="h-14 flex items-center justify-between px-4 shrink-0 bg-[#f8fafc]">
+    // 상단바 규격(2026-10-02) — 높이 56px(기존 레이아웃이 calc(100vh - 56px) 등으로 의존해 유지,
+    // Material 모바일 top app bar와 같은 값). 아이콘 버튼은 모두 44×44 터치 영역(Apple HIG 44pt,
+    // WCAG 2.5.5)에 아이콘 20~22px, 프로필은 보이는 원 32px + 투명 44px 터치 영역. 버튼 사이 8px →
+    // 보이는 아이콘끼리는 약 25px 떨어지고, 화면 끝 ↔ 보이는 아이콘 가장자리는 모바일 20px·데스크톱 24px.
+    <header className="h-14 flex items-center justify-between pl-2 sm:pl-3 pr-[14px] sm:pr-[18px] shrink-0 bg-[#f8fafc]">
       <div className="flex items-center gap-2">
         {showBack && onBack ? (
-          <IconButton onClick={onBack} aria-label="뒤로 가기" className="flex items-center justify-center size-9"><IconChevronLeft /></IconButton>
+          <IconButton onClick={onBack} aria-label="뒤로 가기" shape="circle" className="flex items-center justify-center size-11"><IconChevronLeft /></IconButton>
         ) : brand ? (
-          <IconButton onClick={onMenuOpen} className="flex items-center justify-center size-9 opacity-80"><IconMenu /></IconButton>
+          <IconButton onClick={onMenuOpen} aria-label="메뉴 열기" shape="circle" className="flex items-center justify-center size-11 opacity-80"><IconMenu /></IconButton>
         ) : null}
         {brand && <img alt="딸깍.net" className="h-[22px] w-auto object-contain" src={imgImageNet} />}
       </div>
       <div className="flex items-center gap-2">
-        <IconButton ref={bellRef} onClick={onBellClick} shape="circle" aria-label="알림" className="relative size-9 flex items-center justify-center">
-          <IconBell />
-          <div className="absolute top-[6px] left-[22px] bg-[#2b7fff] rounded-full size-2" />
+        <IconButton ref={bellRef} onClick={onBellClick} shape="circle" aria-label="알림" className="relative size-11 flex items-center justify-center">
+          <IconBell size={22} />
+          <div aria-hidden className="absolute top-[9px] left-[25px] bg-[#2b7fff] rounded-full size-2 ring-2 ring-[#f8fafc]" />
         </IconButton>
         <ProfileMenuButton onCreditClick={onCreditClick} onHistoryClick={onHistoryClick} onStartTutorial={onStartTutorial} onSettingsOpen={onSettingsOpen} />
       </div>

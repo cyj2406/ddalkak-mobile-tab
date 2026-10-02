@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 
 import { ScrollableChips } from "@/app/components/common/ScrollableChips";
 import { color, f, radius, shadow, typography } from "@/app/styleTokens";
@@ -11,7 +12,8 @@ import { color, f, radius, shadow, typography } from "@/app/styleTokens";
  *
  * 실제 지원하는 구분만 필터로 둔다 — 이 데이터가 구분하는 건 "사용"(작업 처리로 차감)과
  * "지급·충전"(충전/환불처럼 잔액이 느는 것)뿐이라, 없는 "복원·회수" 같은 유형을
- * 지어내지 않는다. 기간 필터도 실제 내역에 있는 연·월만 선택지로 만든다(가짜 범위 없음).
+ * 지어내지 않는다. 기간 필터는 이번 달부터 가장 오래된 내역이 있는 달까지를 월 단위로 늘
+ * 보여 준다(내역이 없는 달을 고르면 "조건에 맞는 내역이 없습니다"가 뜬다 — 범위를 지어내지 않는다).
  */
 
 const USAGE_TYPES = ["이미지", "랜딩페이지", "동영상", "프레젠테이션", "오디오", "문서", "서식"] as const;
@@ -63,7 +65,18 @@ export function CreditHistorySection() {
   const [typeFilter, setTypeFilter] = useState(0);
   const [periodFilter, setPeriodFilter] = useState("all");
 
-  const periods = useMemo(() => Array.from(new Set(CREDIT_HISTORY_DATA.map((it) => monthKeyOf(it.date)))), []);
+  // 이번 달 → 가장 오래된 내역 달까지, 최신순. 내역이 미래 달에 있어도 그 달부터 시작한다.
+  const periods = useMemo(() => {
+    const keys = CREDIT_HISTORY_DATA.map((it) => monthKeyOf(it.date)).sort();
+    const now = new Date();
+    const nowKey = `${now.getFullYear()}. ${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const toNum = (k: string) => { const [y, m] = k.split(". ").map(Number); return y * 12 + (m - 1); };
+    const newest = Math.max(toNum(nowKey), keys.length ? toNum(keys[keys.length - 1]) : toNum(nowKey));
+    const oldest = keys.length ? toNum(keys[0]) : newest;
+    const out: string[] = [];
+    for (let n = newest; n >= oldest; n--) out.push(`${Math.floor(n / 12)}. ${String((n % 12) + 1).padStart(2, "0")}`);
+    return out;
+  }, []);
 
   const filtered = CREDIT_HISTORY_DATA.filter((it) => {
     const label = CREDIT_FILTERS[typeFilter];
@@ -81,20 +94,28 @@ export function CreditHistorySection() {
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <ScrollableChips items={CREDIT_FILTERS} activeIndex={typeFilter} onChange={setTypeFilter} variant="outline" edgeClassName="" className="min-w-0" />
-        {periods.length > 1 && (
+        {/* 기간 — 왼쪽 유형 칩(outline)과 같은 높이·테두리·글자 규격의 pill 선택창. */}
+        <div className="relative shrink-0">
           <select
             aria-label="기간 필터"
             value={periodFilter}
             onChange={(e) => setPeriodFilter(e.target.value)}
-            className="shrink-0 rounded-full outline-none cursor-pointer"
-            style={{ ...f, fontWeight: 600, fontSize: 12.5, color: color.text.secondary, border: `1px solid ${color.border.default}`, padding: "6px 12px", background: "white" }}
+            className="h-9 rounded-full appearance-none cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-[#4f7bff]"
+            style={{
+              ...f, fontWeight: 600, fontSize: 12.5, letterSpacing: "-0.2px",
+              color: periodFilter === "all" ? "#4B5262" : "#3B5BFE",
+              border: `1.5px solid ${periodFilter === "all" ? "#E3E6EB" : "#3B5BFE"}`,
+              background: periodFilter === "all" ? "white" : "#ECEFFE",
+              padding: "0 34px 0 14px",
+            }}
           >
             <option value="all">전체 기간</option>
             {periods.map((p) => (
               <option key={p} value={p}>{monthLabelOf(p)}</option>
             ))}
           </select>
-        )}
+          <ChevronDown size={14} strokeWidth={2} aria-hidden className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" color={periodFilter === "all" ? "#64748b" : "#3B5BFE"} />
+        </div>
       </div>
 
       <div

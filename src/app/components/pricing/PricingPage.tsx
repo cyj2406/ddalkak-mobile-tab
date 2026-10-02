@@ -42,15 +42,6 @@ export function PricingPage({
   const [confirmIntent, setConfirmIntent] = useState<PurchaseIntent | null>(null);
   const policyAccordionRef = useRef<HTMLDivElement>(null);
 
-  /** 구독 확인창의 "구독·해지·환불 정책 보기" — 새 페이지/모달을 만들지 않고, 이미
-   *  이 페이지에 있는 "결제 전에 확인해 주세요" 정책 아코디언으로 스크롤한다. 확인창을
-   *  먼저 닫고(겹쳐서 뜬 채로 배경이 스크롤되면 어색하다) 다음 프레임에 스크롤한다. */
-  const handleViewPolicy = () => {
-    setConfirmIntent(null);
-    requestAnimationFrame(() => {
-      policyAccordionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  };
 
   const subscription = useSubscription();
   const currentPlanId = subscription.status === "active" || subscription.status === "cancel_scheduled" ? subscription.planId : null;
@@ -105,8 +96,10 @@ export function PricingPage({
     return { success: true };
   };
 
-  const handleConfirmTopup = async (pkg: CreditPackage): Promise<PurchaseConfirmResult> => {
-    const chargeResult = await chargeTopupWithTossPayments(pkg);
+  /** 크레딧 충전 — 확인창에서 고른 카드(selectedPaymentMethodId)는 이번 결제에만 쓴다. 구독과 달리
+   *  계정의 기본 결제수단으로 커밋하지 않는다(구독 자동결제 카드가 바뀌면 안 된다). */
+  const handleConfirmTopup = async (pkg: CreditPackage, selectedPaymentMethodId?: string): Promise<PurchaseConfirmResult> => {
+    const chargeResult = await chargeTopupWithTossPayments(pkg, selectedPaymentMethodId);
     if (chargeResult.status === "cancelled") return { success: false };
     if (chargeResult.status === "failure") return { success: false, message: "결제에 실패했습니다. 다시 시도해주세요." };
 
@@ -119,7 +112,7 @@ export function PricingPage({
   const handleConfirm = (selectedPaymentMethodId?: string): Promise<PurchaseConfirmResult> => {
     if (!confirmIntent) return Promise.resolve({ success: false });
     if (confirmIntent.kind === "subscription" && confirmIntent.planId) return handleConfirmSubscription(confirmIntent.planId, !!confirmIntent.isPlanChange, selectedPaymentMethodId);
-    if (confirmIntent.kind === "topup" && confirmIntent.package) return handleConfirmTopup(confirmIntent.package);
+    if (confirmIntent.kind === "topup" && confirmIntent.package) return handleConfirmTopup(confirmIntent.package, selectedPaymentMethodId);
     return Promise.resolve({ success: false });
   };
 
@@ -158,7 +151,6 @@ export function PricingPage({
           currentPaymentMethod={subscription.paymentMethod}
           onClose={() => setConfirmIntent(null)}
           onConfirm={handleConfirm}
-          onViewPolicy={confirmIntent.kind === "subscription" ? handleViewPolicy : undefined}
         />
       )}
     </>

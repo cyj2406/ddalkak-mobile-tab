@@ -8,6 +8,8 @@ import { showToast } from "@/app/components/common/Toast";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/app/components/ui/accordion";
 import { color, controlHeight, f, radius, shadow, typography } from "@/app/styleTokens";
 import {
+  cardIssuerName,
+  cardLastDigits,
   addPaymentMethod, expireSubscriptionForDev, fetchPaymentHistory, fetchPaymentMethod, findPlan,
   getDevForcedOutcomes, registerCardWithTossPayments, resetSubscriptionForDev, setDevForcedOutcome,
   simulatePaymentFailureForDev, undoCancel, useSubscription,
@@ -261,14 +263,9 @@ export function SubscriptionBillingTab({ onChangePlan }: { onChangePlan: () => v
                   <>이용 종료일 <strong style={{ color: color.text.primary, fontWeight: 700 }}>{subscription.endDateLabel ?? "—"}</strong></>
                 )}
               </p>
+              {/* 이번 달 크레딧 — 게이지 바는 없애고(2026-10-02) 남은/제공 크레딧 숫자만 한 줄로 둔다. */}
               {subscription.monthlyCreditsGranted !== null && (
                 <div className="flex flex-col gap-1.5">
-                  <div className="h-2 rounded-full overflow-hidden" style={{ background: "#f1f5f9" }}>
-                    <div className="h-full rounded-full" style={{
-                      width: `${Math.min(100, Math.max(0, ((subscription.monthlyCreditsRemaining ?? 0) / subscription.monthlyCreditsGranted) * 100))}%`,
-                      background: color.brand,
-                    }} />
-                  </div>
                   <span style={{ ...f, fontWeight: 500, fontSize: 11.5, color: color.text.secondary }}>
                     이번 달 크레딧 {(subscription.monthlyCreditsRemaining ?? 0).toLocaleString()} / {subscription.monthlyCreditsGranted.toLocaleString()}
                   </span>
@@ -325,7 +322,7 @@ export function SubscriptionBillingTab({ onChangePlan }: { onChangePlan: () => v
                 </span>
                 <div className="min-w-0">
                   <p style={{ ...f, fontWeight: 700, fontSize: 14.5, color: color.text.primary }}>
-                    {cardMethod.brand} <span style={{ fontWeight: 500, color: color.text.secondary }}>•••• {cardMethod.last4}</span>
+                    {cardIssuerName(cardMethod.brand)} <span style={{ fontWeight: 500, color: color.text.secondary }}>•••• {cardLastDigits(cardMethod.last4)}</span>
                   </p>
                   <p style={{ ...f, fontWeight: 500, fontSize: 12, color: color.text.muted, marginTop: 3 }}>
                     다음 정기결제에 사용할 결제 수단입니다.

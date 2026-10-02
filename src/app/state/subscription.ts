@@ -39,6 +39,25 @@ export interface PaymentMethod {
   status: "active";
 }
 
+/** 토스페이먼츠가 돌려주는 카드사 코드(두 자리, docs.tosspayments.com/codes/org-codes) → 표시 이름.
+ *  brand에 코드가 오면 이름으로 바꾸고, 이미 이름이면("신한카드" 등) 그대로 쓴다. */
+const CARD_ISSUER_NAMES: Record<string, string> = {
+  "3K": "기업비씨카드", "46": "광주카드", "71": "롯데카드", "30": "산업카드", "31": "BC카드", "51": "삼성카드",
+  "38": "새마을카드", "41": "신한카드", "62": "신협카드", "36": "씨티카드", "33": "우리카드", W1: "우리카드",
+  "37": "우체국카드", "39": "저축은행카드", "35": "전북카드", "42": "제주카드", "15": "카카오뱅크카드",
+  "3A": "케이뱅크카드", "24": "토스뱅크카드", "21": "하나카드", "61": "현대카드", "11": "KB국민카드",
+  "91": "NH농협카드", "34": "수협카드",
+};
+export function cardIssuerName(brand: string): string {
+  return CARD_ISSUER_NAMES[brand.trim().toUpperCase()] ?? brand;
+}
+/** 카드 번호 끝자리 — 토스의 마스킹 번호("46700850****327*")가 오면 끝 4자리만 남긴다
+ *  (토스는 마지막 한 자리도 *로 가려 보내므로 그대로 "327*"처럼 보인다). 이미 4자리면 그대로. */
+export function cardLastDigits(last4: string): string {
+  const v = last4.replace(/\s/g, "");
+  return v.length > 4 ? v.slice(-4) : v;
+}
+
 /** Toss Payments 카드 등록/인증 결과로 받는 표시용 정보 — paymentMethodId·isDefault는
  *  Toss가 아니라 이 앱이 목록에 추가하면서 부여한다(addPaymentMethod 참고). */
 export interface RegisteredCardInfo {
@@ -194,10 +213,11 @@ export function chargeFirstPaymentWithTossPayments(_plan: PlanExample): Promise<
 }
 
 /**
- * [Toss Payments 연결 지점] 크레딧 추가 충전 결제 — 구독 빌링키와 무관한 일회성 결제
- * 창이다(구독용으로 등록된 카드를 임의로 재사용한다고 가정하지 않는다).
+ * [Toss Payments 연결 지점] 크레딧 추가 충전 결제 — 일회성 결제다. 확인창에서 사용자가 등록된
+ * 카드를 고른 경우(paymentMethodId)에만 그 카드로 결제하고, 없으면 Toss 결제창에서 카드를 입력받는다.
+ * 어느 경우에도 구독의 기본 결제수단은 바꾸지 않는다.
  */
-export function chargeTopupWithTossPayments(_pkg: CreditPackage): Promise<TossChargeResult> {
+export function chargeTopupWithTossPayments(_pkg: CreditPackage, _paymentMethodId?: string): Promise<TossChargeResult> {
   return new Promise((resolve) => {
     window.setTimeout(() => resolve({ status: devForced.topupPayment }), 700);
   });
@@ -436,6 +456,23 @@ export function switchDefaultPaymentMethod(_paymentMethodId: string): Promise<{ 
 /** switchDefaultPaymentMethod가 성공을 확인해준 뒤에만 부른다 — 로컬 상태에 실제로 반영한다. */
 export function commitDefaultPaymentMethod(paymentMethodId: string): void {
   const nextList = state.paymentMethods.map((m) => ({ ...m, isDefault: m.paymentMethodId === paymentMethodId }));
+  set({ paymentMethods: nextList, paymentMethod: nextList.find((m) => m.isDefault) ?? null });
+}
+
+/**
+ * [서버 연결 지점] 등록된 결제수단 삭제 — 실제로는 서버가 빌링키를 폐기한다. 성공 응답 뒤에만
+ * removePaymentMethod로 로컬 목록에서 지운다. 다음 정기결제에 쓰이는 기본 결제수단은 호출부가
+ * 먼저 막는다(구독 중에는 다른 카드로 변경한 뒤에만 삭제).
+ */
+export function deletePaymentMethodWithServer(_paymentMethodId: string): Promise<{ success: boolean }> {
+  return new Promise((resolve) => {
+    window.setTimeout(() => resolve({ success: true }), 500);
+  });
+}
+
+/** deletePaymentMethodWithServer 성공 뒤에만 부른다. 기본 결제수단을 지우면(구독이 없을 때만 가능) 기본이 비게 된다. */
+export function removePaymentMethod(paymentMethodId: string): void {
+  const nextList = state.paymentMethods.filter((m) => m.paymentMethodId !== paymentMethodId);
   set({ paymentMethods: nextList, paymentMethod: nextList.find((m) => m.isDefault) ?? null });
 }
 

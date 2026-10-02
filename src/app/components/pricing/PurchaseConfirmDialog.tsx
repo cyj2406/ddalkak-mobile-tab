@@ -3,8 +3,8 @@ import { CreditCard, Plus } from "lucide-react";
 
 import { Button } from "@/app/components/common/Button";
 import { Modal } from "@/app/components/common/Modal";
-import { color, f, radius } from "@/app/styleTokens";
-import { addPaymentMethod, fetchPaymentMethods, registerCardWithTossPayments, type PaymentMethod } from "@/app/state/subscription";
+import { color, f, radius, typography } from "@/app/styleTokens";
+import { addPaymentMethod, cardIssuerName, cardLastDigits, fetchPaymentMethods, registerCardWithTossPayments, type PaymentMethod } from "@/app/state/subscription";
 
 import { PaymentMethodRow } from "./PaymentMethodSwitchModal";
 import type { PurchaseIntent } from "./pricingData";
@@ -17,13 +17,21 @@ export interface PurchaseConfirmResult {
 
 /** 그룹(①변경할 요금제/②결제 수단/③결제 및 동의) 제목 — 모달 제목보다 작고, 그 안의
  *  label(캡션)보다는 진하게 — 정보 위계에서 "Section title" 한 단만 차지한다. */
-const SECTION_TITLE_STYLE = { ...f, fontWeight: 700, fontSize: 13, color: color.text.primary, letterSpacing: "-0.2px" } as const;
+const SECTION_TITLE_STYLE = { ...f, fontWeight: 600, fontSize: 13, color: color.text.primary, letterSpacing: "-0.2px" } as const;
 /** label(상품/구독 크레딧/변경 후 결제 금액/다음 결제 예정일 등 왼쪽 이름표) — 항상 secondary. */
-const LABEL_STYLE = { ...f, fontWeight: 500, fontSize: 12.5, color: color.text.secondary, letterSpacing: "-0.2px" } as const;
+const LABEL_STYLE = { ...f, fontWeight: 400, fontSize: 12.5, color: color.text.secondary, letterSpacing: "-0.2px" } as const;
+/** 일반 값(상품·크레딧·월 정기금액·다음 결제일·카드) — 제목과 "결제 금액"만 굵게 두고 나머지 값은 500으로 낮춘다. */
+const VALUE_STYLE = { ...f, fontWeight: 500, fontSize: 14, color: color.text.primary, letterSpacing: "-0.2px" } as const;
+/** 항목명 | 값 한 줄 — 좌우 끝 정렬(justify-between) 대신 이름표 칸 폭을 고정해 값이 이름표 바로 옆에 오게 한다. */
+/** 오늘 결제 금액 아래 "앞으로 매달" 정보 — 한 단계 작게. */
+const SMALL_LABEL_STYLE = { ...f, fontWeight: 400, fontSize: 12, color: color.text.secondary, letterSpacing: "-0.2px" } as const;
+const SMALL_VALUE_STYLE = { ...f, fontWeight: 500, fontSize: 12.5, color: color.text.primary, letterSpacing: "-0.2px" } as const;
+const ROW_CLASS = "grid items-center gap-x-4";
+const ROW_STYLE = { gridTemplateColumns: "112px minmax(0, 1fr)" } as const;
 /** PG 고지 문구 — 예전엔 아이콘+옅은 배경의 독립 박스였다. 삭제하는 대신 "결제 수단"
  *  아래(구독) 또는 결제 및 동의 안(충전)에 배경·테두리·아이콘 없는 작은 보조 문구로만
  *  남긴다 — 내용은 그대로, 무게만 낮췄다. */
-const PG_NOTICE_STYLE = { ...f, fontWeight: 500, fontSize: 11.5, color: color.text.muted, lineHeight: 1.5 } as const;
+const PG_NOTICE_STYLE = { ...f, fontWeight: 400, fontSize: 12, color: typography.body.color, lineHeight: 1.55 } as const;
 
 /** "₩9,900" → "9,900원" — 정기결제 동의 문구에 실제 월 결제 금액을 그대로 넣는다. */
 function wonFormat(priceLabel: string): string {
@@ -60,17 +68,12 @@ export function PurchaseConfirmDialog({
   currentPaymentMethod,
   onClose,
   onConfirm,
-  onViewPolicy,
 }: {
   intent: PurchaseIntent;
   /** 구독일 때만 의미 있음 — 현재 기본 결제수단(없으면 null). */
   currentPaymentMethod?: PaymentMethod | null;
   onClose: () => void;
   onConfirm: (selectedPaymentMethodId?: string) => Promise<PurchaseConfirmResult>;
-  /** "구독·해지·환불 정책 보기" 링크 — 누르면 이 모달을 닫고 PricingPage에 이미 있는
-   *  "결제 전에 확인해 주세요" 정책 아코디언으로 스크롤한다(정책 문구를 여기서 새로
-   *  만들지 않고 기존 걸 그대로 가리킨다). 구독일 때만 의미가 있어 그때만 렌더링한다. */
-  onViewPolicy?: () => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,7 +96,9 @@ export function PurchaseConfirmDialog({
   // "결제하고 구독 시작/변경"을 눌러야만 의미가 생긴다. 화면을 오가는 동안(view 전환)
   // 에도 이 state와 agreed/intent는 그대로 유지된다(컴포넌트가 언마운트되지 않는다).
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(currentPaymentMethod ?? null);
-  const hasPaymentMethod = isSubscription && !!selectedMethod;
+  // 구독·충전 모두 결제 수단을 보여 준다(2026-10-02). 충전에서 고른 카드는 이번 결제에만 쓰이고
+  // 계정의 기본 결제수단(구독 자동결제 카드)은 바꾸지 않는다.
+  const hasPaymentMethod = !!selectedMethod;
 
   // 결제 수단 선택 화면 전용 state — 목록 조회 상태, 라디오로 "찜해 둔" 후보(아직 확정 아님),
   // 새 카드 등록 진행 상태.
@@ -163,7 +168,7 @@ export function PurchaseConfirmDialog({
     if (!canConfirm) return;
     setLoading(true);
     setError(null);
-    onConfirm(isSubscription ? (selectedMethod?.paymentMethodId ?? undefined) : undefined).then((result) => {
+    onConfirm(selectedMethod?.paymentMethodId ?? undefined).then((result) => {
       setLoading(false);
       if (!result.success && result.message) setError(result.message);
       // success:false, message 없음 = 사용자 취소 → 조용히 그대로 둔다(오류 표시 없음).
@@ -178,7 +183,7 @@ export function PurchaseConfirmDialog({
             <div className="px-6 pt-6 pb-1">
               <p style={{ ...f, fontWeight: 700, fontSize: 18, color: color.text.primary, letterSpacing: "-0.5px" }}>결제 수단 선택</p>
               <p style={{ ...f, fontWeight: 500, fontSize: 12.5, color: color.text.secondary, marginTop: 6, lineHeight: 1.5 }}>
-                이번 결제와 앞으로의 자동결제에 사용할 카드를 선택해 주세요.
+                {isSubscription ? "이번 결제와 앞으로의 자동결제에 사용할 카드를 선택해 주세요." : "이번 충전에 사용할 카드를 선택해 주세요. 구독 자동결제 카드는 바뀌지 않아요."}
               </p>
             </div>
 
@@ -249,60 +254,53 @@ export function PurchaseConfirmDialog({
         ) : (
           <>
             <div className="px-6 pt-6 pb-4">
-              <span style={{ ...f, fontWeight: 700, fontSize: 18, color: color.text.primary, letterSpacing: "-0.5px" }}>
+              <span style={{ ...f, fontWeight: 700, fontSize: 19, color: color.text.primary, letterSpacing: "-0.5px" }}>
                 {actionLabel} 확인
               </span>
             </div>
 
-            {/* ① 변경할 요금제 — 가격이 그룹 안에서 가장 강한 값이고, 플랜명이 그다음,
-                미확정 값("원가 검토 후 확정")은 오히려 muted로 낮춘다. label은 전부 secondary. */}
-            <div className="px-6 flex flex-col gap-3">
-              <p style={SECTION_TITLE_STYLE}>{isSubscription ? "변경할 요금제" : "충전할 크레딧"}</p>
-              <div className="flex items-center justify-between gap-3">
-                <span style={LABEL_STYLE}>상품</span>
-                <span style={{ ...f, fontWeight: 700, fontSize: 15, color: color.text.primary, letterSpacing: "-0.3px" }}>{intent.title}</span>
+            {/* ① 요금제 — 일반 정보(요금제·크레딧)는 중간 굵기, "오늘 결제 금액"만 별도 배경 영역에서 크게
+                강조하고, 앞으로 매달 나가는 돈(월 구독료·다음 결제일)은 그 아래 작게 둬 "지금 내는 돈"과
+                "앞으로 매달 내는 돈"을 분리한다. 모의 결제는 확인 즉시 승인되므로 "오늘 결제 금액"이 정확하다. */}
+            <div className="px-6 flex flex-col gap-2.5">
+              <p style={SECTION_TITLE_STYLE}>{isSubscription ? (isPlanChange ? "변경할 요금제" : "구독할 요금제") : "충전할 크레딧"}</p>
+              <div className={ROW_CLASS} style={ROW_STYLE}>
+                <span style={LABEL_STYLE}>{isSubscription ? "요금제" : "상품"}</span>
+                <span style={VALUE_STYLE}>{intent.title}</span>
               </div>
-              <div className="flex items-center justify-between gap-3">
-                <span style={LABEL_STYLE}>{isSubscription ? "구독 크레딧" : "추가 충전 크레딧"}</span>
-                <span
-                  style={{
-                    ...f,
-                    fontWeight: intent.credits === null ? 500 : 700,
-                    fontSize: 14,
-                    color: intent.credits === null ? color.text.muted : color.text.primary,
-                    letterSpacing: "-0.3px",
-                  }}
-                >
+              <div className={ROW_CLASS} style={ROW_STYLE}>
+                <span style={LABEL_STYLE}>{isSubscription ? "매월 제공 크레딧" : "추가 충전 크레딧"}</span>
+                <span style={{ ...VALUE_STYLE, color: intent.credits === null ? color.text.secondary : color.text.primary }}>
                   {intent.credits === null ? "원가 검토 후 확정" : `${intent.credits.toLocaleString()} 크레딧`}
                 </span>
               </div>
-              {/* 오늘 실제로 청구되는 금액만 보여준다 — "/매월" 표기를 붙여 월 정기금액과
-                  섞어 보여주지 않는다(둘이 항상 같은 값이더라도 "오늘 낼 돈"과 "매달 낼
-                  돈"은 다른 사실이라 따로 적는다). */}
-              <div className="flex items-center justify-between gap-3">
-                <span style={LABEL_STYLE}>{isSubscription ? (isPlanChange ? "변경 후 결제 금액" : "오늘 결제할 총금액") : "결제 금액"}</span>
-                <span style={{ ...f, fontWeight: 800, fontSize: 19, color: color.text.primary, letterSpacing: "-0.5px" }}>
-                  {intent.priceLabel}
-                </span>
+
+              <div className="mt-1.5 flex flex-col gap-2" style={{ background: color.surface.subtle, borderRadius: 12, padding: "14px 16px" }}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span style={{ ...LABEL_STYLE, color: color.text.primary, fontWeight: 500 }}>{isSubscription ? "오늘 결제 금액" : "결제 금액"}</span>
+                  <span style={{ ...f, fontWeight: 700, fontSize: 20, color: color.text.primary, letterSpacing: "-0.4px" }}>{intent.priceLabel}</span>
+                </div>
+                {isSubscription && (
+                  <>
+                    <div className="h-px" style={{ background: color.border.default }} />
+                    <div className="flex items-center justify-between gap-3">
+                      <span style={SMALL_LABEL_STYLE}>월 구독료</span>
+                      <span style={SMALL_VALUE_STYLE}>{intent.priceLabel} / 월</span>
+                    </div>
+                    {intent.nextBillingDateLabel && (
+                      <div className="flex items-center justify-between gap-3">
+                        <span style={SMALL_LABEL_STYLE}>다음 결제일</span>
+                        <span style={SMALL_VALUE_STYLE}>{intent.nextBillingDateLabel}</span>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
-              {isSubscription && (
-                <div className="flex items-center justify-between gap-3">
-                  <span style={LABEL_STYLE}>월 정기결제 금액</span>
-                  <span style={{ ...f, fontWeight: 700, fontSize: 14, color: color.text.primary, letterSpacing: "-0.3px" }}>{intent.priceLabel} / 월</span>
-                </div>
-              )}
-              {isSubscription && intent.nextBillingDateLabel && (
-                <div className="flex items-center justify-between gap-3">
-                  <span style={LABEL_STYLE}>다음 결제 예정일</span>
-                  <span style={{ ...f, fontWeight: 700, fontSize: 14, color: color.text.primary, letterSpacing: "-0.3px" }}>{intent.nextBillingDateLabel}</span>
-                </div>
-              )}
             </div>
 
-            {/* ② 결제 수단 — 구독일 때만. "변경"은 이 모달 안에서 결제 수단 선택
+            {/* ② 결제 수단 — 구독·충전 공통. "변경"은 이 모달 안에서 결제 수단 선택
                 화면으로 전환한다(설정 이동 없음). 없으면(첫 구독자) 그 사실만 알린다 —
                 실제 등록은 아래 CTA를 누른 뒤 이어지는 Toss 흐름에서 한다. */}
-            {isSubscription && (
               <div className="px-6 mt-6 flex flex-col gap-3">
                 <div className="h-px" style={{ background: "#f1f5f9" }} />
                 <div className="flex items-center justify-between gap-3">
@@ -313,7 +311,7 @@ export function PurchaseConfirmDialog({
                       type="button"
                       onClick={openSelectMethod}
                       className="outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff] rounded"
-                      style={{ ...f, fontWeight: 700, fontSize: 12.5, color: color.brand, cursor: "pointer" }}
+                      style={{ ...f, fontWeight: 600, fontSize: 12.5, color: color.brand, cursor: "pointer" }}
                     >
                       변경
                     </button>
@@ -323,32 +321,34 @@ export function PurchaseConfirmDialog({
                 {hasPaymentMethod && selectedMethod ? (
                   <div className="flex items-center gap-2">
                     <CreditCard size={16} strokeWidth={1.8} color={color.text.secondary} aria-hidden />
-                    <span style={{ ...f, fontWeight: 700, fontSize: 14, color: color.text.primary }}>
-                      {selectedMethod.brand} <span style={{ fontWeight: 500, color: color.text.secondary }}>•••• {selectedMethod.last4}</span>
+                    <span style={VALUE_STYLE}>
+                      {cardIssuerName(selectedMethod.brand)} <span style={{ fontWeight: 400, color: color.text.secondary }}>•••• {cardLastDigits(selectedMethod.last4)}</span>
                     </span>
                   </div>
                 ) : (
                   <span style={{ ...f, fontWeight: 500, fontSize: 12.5, color: color.text.secondary }}>등록된 결제 수단이 없습니다.</span>
                 )}
 
-                <p style={PG_NOTICE_STYLE}>카드 등록·결제 승인은 토스페이먼츠를 통해 처리됩니다. 결제 승인이 확인된 뒤에만 구독이 시작됩니다.</p>
+                <p style={PG_NOTICE_STYLE}>
+                  {isSubscription
+                    ? `카드 등록·결제 승인은 토스페이먼츠를 통해 처리됩니다. ${isPlanChange ? "결제가 완료되면 변경한 요금제가 적용됩니다." : "결제 승인이 확인된 뒤에만 구독이 시작됩니다."}`
+                    : `일회성 결제이며 구독과 별도로 청구됩니다. 결제 승인은 토스페이먼츠를 통해 처리됩니다.${hasPaymentMethod ? "" : " 결제 단계에서 카드 정보를 입력합니다."}`}
+                </p>
               </div>
-            )}
 
             {/* ③ 결제 및 동의 — Toss 안내 박스를 없앴다(구독이면 위 "결제 수단" 아래로
                 옮겼고, 충전이면 여기 작은 보조 문구로만 남는다). 정기결제 동의는 실제
                 청구 금액을 그대로 문구에 넣고, 바로 옆에 정책 링크를 둬 "확인 → 정책
                 확인 → 동의 → 결제"가 한 흐름으로 읽히게 한다. */}
+            {/* 충전은 동의 항목이 없어 이 구역 자체를 그리지 않는다(안내는 위 결제 수단 아래로 옮겼다). */}
+            {(isSubscription || error) && (
             <div className="px-6 mt-6 flex flex-col gap-3">
-              <div className="h-px" style={{ background: "#f1f5f9" }} />
-              <p style={SECTION_TITLE_STYLE}>결제 및 동의</p>
-
-              {!isSubscription && (
-                <p style={PG_NOTICE_STYLE}>일회성 결제이며 구독과 별도로 청구됩니다. 카드 등록·결제 승인은 토스페이먼츠를 통해 처리됩니다.</p>
-              )}
-
               {isSubscription && (
                 <>
+                  <div className="h-px" style={{ background: "#f1f5f9" }} />
+                  <p style={SECTION_TITLE_STYLE}>정기결제 동의</p>
+                  {/* 정책은 요금제 페이지 하단 "결제 전에 확인해 주세요"에 늘 안내돼 있어, 여기엔 따로
+                      "정책 보기" 링크를 두지 않는다(2026-10-02). */}
                   <label className="flex items-start gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -357,20 +357,10 @@ export function PurchaseConfirmDialog({
                       className="mt-0.5 shrink-0"
                       style={{ width: 16, height: 16, accentColor: color.brand }}
                     />
-                    <span style={{ ...f, fontWeight: 500, fontSize: 12.5, color: color.text.secondary, lineHeight: 1.5 }}>
+                    <span style={{ ...f, fontWeight: 400, fontSize: 13, color: color.text.primary, lineHeight: 1.5 }}>
                       매월 {wonFormat(intent.priceLabel)} 자동결제에 동의합니다.
                     </span>
                   </label>
-                  {onViewPolicy && (
-                    <button
-                      type="button"
-                      onClick={onViewPolicy}
-                      className="self-start outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff] rounded"
-                      style={{ ...f, fontWeight: 600, fontSize: 12, color: color.brand }}
-                    >
-                      구독·해지·환불 정책 보기
-                    </button>
-                  )}
                 </>
               )}
 
@@ -380,6 +370,7 @@ export function PurchaseConfirmDialog({
                 </div>
               )}
             </div>
+            )}
 
             {/* 첫 구독자(등록된 결제 수단 없음) 안내 — 버튼을 누르면 곧바로 카드 등록
                 흐름으로 넘어간다는 사실을 그 자리에서 미리 알린다. 카드 등록이 끝난
@@ -391,7 +382,7 @@ export function PurchaseConfirmDialog({
             {/* "닫기"는 짧은 고정 폭, CTA가 나머지 공간을 다 쓰게 해서 문구가 줄바꿈되지 않게 한다.
                 두 버튼 모두 size="lg"라 높이가 같다. */}
             <div className="flex gap-2.5 px-6 pt-5 pb-6">
-              <Button variant="secondary" size="lg" onClick={close} disabled={loading} className="shrink-0" style={{ whiteSpace: "nowrap" }}>닫기</Button>
+              <Button variant="secondary" size="lg" onClick={close} disabled={loading} className="shrink-0" style={{ whiteSpace: "nowrap" }}>취소</Button>
               <Button variant="primary" size="lg" loading={loading} disabled={!canConfirm} onClick={handleConfirm} className="flex-1" style={{ whiteSpace: "nowrap" }}>
                 {ctaLabel}
               </Button>
