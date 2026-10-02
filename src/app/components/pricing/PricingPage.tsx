@@ -5,7 +5,7 @@ import { showToast } from "@/app/components/common/Toast";
 import { Tabs, tabPanelProps, type TabItem } from "@/app/components/common/Tabs";
 import {
   addPaymentMethod, addTopup, chargeFirstPaymentWithTossPayments, chargeTopupWithTossPayments,
-  commitDefaultPaymentMethod, findPlan, previewNextBillingDateLabel, registerCardWithTossPayments,
+  commitDefaultPaymentMethod, findPlan, getSubscription, previewNextBillingDateLabel, registerCardWithTossPayments,
   subscribeToPlan, switchDefaultPaymentMethod, useSubscription,
 } from "@/app/state/subscription";
 
@@ -75,12 +75,14 @@ export function PricingPage({
     const plan = findPlan(planId);
     if (!plan) return { success: false, message: "요금제 정보를 찾을 수 없습니다." };
 
-    if (!subscription.paymentMethod) {
+    // 확인창이 방금 카드를 등록했을 수 있어 렌더 시점의 subscription 대신 최신 상태를 읽는다.
+    const current = getSubscription();
+    if (!current.paymentMethod && !selectedPaymentMethodId) {
       const cardResult = await registerCardWithTossPayments();
       if (cardResult.status === "cancelled") return { success: false };
       if (cardResult.status === "failure") return { success: false, message: "카드 등록에 실패했습니다. 다시 시도해주세요." };
       addPaymentMethod(cardResult.card, { makeDefault: true });
-    } else if (selectedPaymentMethodId && selectedPaymentMethodId !== subscription.paymentMethod.paymentMethodId) {
+    } else if (selectedPaymentMethodId && selectedPaymentMethodId !== current.paymentMethod?.paymentMethodId) {
       const switchResult = await switchDefaultPaymentMethod(selectedPaymentMethodId);
       if (!switchResult.success) return { success: false, message: "결제 수단을 변경하지 못했습니다. 다시 시도해주세요." };
       commitDefaultPaymentMethod(selectedPaymentMethodId);

@@ -139,40 +139,50 @@ export function PurchaseConfirmDialog({
     restoreFocusToChangeButton();
   };
 
-  const handleRegisterNewCard = () => {
-    if (registering) return;
+  /** Toss 카드 등록·인증 — 성공하면 새 카드를 이번 결제 카드로 고르고 돌려준다. 실패는 문구로 알리고,
+   *  취소(등록창 닫음)는 조용히 null. 등록만으로 계정의 기본 결제수단을 확정하지 않는다(makeDefault:false —
+   *  카드가 하나도 없던 경우엔 addPaymentMethod가 자동으로 기본으로 둔다). */
+  const registerCard = async (): Promise<PaymentMethod | null> => {
+    if (registering) return null;
     setRegistering(true);
     setRegisterError(null);
-    registerCardWithTossPayments().then((result) => {
-      setRegistering(false);
-      if (result.status === "success") {
-        // 등록만 됐을 뿐 계정의 기본 결제수단으로 확정하지 않는다(makeDefault:false) —
-        // "결제하고 구독 시작/변경"이 실제로 성공해야 이 구독의 결제수단으로 커밋된다.
-        const newMethod = addPaymentMethod(result.card, { makeDefault: false });
-        setMethods((prev) => [...prev, newMethod]);
-        // 등록 직후엔 방금 만든 카드를 바로 골라 확인 화면으로 돌아간다 — 등록 →
-        // 목록에서 다시 라디오를 고르는 한 단계를 더 거치게 하지 않는다.
-        setSelectedMethod(newMethod);
-        setView("confirm");
-        restoreFocusToChangeButton();
-      } else if (result.status === "failure") {
-        setRegisterError("카드를 등록하지 못했습니다. 다시 시도해주세요.");
-      }
-      // cancelled: 사용자가 등록창을 닫은 것 — 오류로 과장하지 않고 조용히 선택 화면에 머문다.
+    const result = await registerCardWithTossPayments();
+    setRegistering(false);
+    if (result.status === "success") {
+      const newMethod = addPaymentMethod(result.card, { makeDefault: false });
+      setMethods((prev) => [...prev, newMethod]);
+      setSelectedMethod(newMethod);
+      return newMethod;
+    }
+    if (result.status === "failure") setRegisterError("카드를 등록하지 못했습니다. 다시 시도해주세요.");
+    return null;
+  };
+
+  /** 선택 화면의 "다른 카드 등록" / 확인 화면의 "등록" — 등록되면 확인 화면으로 돌아와 그 카드를 보여 준다. */
+  const handleRegisterNewCard = () => {
+    registerCard().then((m) => {
+      if (!m) return;
+      setView("confirm");
+      restoreFocusToChangeButton();
     });
   };
 
-  const canConfirm = !loading && (!isSubscription || agreed);
+  const canConfirm = !loading && !registering && (!isSubscription || agreed);
 
-  const handleConfirm = () => {
+  /** 카드 없이 "결제하고 …"를 누르면 오류 대신 등록 흐름을 바로 열고, 등록되면 그 카드로 결제를 이어 간다. */
+  const handleConfirm = async () => {
     if (!canConfirm) return;
-    setLoading(true);
     setError(null);
-    onConfirm(selectedMethod?.paymentMethodId ?? undefined).then((result) => {
-      setLoading(false);
-      if (!result.success && result.message) setError(result.message);
-      // success:false, message 없음 = 사용자 취소 → 조용히 그대로 둔다(오류 표시 없음).
-    });
+    let method = selectedMethod;
+    if (!method) {
+      method = await registerCard();
+      if (!method) return; // 취소·실패 — 결제하지 않고 모달에 머문다(실패 문구는 결제 수단 아래).
+    }
+    setLoading(true);
+    const result = await onConfirm(method.paymentMethodId);
+    setLoading(false);
+    if (!result.success && result.message) setError(result.message);
+    // success:false, message 없음 = 사용자 취소 → 조용히 그대로 둔다(오류 표시 없음).
   };
 
   return (
@@ -263,7 +273,7 @@ export function PurchaseConfirmDialog({
                 강조하고, 앞으로 매달 나가는 돈(월 구독료·다음 결제일)은 그 아래 작게 둬 "지금 내는 돈"과
                 "앞으로 매달 내는 돈"을 분리한다. 모의 결제는 확인 즉시 승인되므로 "오늘 결제 금액"이 정확하다. */}
             <div className="px-6 flex flex-col gap-2.5">
-              <p style={SECTION_TITLE_STYLE}>{isSubscription ? (isPlanChange ? "변경할 요금제" : "구독할 요금제") : "충전할 크레딧"}</p>
+              {/* 그룹 제목("구독할 요금제" 등)은 모달 제목·"요금제" 항목명과 같은 말을 반복해 없앴다(2026-10-02). */}
               <div className={ROW_CLASS} style={ROW_STYLE}>
                 <span style={LABEL_STYLE}>{isSubscription ? "요금제" : "상품"}</span>
                 <span style={VALUE_STYLE}>{intent.title}</span>
@@ -298,41 +308,45 @@ export function PurchaseConfirmDialog({
               </div>
             </div>
 
-            {/* ② 결제 수단 — 구독·충전 공통. "변경"은 이 모달 안에서 결제 수단 선택
-                화면으로 전환한다(설정 이동 없음). 없으면(첫 구독자) 그 사실만 알린다 —
-                실제 등록은 아래 CTA를 누른 뒤 이어지는 Toss 흐름에서 한다. */}
+            {/* ② 결제 수단 — 구독·충전 공통. 같은 자리의 텍스트 버튼이 상태만 바뀐다: 카드가 있으면
+                "변경"(이 모달 안 선택 화면), 없으면 "등록"(Toss 카드 등록 흐름). */}
               <div className="px-6 mt-6 flex flex-col gap-3">
                 <div className="h-px" style={{ background: "#f1f5f9" }} />
-                <div className="flex items-center justify-between gap-3">
-                  <p style={SECTION_TITLE_STYLE}>결제 수단</p>
-                  {hasPaymentMethod && (
-                    <button
-                      ref={changeBtnRef}
-                      type="button"
-                      onClick={openSelectMethod}
-                      className="outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff] rounded"
-                      style={{ ...f, fontWeight: 600, fontSize: 12.5, color: color.brand, cursor: "pointer" }}
-                    >
-                      변경
-                    </button>
+                <p style={SECTION_TITLE_STYLE}>결제 수단</p>
+                {/* 값 줄 — 카드 정보(또는 "없음")와 그 카드에 대한 액션(변경/등록)을 한 묶음으로 둔다.
+                    상태가 바뀌어도 같은 자리·같은 크기의 작은 보조 버튼(높이 34px)이라 레이아웃이 흔들리지 않는다. */}
+                <div className="flex items-center justify-between gap-3" style={{ minHeight: 34 }}>
+                  {hasPaymentMethod && selectedMethod ? (
+                    <div className="flex items-center gap-2 min-w-0">
+                      <CreditCard size={16} strokeWidth={1.8} color={color.text.secondary} className="shrink-0" aria-hidden />
+                      <span className="truncate" style={VALUE_STYLE}>
+                        {cardIssuerName(selectedMethod.brand)} <span style={{ fontWeight: 400, color: color.text.secondary }}>•••• {cardLastDigits(selectedMethod.last4)}</span>
+                      </span>
+                    </div>
+                  ) : (
+                    <span style={{ ...f, fontWeight: 400, fontSize: 13, color: color.text.secondary }}>등록된 결제 수단이 없습니다.</span>
                   )}
+                  <Button
+                    ref={changeBtnRef}
+                    variant="secondary"
+                    size="md"
+                    onClick={hasPaymentMethod ? openSelectMethod : handleRegisterNewCard}
+                    disabled={registering || loading}
+                    aria-label={hasPaymentMethod ? "결제 수단 변경" : "결제 수단 등록"}
+                    className="shrink-0 whitespace-nowrap"
+                    style={{ height: 34, padding: "0 12px", fontSize: 12.5, borderRadius: 10 }}
+                  >
+                    {hasPaymentMethod ? "변경" : registering ? "등록 중…" : "등록"}
+                  </Button>
                 </div>
-
-                {hasPaymentMethod && selectedMethod ? (
-                  <div className="flex items-center gap-2">
-                    <CreditCard size={16} strokeWidth={1.8} color={color.text.secondary} aria-hidden />
-                    <span style={VALUE_STYLE}>
-                      {cardIssuerName(selectedMethod.brand)} <span style={{ fontWeight: 400, color: color.text.secondary }}>•••• {cardLastDigits(selectedMethod.last4)}</span>
-                    </span>
-                  </div>
-                ) : (
-                  <span style={{ ...f, fontWeight: 500, fontSize: 12.5, color: color.text.secondary }}>등록된 결제 수단이 없습니다.</span>
+                {view === "confirm" && registerError && (
+                  <p style={{ ...f, fontWeight: 600, fontSize: 12, color: "#ef4444" }}>{registerError}</p>
                 )}
 
                 <p style={PG_NOTICE_STYLE}>
                   {isSubscription
                     ? `카드 등록·결제 승인은 토스페이먼츠를 통해 처리됩니다. ${isPlanChange ? "결제가 완료되면 변경한 요금제가 적용됩니다." : "결제 승인이 확인된 뒤에만 구독이 시작됩니다."}`
-                    : `일회성 결제이며 구독과 별도로 청구됩니다. 결제 승인은 토스페이먼츠를 통해 처리됩니다.${hasPaymentMethod ? "" : " 결제 단계에서 카드 정보를 입력합니다."}`}
+                    : `일회성 결제이며 구독과 별도로 청구됩니다. 결제 승인은 토스페이먼츠를 통해 처리됩니다.`}
                 </p>
               </div>
 
@@ -372,12 +386,6 @@ export function PurchaseConfirmDialog({
             </div>
             )}
 
-            {/* 첫 구독자(등록된 결제 수단 없음) 안내 — 버튼을 누르면 곧바로 카드 등록
-                흐름으로 넘어간다는 사실을 그 자리에서 미리 알린다. 카드 등록이 끝난
-                뒤에 같은 내용을 한 번 더 확인시키는 단계는 따로 두지 않는다. */}
-            {isSubscription && !hasPaymentMethod && (
-              <p className="px-6 mt-3" style={PG_NOTICE_STYLE}>다음 단계에서 결제 수단을 등록합니다.</p>
-            )}
 
             {/* "닫기"는 짧은 고정 폭, CTA가 나머지 공간을 다 쓰게 해서 문구가 줄바꿈되지 않게 한다.
                 두 버튼 모두 size="lg"라 높이가 같다. */}
