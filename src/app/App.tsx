@@ -38,7 +38,8 @@ import HomeSearch from "@/app/components/home/HomeSearch";
 import { CategoryQuickLinks } from "@/app/components/home/CategoryQuickLinks";
 import { CategoryFeatureStrip } from "@/app/components/home/CategoryFeatureStrip";
 import SearchResultsScreen from "@/app/components/home/SearchResultsScreen";
-import RequestHelpScreen from "@/app/components/home/RequestHelpScreen";
+import RequestHelpScreen, { type RequestHandoff } from "@/app/components/home/RequestHelpScreen";
+import { RequestCardsPanel } from "@/app/components/workspace/RequestCardsPanel";
 import { getTaskById, TASK_GROUPS, type TaskTemplate } from "@/app/data/tasks";
 // [formfill 임시] ?formfill=1 확인용. 컴포넌트 단품 확인 화면이라 3단 레이아웃과 별개로 남겨둔다.
 import FormFillPlayground from "@/app/components/formfill/__dev__/FormFillPlayground";
@@ -4470,7 +4471,7 @@ const CATEGORY_FILE_TYPE: Record<WorkspaceCategory, ViewerFileType> = {
   docs: "docx", ppt: "pptx", video: "mp4", landing: "html", image: "png", detail: "html",
 };
 
-/** 요청 작성 도움받기(1단계 작업 선택)가 고른 wsCategory 를 이어 붙일 AI 작업 화면.
+/** 요청 작성 도움받기를 마치면 이 AI 작업 화면 위에 워크스페이스를 연다(뒤로 가면 이 화면).
  * "상세페이지"는 별도 화면이 없어 이미지 작업 화면(상세페이지 필터 탭 포함)으로 보낸다. */
 const REQUEST_HELP_SCREEN: Record<WorkspaceCategory, Screen> = {
   image: "image-ai", detail: "image-ai", docs: "docs-ai", ppt: "ppt-ai", video: "video-ai", landing: "landing-ai",
@@ -5016,8 +5017,10 @@ function HtmlPagePreview() {
 
 // ─── Workspace ────────────────────────────────────────────────────────────────
 
-function WorkspaceScreen({ category, templateName, fileType, onBack, onCreditClick, onBellClick }: {
+function WorkspaceScreen({ category, templateName, fileType, request, onBack, onCreditClick, onBellClick }: {
   category: WorkspaceCategory; templateName: string;
+  /** 요청 작성 도우미로 들어온 경우 — 상세 프롬프트 폼 대신 "확인이 필요해요" 카드를 띄운다 */
+  request?: RequestHandoff;
   /** 진입한 카테고리(필터 탭)가 정한 결과물 형식 — 확장자와 뷰어 상단바를 함께 결정한다 */
   fileType: ViewerFileType;
   onBack: () => void; onCreditClick: () => void; onBellClick: () => void;
@@ -5070,6 +5073,14 @@ function WorkspaceScreen({ category, templateName, fileType, onBack, onCreditCli
   ];
 
   const handleGenerate = () => setGenerated(true);
+
+  // 요청 작성 도우미로 들어오면 "확인이 필요해요" 카드가 첫 화면에서 바로 보이도록(하단 버튼까지)
+  // 채팅을 카드 쪽으로 내려 둔다.
+  useEffect(() => {
+    if (!request) return;
+    const t = setTimeout(() => chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight }), 50);
+    return () => clearTimeout(t);
+  }, [request]);
 
   // 결과물이 렌더된 뒤 스크롤을 맨 아래로 이동
   useEffect(() => {
@@ -5155,7 +5166,7 @@ function WorkspaceScreen({ category, templateName, fileType, onBack, onCreditCli
           {/* 사용자 말풍선 — 오른쪽 정렬 */}
           <div className="flex justify-end">
             <div className="rounded-[18px] rounded-tr-[6px] px-4 py-3" style={{ background: "#e5e9f0", maxWidth: "82%" }}>
-              <p style={{ ...f, fontSize: 14.5, color: "#0a0a0a", lineHeight: 1.6, fontWeight: 400 }}>이 템플릿으로 시작할게요. 어떤 내용을 채워야 하는지 알려주세요.</p>
+              <p style={{ ...f, fontSize: 14.5, color: "#0a0a0a", lineHeight: 1.6, fontWeight: 400 }}>{request ? `‘${request.topic}’ 주제로 이 템플릿을 채워 주세요.` : "이 템플릿으로 시작할게요. 어떤 내용을 채워야 하는지 알려주세요."}</p>
             </div>
           </div>
 
@@ -5198,7 +5209,9 @@ function WorkspaceScreen({ category, templateName, fileType, onBack, onCreditCli
           </div>
 
           {/* Form card — category-specific slot */}
-          <FormCardSlot category={category} onGenerate={handleGenerate} />
+          {request
+            ? <RequestCardsPanel handoff={request} onGenerate={handleGenerate} />
+            : <FormCardSlot category={category} onGenerate={handleGenerate} />}
 
           {/* 생성 결과물 — 생성하기 클릭 후 노출 */}
           {generated && <WsResult category={category} templateName={templateName} fileType={fileType} />}
@@ -5360,7 +5373,7 @@ export default function App() {
   // fileType — "템플릿 적용하기"로 들어온 카테고리(필터 탭)가 정한 결과물 형식.
   // 워드 → .docx / 한글 → .hwpx / 엑셀 → .xlsx / 논문 → .pdf / 영상 → .mp4
   const [workspace, setWorkspace] = useState<
-    { category: WorkspaceCategory; templateName: string; fileType: ViewerFileType } | null
+    { category: WorkspaceCategory; templateName: string; fileType: ViewerFileType; request?: RequestHandoff } | null
   >(null);
   const openWorkspace = (category: WorkspaceCategory) => (templateName: string, tabLabel: string) =>
     setWorkspace({
@@ -5369,10 +5382,9 @@ export default function App() {
       fileType: resolveFileType(tabLabel, CATEGORY_FILE_TYPE[category]),
     });
 
-  // 홈 — 검색어, 요청 작성 도움받기가 완성한 요청문. screen 문자열만으로는 "어떤
+  // 홈 — 검색어. screen 문자열만으로는 "어떤
   // 검색어인지"를 담을 수 없어 따로 든다.
   const [searchQuery, setSearchQuery] = useState("");
-  const [requestHandoff, setRequestHandoff] = useState<{ text: string; screen: Screen } | null>(null);
   /** "요청 작성 도움받기"를 취소하고 홈으로 돌아왔을 때만 켜서, 홈의 도우미 버튼에 포커스를
    *  되돌린다 — 완료(다른 화면으로 이동)나 그냥 홈에 들어올 때는 켜지 않는다. */
   const [focusHelperCta, setFocusHelperCta] = useState(false);
@@ -5382,11 +5394,6 @@ export default function App() {
     const task = getTaskById(template.taskId);
     if (task?.wsCategory) openWorkspace(task.wsCategory)(template.title, task.tabLabel ?? "전체");
   };
-  // 요청 작성 도움받기 완료 — 정리된 요청문을 고른 작업의 AI 작업 화면 컴포저에 이어 붙인다.
-  // 목적지 화면을 벗어나면(다른 화면으로 이동) 지운다 — 그래야 나중에 같은 화면을 다시
-  // 열었을 때 지난 요청문이 엉뚱하게 다시 채워지지 않는다.
-  useEffect(() => { if (requestHandoff && screen !== requestHandoff.screen) setRequestHandoff(null); }, [screen, requestHandoff]);
-  const composerFor = (s: Screen) => (requestHandoff?.screen === s ? requestHandoff.text : undefined);
 
   // 서식 채우기 — screen 문자열만으로는 "어떤 서식인지"를 담을 수 없어 대상만 따로 든다.
   const [fillTarget, setFillTarget] = useState<{ id: string; title: string } | null>(null);
@@ -5583,10 +5590,17 @@ export default function App() {
       {screen === "request-help" && (
         <RequestHelpScreen
           onBack={() => { setFocusHelperCta(true); navigate("home"); }}
-          onComplete={(text, wsCategory) => {
-            const target = REQUEST_HELP_SCREEN[wsCategory];
-            setRequestHandoff({ text, screen: target });
-            navigate(target);
+          onComplete={(handoff, wsCategory) => {
+            // 요청 작성 → 템플릿·요청 확인을 마치면 고른 템플릿의 워크스페이스로 바로 들어가,
+            // 세부 내용은 "확인이 필요해요" 카드(RequestCardsPanel)가 이어서 묻는다.
+            navigate(REQUEST_HELP_SCREEN[wsCategory]);
+            const task = getTaskById(handoff.taskId);
+            setWorkspace({
+              category: wsCategory,
+              templateName: handoff.templateTitle ?? "빈 템플릿",
+              fileType: resolveFileType(task?.tabLabel ?? "전체", CATEGORY_FILE_TYPE[wsCategory]),
+              request: handoff,
+            });
           }}
         />
       )}
@@ -5599,7 +5613,6 @@ export default function App() {
           cards={imageAICards}
           wsCategory="image"
           onWorkspace={openWorkspace("image")}
-          initialComposerValue={composerFor("image-ai")}
         />
       )}
       {screen === "landing-ai" && (
@@ -5633,7 +5646,6 @@ export default function App() {
           cardRatio="140%"
           wsCategory="docs"
           onWorkspace={openWorkspace("docs")}
-          initialComposerValue={composerFor("docs-ai")}
         />
       )}
       {screen === "audio-ai" && (
@@ -5655,7 +5667,6 @@ export default function App() {
           cardRatio="81%"
           wsCategory="ppt"
           onWorkspace={openWorkspace("ppt")}
-          initialComposerValue={composerFor("ppt-ai")}
         />
       )}
       {screen === "video-ai" && (
@@ -5668,7 +5679,6 @@ export default function App() {
           cardRatio="203%"
           wsCategory="video"
           onWorkspace={openWorkspace("video")}
-          initialComposerValue={composerFor("video-ai")}
         />
       )}
       {screen === "favorites" && <FavoritesScreen />}
@@ -5711,6 +5721,7 @@ export default function App() {
           category={workspace.category}
           templateName={workspace.templateName}
           fileType={workspace.fileType}
+          request={workspace.request}
           onBack={() => setWorkspace(null)}
           onCreditClick={() => openPricing("subscription")}
           onBellClick={() => setNotifOpen(true)}
