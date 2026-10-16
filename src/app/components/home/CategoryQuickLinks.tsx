@@ -51,7 +51,7 @@ function CategoryButton({
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="flex items-center gap-2.5 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff] transition-colors"
+      className="flex items-center gap-2.5 shrink-0 whitespace-nowrap snap-start rounded-full outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff] transition-colors"
       style={{
         height: 48,
         padding: "0 18px 0 13px",
@@ -80,11 +80,29 @@ export function CategoryQuickLinks({
   const [allHovered, setAllHovered] = useState(false);
 
   return (
+    // 데스크톱(768px 이상): 가운데 정렬로 줄바꿈 — 기존 그대로.
+    // 모바일: 한 줄 가로 스크롤. 페이지 좌우 여백 밖까지 전폭으로 펼치고 안쪽에 같은 여백(16px)을 줘서,
+    // 화면 밖에 더 있다는 걸 오른쪽 끝에서 잘려 보이는 뱃지로 알린다. 스크롤바는 숨기고(관성 스크롤 유지),
+    // 끝에서 튕겨도 페이지 전체가 밀리지 않게 가로 overscroll 을 막는다.
     <nav
       data-tutorial="categories"
       aria-label="대표 작업 분류"
-      className="flex items-center justify-center flex-wrap gap-2.5"
+      className="cat-scroll flex items-center gap-2.5 md:justify-center md:flex-wrap max-md:flex-nowrap max-md:overflow-x-auto max-md:self-stretch max-md:snap-x max-md:snap-proximity"
+      style={{ ["--cat-gutter" as string]: "var(--gap-screen-x)" }}
     >
+      <style>{`
+        @media (max-width: 767px) {
+          .cat-scroll {
+            margin-left: calc(-1 * var(--cat-gutter)); margin-right: calc(-1 * var(--cat-gutter));
+            padding: 0 var(--cat-gutter); scroll-padding-inline: var(--cat-gutter);
+            scrollbar-width: none; -webkit-overflow-scrolling: touch;
+            overscroll-behavior-x: contain; touch-action: pan-x pan-y;
+          }
+          .cat-scroll::-webkit-scrollbar { display: none; }
+          /* 전체 보기 — 맨 끝에 테두리 없이 텍스트 + > 만 */
+          .cat-scroll .cat-all { border-color: transparent !important; box-shadow: none !important; background: transparent !important; padding: 0 8px !important; }
+        }
+      `}</style>
       {groups.map((group) => (
         <CategoryButton
           key={group.id}
@@ -99,7 +117,7 @@ export function CategoryQuickLinks({
         onClick={scrollToAllFeatures}
         onMouseEnter={() => setAllHovered(true)}
         onMouseLeave={() => setAllHovered(false)}
-        className="flex items-center gap-1.5 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff] transition-colors"
+        className="cat-all flex items-center gap-1.5 shrink-0 whitespace-nowrap snap-start rounded-full outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff] transition-colors"
         style={{
           height: 48,
           padding: "0 18px",

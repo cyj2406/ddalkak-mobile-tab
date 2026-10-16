@@ -112,7 +112,8 @@ const QUESTION_LABEL_STYLE = { ...f, fontWeight: 600, fontSize: 14, color: "#0a0
 const REQUIRED_MARK_STYLE = { ...f, fontWeight: 700, fontSize: 15, color: color.brand, lineHeight: 1 } as const;
 const FIELD_ERROR_STYLE = { ...f, fontWeight: 600, fontSize: 12, color: "#d4183d" } as const;
 /** 작업 선택·비율/장수 드롭다운이 함께 쓰는 트리거 모양(기존 작업 선택 트리거 그대로). */
-const FIELD_BOX_STYLE = { height: 46, background: "#fbfcfe", borderRadius: 12 } as const;
+/** 상자형 입력(작업 선택·형식 값·스테퍼·참고 자료) — 높이는 CSS 변수로: 데스크톱 48px, 768px 미만 52px(.rh-form 에서 정의) */
+const FIELD_BOX_STYLE = { height: "var(--rh-field-h, 48px)", background: "#fbfcfe", borderRadius: 12 } as const;
 
 /**
  * 작업 선택 — 드롭다운은 유지하되(선택지가 늘어도 높이가 변하지 않는다), 펼친 목록 위에
@@ -123,11 +124,14 @@ function TaskSelectField({
   onSelect,
   error,
   triggerRef,
+  native,
 }: {
   taskId: string | null;
   onSelect: (id: string) => void;
   error?: string;
-  triggerRef: React.RefObject<HTMLButtonElement | null>;
+  triggerRef: React.RefObject<HTMLElement | null>;
+  /** 모바일 — 커스텀 목록은 터치 스크롤이 어긋나므로 분류(optgroup)가 있는 네이티브 select 를 쓴다 */
+  native?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
@@ -206,10 +210,38 @@ function TaskSelectField({
     );
   };
 
+  if (native) {
+    return (
+      <div className="relative">
+        {selectedTask && <selectedTask.icon size={17} color={color.brand} className="absolute pointer-events-none" style={{ left: 14, top: "50%", transform: "translateY(-50%)" }} aria-hidden />}
+        <select
+          ref={triggerRef as React.RefObject<HTMLSelectElement>}
+          aria-label="만들 작업"
+          aria-invalid={!!error}
+          value={taskId ?? ""}
+          onChange={(e) => e.target.value && onSelect(e.target.value)}
+          className="w-full appearance-none outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff]"
+          style={{
+            ...FIELD_BOX_STYLE, ...f, fontWeight: selectedTask ? 600 : 500, fontSize: 14, color: selectedTask ? "#0a0a0a" : "#94a3b8",
+            padding: selectedTask ? "0 38px 0 41px" : "0 38px 0 14px", border: `1px solid ${error ? "#fca5a5" : "#e2e8f0"}`, cursor: "pointer",
+          }}
+        >
+          <option value="" disabled>만들 작업을 선택해 주세요</option>
+          {groups.map(({ group, tasks }) => (
+            <optgroup key={group.id} label={group.name}>
+              {tasks.filter((t) => t.status !== "soon").map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </optgroup>
+          ))}
+        </select>
+        <ChevronDown size={16} color="#94a3b8" className="absolute pointer-events-none" style={{ right: 14, top: "50%", transform: "translateY(-50%)" }} aria-hidden />
+      </div>
+    );
+  }
+
   return (
     <div ref={wrapRef} className="relative">
       <button
-        ref={triggerRef}
+        ref={triggerRef as React.RefObject<HTMLButtonElement>}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
@@ -275,7 +307,7 @@ function FormatSelect({ id, field, value, onChange }: { id: string; field: Extra
           <option key={o.value} value={o.value}>{optionText(field, o.value)}</option>
         ))}
       </select>
-      <ChevronDown size={16} color="#94a3b8" className="absolute pointer-events-none" style={{ right: 14, top: 15 }} aria-hidden />
+      <ChevronDown size={16} color="#94a3b8" className="absolute pointer-events-none" style={{ right: 14, top: "50%", transform: "translateY(-50%)" }} aria-hidden />
     </div>
   );
 }
@@ -283,33 +315,70 @@ function FormatSelect({ id, field, value, onChange }: { id: string; field: Extra
 type NumberField = Extract<FormatField, { kind: "number" }>;
 
 /**
- * 스테퍼 — 연속 수치(브로셔 면수·영상 길이)용. 숫자를 직접 타이핑할 수 있고(화살표로만 올리게 막지 않는다),
+ * 스테퍼 — 연속 수치(카드 수·섹션 수·장수·슬라이드 수·영상 길이). 숫자를 직접 타이핑할 수 있고(inputmode numeric),
  * 타이핑 도중에는 범위 밖 값도 그대로 둔다(1을 치고 5를 치려는 순간을 막으면 15를 못 쓴다) — 범위 보정은
- * blur·화살표·↑↓ 때만 하고, 보정했으면 아래 회색 한 줄로 알린다. 빈 값은 기본값으로 되돌린다.
- * 높이·테두리·라운드·폰트는 드롭다운(FormatSelect)과 같다. 브라우저 기본 스피너는 숨기고, 오른쪽 끝에 위아래로 쌓은 작은 ▲▼(회색 상자, 각 22×14)를 쓴다.
+ * 칸을 벗어날 때(blur)·버튼·↑↓ 때만 하고, 보정했으면 아래 회색 한 줄로 알린다. 빈 값은 기본값으로 되돌린다.
+ *
+ * - 768px 미만: − / + 를 좌우 끝(각 52×52, 숫자 영역과 1px 구분선), 숫자는 가운데 18px 굵게, 단위는 13px 회색.
+ *   ▲▼를 세로로 나누면 하나당 26px라 터치 최소 44px를 못 지켜서 좌우로 벌린다.
+ * - 768px 이상: 오른쪽 끝에 폭 36px ▲▼ 세로 스택(왼쪽·가운데 1px 구분선), 숫자는 왼쪽 정렬.
+ * - 공통: 길게 누르면 연속 증감(500ms 뒤부터 120ms 간격), 경계값에서는 해당 버튼을 흐리게 하고 누를 수 없게.
+ *   연타·연속 증감은 항상 최신 값에서 한 칸씩 움직이도록 ref 로 현재 값을 읽는다.
  */
 function NumberStepper({ id, field, value, onChange, onNotice }: {
   id: string; field: NumberField; value: string; onChange: (v: string) => void;
-  /** 넘기면 안내 문구를 직접 그리지 않고 위로 올린다 — 좁은 칸(영상 길이)에서 문구가 줄바꿈되지 않게 두 칸 아래에 한 줄로 그린다 */
+  /** 넘기면 안내 문구를 직접 그리지 않고 위로 올린다 — 영상처럼 한 라벨 아래 두 칸일 때 두 칸 아래에 한 줄로 그린다 */
   onNotice?: (text: string | null) => void;
 }) {
+  const touchLayout = useMediaQuery("(max-width: 767px)");
   const [text, setText] = useState(value);
   const [notice, setNotice] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { setText(value); }, [value]);
+  // 연타·길게 누르기 중에도 최신 값을 읽도록(상태는 렌더 전까지 이전 값이라 값이 튄다)
+  const textRef = useRef(value);
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  useEffect(() => { setText(value); textRef.current = value; }, [value]);
 
   const commit = (raw: string) => {
     const { value: next, notice: why } = clampNumberField(field, raw);
     setText(next);
+    textRef.current = next;
     // 보정 안내는 다음 입력 전까지 남긴다 — 범위 안의 같은 값으로 칸을 벗어날 때(blur) 지우지 않는다.
     if (why) setNotice(why);
-    else if (next !== value) setNotice(null);
-    if (next !== value) onChange(next);
+    else if (next !== valueRef.current) setNotice(null);
+    if (next !== valueRef.current) { valueRef.current = next; onChange(next); }
   };
   const step = (d: 1 | -1) => {
-    const cur = Number.parseInt(text, 10);
+    const cur = Number.parseInt(textRef.current, 10);
     commit(String((Number.isNaN(cur) ? Number(field.defaultValue) : cur) + d));
   };
+
+  // 길게 누르기 — 첫 반복 500ms 뒤, 이후 120ms 간격. 손을 떼거나 버튼 밖으로 나가거나 경계에 닿으면 멈춘다.
+  const holdTimers = useRef<{ t?: number; i?: number }>({});
+  const stopHold = () => { window.clearTimeout(holdTimers.current.t); window.clearInterval(holdTimers.current.i); holdTimers.current = {}; };
+  useEffect(() => stopHold, []);
+  const atBound = (d: 1 | -1) => {
+    const cur = Number.parseInt(textRef.current, 10);
+    if (Number.isNaN(cur)) return false;
+    return d < 0 ? cur <= field.min : field.max !== undefined && cur >= field.max;
+  };
+  const startHold = (d: 1 | -1) => {
+    stopHold();
+    step(d);
+    holdTimers.current.t = window.setTimeout(() => {
+      holdTimers.current.i = window.setInterval(() => { if (atBound(d)) stopHold(); else step(d); }, 120);
+    }, 500);
+  };
+  const holdProps = (d: 1 | -1) => ({
+    onPointerDown: (e: React.PointerEvent) => { if (e.button !== 0) return; e.preventDefault(); startHold(d); },
+    onPointerUp: stopHold, onPointerLeave: stopHold, onPointerCancel: stopHold,
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+  });
+
+  const cur = Number.parseInt(text, 10);
+  const atMin = !Number.isNaN(cur) && cur <= field.min;
+  const atMax = !Number.isNaN(cur) && field.max !== undefined && cur >= field.max;
   const n = Number.parseInt(value, 10);
   const largeNotice = field.large && n >= field.large.from ? field.large.notice : null;
   const shownNotice = notice ?? largeNotice;
@@ -318,57 +387,109 @@ function NumberStepper({ id, field, value, onChange, onNotice }: {
   }, [shownNotice]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => onNotice?.(null), []); // eslint-disable-line react-hooks/exhaustive-deps
   const range = field.max !== undefined ? `${field.min}에서 ${field.max}${field.unit ?? ""}` : `${field.min} 이상`;
-  const arrowBtn: React.CSSProperties = { width: 22, height: 14, background: "transparent", border: 0, color: "#475569", cursor: "pointer", padding: 0 };
+  const disabledStyle = (off: boolean): React.CSSProperties => (off ? { opacity: 0.3, pointerEvents: "none" } : {});
 
-  // 단위는 입력칸 안쪽, 숫자 바로 뒤에 회색 suffix 로 둔다(칸 밖에 두면 다음 칸의 글자처럼 읽힌다).
-  // 그래서 입력 폭을 숫자 길이에 맞추고, 빈 곳을 눌러도 입력에 포커스가 가도록 상자 전체를 누를 수 있게 한다.
+  const input = (
+    <input
+      ref={inputRef}
+      id={id}
+      type="number"
+      inputMode="numeric"
+      min={field.min}
+      max={field.max}
+      value={text}
+      onChange={(e) => { setText(e.target.value); textRef.current = e.target.value; setNotice(null); }}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowUp") { e.preventDefault(); step(1); }
+        if (e.key === "ArrowDown") { e.preventDefault(); step(-1); }
+        if (e.key === "Enter") commit(e.currentTarget.value);
+      }}
+      aria-label={`${field.label}, ${range}`}
+      className="rh-num h-full bg-transparent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      style={touchLayout ? {
+        ...f, fontWeight: 700, fontSize: 18, color: "#0a0a0a", border: 0, outline: "none", boxShadow: "none", padding: 0, textAlign: "center",
+        // 숫자 폭만큼만 차지해 단위가 숫자 바로 뒤(4px)에 붙고, 숫자+단위 묶음이 가운데에 온다
+        width: `calc(${Math.max(1, text.length)}ch + 4px)`, flex: "none",
+      } : {
+        ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a", border: 0, outline: "none", boxShadow: "none",
+        padding: field.unit ? "0 0 0 14px" : "0 6px 0 14px",
+        // 단위가 있으면 숫자 폭만큼만 차지해 단위가 숫자 바로 뒤에 붙는다
+        ...(field.unit ? { width: `calc(${Math.max(1, text.length)}ch + 16px)`, flex: "none" } : { flex: 1, minWidth: 0 }),
+      }}
+    />
+  );
+  const focusInput = (e: React.MouseEvent) => { if (!(e.target as HTMLElement).closest("button, input")) inputRef.current?.focus(); };
+  const boxStyle: React.CSSProperties = { ...FIELD_BOX_STYLE, border: "1px solid #e2e8f0", cursor: "text", overflow: "hidden" };
+
   return (
     <div className="min-w-0">
-      <div
-        onClick={(e) => { if (!(e.target as HTMLElement).closest("button, input")) inputRef.current?.focus(); }}
-        className="relative min-w-0 flex items-center focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-[#4f7bff]"
-        style={{ ...FIELD_BOX_STYLE, border: "1px solid #e2e8f0", cursor: "text" }}
-      >
-          <input
-            ref={inputRef}
-            id={id}
-            type="number"
-            inputMode="numeric"
-            min={field.min}
-            max={field.max}
-            value={text}
-            onChange={(e) => { setText(e.target.value); setNotice(null); }}
-            onBlur={(e) => commit(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "ArrowUp") { e.preventDefault(); step(1); }
-              if (e.key === "ArrowDown") { e.preventDefault(); step(-1); }
-              if (e.key === "Enter") commit(e.currentTarget.value);
-            }}
-            aria-label={`${field.label}, ${range}`}
-            className="h-full bg-transparent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            style={{
-              ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a", border: 0, outline: "none", boxShadow: "none",
-              padding: field.unit ? "0 0 0 14px" : "0 6px 0 14px",
-              // 단위가 있으면 숫자 폭만큼만 차지해 단위가 숫자 바로 뒤에 붙는다
-              ...(field.unit ? { width: `calc(${Math.max(1, text.length)}ch + 16px)`, flex: "none" } : { flex: 1, minWidth: 0 }),
-            }}
-          />
+      {touchLayout ? (
+        // ── 768px 미만: [ − | 15 초 | + ] ─────────────────────────
+        <div className="relative min-w-0 flex items-stretch focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-[#4f7bff]" style={boxStyle}>
+          <button
+            type="button" tabIndex={-1} aria-label={`${field.label} 줄이기`} {...holdProps(-1)}
+            className="shrink-0 flex items-center justify-center select-none active:bg-[#F0F3F8]"
+            style={{ width: 52, background: "transparent", border: 0, borderRight: "1px solid #E6EAF2", color: "#6B7280", fontSize: 18, lineHeight: 1, cursor: "pointer", touchAction: "manipulation", ...disabledStyle(atMin) }}
+          >
+            −
+          </button>
+          <div onClick={focusInput} className="flex-1 min-w-0 flex items-center justify-center">
+            {input}
+            {field.unit && <span aria-hidden style={{ ...f, fontWeight: 500, fontSize: 13, color: "#8A909C", marginLeft: 4 }}>{field.unit}</span>}
+          </div>
+          <button
+            type="button" tabIndex={-1} aria-label={`${field.label} 늘리기`} {...holdProps(1)}
+            className="shrink-0 flex items-center justify-center select-none active:bg-[#F0F3F8]"
+            style={{ width: 52, background: "transparent", border: 0, borderLeft: "1px solid #E6EAF2", color: "#6B7280", fontSize: 18, lineHeight: 1, cursor: "pointer", touchAction: "manipulation", ...disabledStyle(atMax) }}
+          >
+            +
+          </button>
+        </div>
+      ) : (
+        // ── 768px 이상: [ 15 초        |▲|▼| ] ───────────────────
+        <div onClick={focusInput} className="relative min-w-0 flex items-center focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-[#4f7bff]" style={boxStyle}>
+          {input}
           {field.unit && <span aria-hidden style={{ ...f, fontWeight: 500, fontSize: 14, color: "#94a3b8", marginLeft: 3 }}>{field.unit}</span>}
-          {field.unit && <span className="flex-1 self-stretch" />}
-          {/* ▲▼ — 오른쪽 끝에 위아래로 쌓은 작은 회색 상자(브라우저 기본 스피너와 같은 모양, 서비스 색으로) */}
-          <div className="flex flex-col shrink-0 overflow-hidden" style={{ marginRight: 12, borderRadius: 4, background: "#eef1f5" }}>
-            <button type="button" tabIndex={-1} aria-label={`${field.label} 늘리기`} onClick={() => step(1)} className="flex items-center justify-center hover:bg-[#e2e8f0]" style={arrowBtn}>
-              <svg width="9" height="6" viewBox="0 0 9 6" aria-hidden><path d="M4.5 0L9 6H0z" fill="currentColor" /></svg>
+          <span className="flex-1 self-stretch" />
+          <div className="shrink-0 self-stretch flex flex-col" style={{ width: 36, borderLeft: "1px solid #E6EAF2" }}>
+            <button
+              type="button" tabIndex={-1} aria-label={`${field.label} 늘리기`} {...holdProps(1)}
+              className="flex-1 flex items-center justify-center hover:bg-[#F0F3F8] active:bg-[#F0F3F8]"
+              style={{ background: "transparent", border: 0, borderBottom: "1px solid #E6EAF2", color: "#9AA0AB", cursor: "pointer", padding: 0, ...disabledStyle(atMax) }}
+            >
+              <svg width="10" height="6" viewBox="0 0 10 6" aria-hidden><path d="M5 0L10 6H0z" fill="currentColor" /></svg>
             </button>
-            <button type="button" tabIndex={-1} aria-label={`${field.label} 줄이기`} onClick={() => step(-1)} className="flex items-center justify-center hover:bg-[#e2e8f0]" style={arrowBtn}>
-              <svg width="9" height="6" viewBox="0 0 9 6" aria-hidden><path d="M4.5 6L9 0H0z" fill="currentColor" /></svg>
+            <button
+              type="button" tabIndex={-1} aria-label={`${field.label} 줄이기`} {...holdProps(-1)}
+              className="flex-1 flex items-center justify-center hover:bg-[#F0F3F8] active:bg-[#F0F3F8]"
+              style={{ background: "transparent", border: 0, color: "#9AA0AB", cursor: "pointer", padding: 0, ...disabledStyle(atMin) }}
+            >
+              <svg width="10" height="6" viewBox="0 0 10 6" aria-hidden><path d="M5 6L10 0H0z" fill="currentColor" /></svg>
             </button>
           </div>
-      </div>
+        </div>
+      )}
       {!onNotice && shownNotice && (
         <p role="status" className="mt-1.5" style={{ ...f, fontWeight: 500, fontSize: 12.5, color: "#94a3b8" }}>{shownNotice}</p>
       )}
     </div>
+  );
+}
+
+/**
+ * 마우스 hover·키보드 포커스에 더해 터치 탭으로도 열리는 툴팁 — 기본 툴팁은 탭으로 열리지 않아 모바일에서 * · ? 설명을 볼 수 없다.
+ * 트리거는 .rh-hit 로 눈에 보이는 크기와 상관없이 터치 영역 44×44를 확보한다.
+ */
+function TapTooltip({ content, children }: { content: React.ReactNode; children: React.ReactElement }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Tooltip open={open} onOpenChange={setOpen}>
+      <TooltipTrigger asChild onClick={(e) => { e.preventDefault(); setOpen(true); }}>
+        {children}
+      </TooltipTrigger>
+      <TooltipContent>{content}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -429,8 +550,8 @@ function ReferenceField({ items, onChange }: { items: string[]; onChange: (items
         onClick={() => fileRef.current?.click()}
         aria-label="파일 첨부"
         title="파일 첨부"
-        className="absolute flex items-center justify-center rounded-lg outline-none hover:bg-[#f1f5f9] focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
-        style={{ right: 7, top: 7, width: 32, height: 32, background: "transparent", border: 0, color: "#64748b", cursor: "pointer" }}
+        className="rh-clip absolute flex items-center justify-center rounded-lg outline-none hover:bg-[#f1f5f9] focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
+        style={{ right: 7, top: "50%", transform: "translateY(-50%)", width: 32, height: 32, background: "transparent", border: 0, color: "#64748b", cursor: "pointer" }}
       >
         <Paperclip size={16} aria-hidden />
       </button>
@@ -443,6 +564,19 @@ function ReferenceField({ items, onChange }: { items: string[]; onChange: (items
       />
     </div>
   );
+}
+
+/** 미디어 쿼리 일치 여부 — 모바일 전용 문구·컨트롤(짧은 placeholder, 네이티브 select 등)을 고를 때 쓴다. */
+function useMediaQuery(query: string) {
+  const [match, setMatch] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatch(mql.matches);
+    onChange();
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, [query]);
+  return match;
 }
 
 /** 2단계 "템플릿 / 정리한 요청" — 데스크톱은 35% + 65% 가로 분할, 그 아래는 세로로 쌓인다. */
@@ -526,6 +660,15 @@ export default function RequestHelpScreen({
   // 영상처럼 한 라벨 아래 두 칸이 있을 때 스테퍼 안내를 두 칸 아래에 한 줄로 그린다
   const [pairNotice, setPairNotice] = useState<string | null>(null);
   const isDesktopSplit = useIsDesktopSplit();
+  // 모바일(<640px) — 짧은 placeholder·버튼 문구, 네이티브 select, 1열 쌓기. 아주 좁으면(<340px) 하단 버튼을 세로로 쌓는다.
+  const isMobile = useMediaQuery("(max-width: 639px)");
+  const isTiny = useMediaQuery("(max-width: 359px)");
+  // 768px 미만은 입력칸 52px(데스크톱 48px) — 1줄 텍스트 칸도 같은 높이가 되도록 위아래 여백을 맞춘다(줄 높이 21 + 테두리 2).
+  const tallFields = useMediaQuery("(max-width: 767px)");
+  const fieldPadY = tallFields ? 14.5 : 12.5;
+  const stackCta = useMediaQuery("(max-width: 339px)");
+  // 모바일에서 글을 입력하는 동안에는 하단 고정 버튼을 풀어 둔다 — 키보드에 밀려 올라와 입력칸을 가리지 않게.
+  const [typing, setTyping] = useState(false);
   const [errors, setErrors] = useState<{ task?: string; topic?: string }>({});
   // 선택한 템플릿 — undefined: 아직 안 고름(첫 템플릿이 기본), null: 자유 구성, 문자열: templateKey.
   const [selectedKey, setSelectedKey] = useState<string | null | undefined>(undefined);
@@ -533,7 +676,7 @@ export default function RequestHelpScreen({
   const resetBtnRef = useRef<HTMLButtonElement>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const taskTriggerRef = useRef<HTMLButtonElement>(null);
+  const taskTriggerRef = useRef<HTMLElement>(null);
   const topicRef = useRef<HTMLTextAreaElement>(null);
 
   const selectedTask = draft.taskId ? getTaskById(draft.taskId) : undefined;
@@ -615,11 +758,40 @@ export default function RequestHelpScreen({
 
 
   return (
-    <main className="flex-1 flex flex-col overflow-y-auto" style={{ scrollbarWidth: "none" }}>
+    <main
+      className="rh-form flex-1 flex flex-col overflow-y-auto"
+      style={{ scrollbarWidth: "none" }}
+      onFocusCapture={(e) => { if (isMobile && (e.target as HTMLElement).matches("textarea, input:not([type=file])")) setTyping(true); }}
+      onBlurCapture={(e) => { if ((e.target as HTMLElement).matches("textarea, input")) setTyping(false); }}
+    >
+      {/* 모바일 보정 — 인라인 스타일보다 우선해야 해서 !important. 입력 글자 16px(iOS 확대 방지), 터치 영역 44px, 2열 → 1열. */}
+      <style>{`
+        .rh-form { --rh-field-h: 48px; }
+        .rh-form input { text-overflow: ellipsis; }
+        @media (max-width: 767px) {
+          .rh-form { --rh-field-h: 52px; }
+          .rh-form input:not([type=file]):not(.rh-num), .rh-form textarea, .rh-form select, .rh-form .ag-placeholder { font-size: 16px !important; }
+          .rh-pair { grid-template-columns: 1fr !important; gap: 8px !important; }
+        }
+        .rh-hit { position: relative; }
+        .rh-hit::after { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+        @media (max-width: 639px) {
+          .rh-card { padding: 16px !important; border-radius: 20px !important; }
+          .rh-clip { width: 44px !important; height: 44px !important; right: 3px !important; }
+        }
+      `}</style>
       <div className="w-full mx-auto flex-1 flex flex-col" style={{ maxWidth: STEP_MAX_WIDTH, padding: STEP_PADDING }}>
         {/* 단계 표시는 상단에 고정한다 — 칸이 늘어나 페이지가 스크롤돼도 지금 어느 단계인지 보인다. */}
         <div className="sticky top-0 z-10 flex items-center gap-2 mb-5 flex-wrap" role="group" aria-label="진행 단계" style={{ background: "#f8fafc", padding: "12px 0 10px", marginTop: -12 }}>
-          {STEPS.map((s, i) => (
+          {isTiny ? (
+            // 아주 좁은 화면 — "1 / 2 · 요청 작성"으로 줄인다
+            <span className="flex items-center gap-2" style={{ ...f, fontSize: 12.5 }}>
+              <span className="flex items-center justify-center rounded-full shrink-0" style={{ height: 22, padding: "0 8px", fontSize: 11.5, fontWeight: 700, background: color.brand, color: "#fff" }}>
+                {step + 1} / {STEPS.length}
+              </span>
+              <span style={{ fontWeight: 700, color: "#0a0a0a" }}>{STEPS[step].label}</span>
+            </span>
+          ) : STEPS.map((s, i) => (
             <div key={s.label} className="flex items-center gap-2">
               <span
                 className="flex items-center justify-center rounded-full shrink-0"
@@ -658,23 +830,26 @@ export default function RequestHelpScreen({
               className="shrink-0 whitespace-nowrap"
               disabled={!hasAnyInput}
               onClick={() => setResetConfirmOpen(true)}
-              style={{ height: 40, padding: "0 14px", fontSize: 13.5 }}
+              aria-label="초기화"
+              title="초기화"
+              // 모바일 — 제목 폭을 덜 뺏도록 아이콘만(터치 영역 44×44)
+              style={isMobile ? { width: 44, height: 44, padding: 0 } : { height: 40, padding: "0 14px", fontSize: 13.5 }}
             >
-              <RotateCcw size={15} aria-hidden />
-              초기화
+              <RotateCcw size={isMobile ? 18 : 15} aria-hidden />
+              {!isMobile && "초기화"}
             </Button>
           )}
         </div>
 
         {step === 0 && (
-          <div className="rounded-[26px]" style={{ background: "#fff", border: "1px solid #e2e8f0", padding: 24 }}>
+          <div className="rh-card rounded-[26px]" style={{ background: "#fff", border: "1px solid #e2e8f0", padding: 24 }}>
             <div className="flex flex-col gap-6">
               {/* 1행 — 만들 작업(전폭). 아이콘 + 라벨이 들어가고 선택지가 14종이라 넓게 둔다. */}
               <div>
                 <div className="mb-2.5">
                   <span style={QUESTION_LABEL_STYLE}>만들 작업</span>
                 </div>
-                <TaskSelectField taskId={draft.taskId} onSelect={selectTask} error={errors.task} triggerRef={taskTriggerRef} />
+                <TaskSelectField taskId={draft.taskId} onSelect={selectTask} error={errors.task} triggerRef={taskTriggerRef} native={isMobile} />
                 {errors.task && <span role="alert" className="block mt-1.5" style={FIELD_ERROR_STYLE}>{errors.task}</span>}
               </div>
 
@@ -683,19 +858,17 @@ export default function RequestHelpScreen({
                 <div className="flex items-center gap-1">
                   <label htmlFor="req-topic" style={QUESTION_LABEL_STYLE}>어떤 주제로 만들까요?</label>
                   {/* * 하나만으로는 필수인지 모를 수 있어, 마우스를 올리거나 키보드로 포커스하면 이유까지 알려 준다. */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span
-                        tabIndex={0}
-                        aria-label="필수 항목"
-                        className="inline-flex items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
-                        style={{ ...REQUIRED_MARK_STYLE, width: 16, height: 18, cursor: "help" }}
-                      >
-                        *
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>필수 항목이에요. 주제를 적어야 다음 단계로 넘어갈 수 있어요.</TooltipContent>
-                  </Tooltip>
+                  <TapTooltip content="필수 항목이에요. 주제를 적어야 다음 단계로 넘어갈 수 있어요.">
+                    <span
+                      tabIndex={0}
+                      aria-label="필수 항목"
+                      // 폭을 고정하지 않는다 — 고정 폭 상자 가운데에 *가 오면 라벨과의 간격이 벌어진다(원래 위치 유지).
+                      className="rh-hit inline-flex items-center rounded outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
+                      style={{ ...REQUIRED_MARK_STYLE, height: 18, cursor: "help" }}
+                    >
+                      *
+                    </span>
+                  </TapTooltip>
                 </div>
                 {/* 서술형이라 한 줄 input 대신 1줄 시작·최대 3줄 자동 확장(넘으면 칸 안 스크롤). */}
                 <AutoGrowTextarea
@@ -711,9 +884,9 @@ export default function RequestHelpScreen({
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.nativeEvent.isComposing) document.getElementById("req-content")?.focus();
                   }}
-                  placeholder="예: 성수동 고깃집 숙성 삼겹살 런치 홍보"
+                  placeholder="만들고 싶은 내용이나 주제를 한 줄로 적어주세요."
                   lineHeight={21}
-                  paddingY={13}
+                  paddingY={fieldPadY}
                   style={{
                     ...f, fontWeight: 500, fontSize: 14, color: "#0a0a0a", width: "100%",
                     border: `1px solid ${errors.topic ? "#fca5a5" : "#e2e8f0"}`, borderRadius: 12, padding: "13px 14px", background: "#fbfcfe",
@@ -736,9 +909,9 @@ export default function RequestHelpScreen({
                   value={draft.content}
                   onChange={(v) => setDraft((d) => ({ ...d, content: v }))}
                   maxRows={8}
-                  placeholder="예) 9월 매출 1억 2천, 신규 거래처 3곳. 비워두면 빈 양식만 만들어 드려요"
+                  placeholder="핵심 내용과 반드시 들어가야 할 이름·날짜·숫자 등을 적어주세요."
                   lineHeight={21}
-                  paddingY={13}
+                  paddingY={fieldPadY}
                   style={{
                     ...f, fontWeight: 500, fontSize: 14, color: "#0a0a0a", width: "100%",
                     border: "1px solid #e2e8f0", borderRadius: 12, padding: "13px 14px", background: "#fbfcfe",
@@ -755,18 +928,15 @@ export default function RequestHelpScreen({
                     <div className="mb-2.5 flex items-center gap-1" style={{ height: 22 }}>
                       <label htmlFor="req-format" className="truncate" style={QUESTION_LABEL_STYLE}>{formatDef.label}</label>
                       {formatDef.tooltip && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button type="button" aria-label={`${formatDef.label} 안내`} className="shrink-0 flex items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ width: 20, height: 20, background: "transparent", border: 0, color: "#94a3b8", cursor: "help" }}>
-                              <HelpCircle size={14} aria-hidden />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent>{formatDef.tooltip}</TooltipContent>
-                        </Tooltip>
+                        <TapTooltip content={formatDef.tooltip}>
+                          <button type="button" aria-label={`${formatDef.label} 안내`} className="rh-hit shrink-0 flex items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]" style={{ width: 20, height: 20, background: "transparent", border: 0, color: "#94a3b8", cursor: "help" }}>
+                            <HelpCircle size={14} aria-hidden />
+                          </button>
+                        </TapTooltip>
                       )}
                     </div>
                     {/* 필드가 둘이면(영상: 비율 + 길이) 한 라벨 아래 두 드롭다운을 나란히 — 행이 늘지 않는다. */}
-                    <div className={formatDef.fields.length > 1 ? "grid gap-1.5 items-start grid-cols-[minmax(0,1fr)_112px]" : undefined}>
+                    <div className={formatDef.fields.length > 1 ? "rh-pair grid gap-1.5 items-start grid-cols-[minmax(0,1fr)_112px]" : undefined}>
                       {formatDef.fields.map((field, i) => {
                         const id = i === 0 ? "req-format" : `req-format-${field.key}`;
                         const value = draft.format[field.key] ?? field.defaultValue;
@@ -814,53 +984,64 @@ export default function RequestHelpScreen({
 
         <div className="flex-1" />
 
-        {/* 하단 CTA — 스크롤과 무관하게 화면 아래에 고정한다. 필수 칸이 비면 버튼 옆에 무엇이 빠졌는지 알려 준다. */}
-        <div className="sticky bottom-0 z-10 flex items-center gap-3 mt-6" style={{ background: "#f8fafc", borderTop: "1px solid #eef2f6", padding: "14px 0 20px" }}>
-          {step === 0 ? (
-            <>
+        {/* 하단 CTA — 스크롤과 무관하게 화면 아래에 고정한다(모바일에서 글을 입력하는 동안은 고정을 풀어 키보드에 가리지 않게).
+            데스크톱: [보조] … 안내 [주 버튼] 한 줄. 모바일: 안내를 위 전폭으로, 버튼 둘은 4:6 한 줄 — 아주 좁으면 주 버튼을 위로 쌓는다. */}
+        <div
+          className={`${typing ? "" : "sticky bottom-0"} z-10 mt-6`}
+          style={{ background: "#f8fafc", borderTop: "1px solid #eef2f6", padding: "14px 0 calc(20px + env(safe-area-inset-bottom))" }}
+        >
+          {(() => {
+            const secondary = step === 0
+              ? { label: isMobile ? "홈으로" : "홈으로 돌아가기", onClick: onBack }
+              : { label: isMobile ? "내용 수정" : "내용 수정하기", onClick: () => setStep(0) };
+            const primary = step === 0
+              ? { label: "템플릿·요청 확인", onClick: goNextFromStep0, arrow: true, disabled: false }
+              : { label: "이 요청으로 시작하기", onClick: finish, arrow: false, disabled: submitting };
+            const hint = step === 0 ? missingHint : null;
+            const secondaryBtn = (
               <button
                 type="button"
-                onClick={onBack}
-                className="rounded-xl"
-                style={{ ...f, fontWeight: 700, fontSize: 13.5, color: SUBTITLE_COLOR, background: "#fff", border: "1px solid #e2e8f0", padding: "13px 20px", cursor: "pointer" }}
+                onClick={secondary.onClick}
+                className="rounded-xl whitespace-nowrap"
+                style={{ ...f, fontWeight: 700, fontSize: 13.5, color: SUBTITLE_COLOR, background: "#fff", border: "1px solid #e2e8f0", padding: "13px 20px", minHeight: 48, cursor: "pointer", width: isMobile ? "100%" : undefined }}
               >
-                홈으로 돌아가기
+                {secondary.label}
               </button>
-              <span className="flex-1" />
-              {missingHint && (
-                <span aria-live="polite" style={{ ...f, fontWeight: 600, fontSize: 13, color: "#94a3b8" }}>{missingHint}</span>
-              )}
+            );
+            const primaryBtn = (
               <button
                 type="button"
-                onClick={goNextFromStep0}
-                className="inline-flex items-center gap-2 rounded-2xl transition-colors bg-[#4f7bff] hover:bg-[#3d68e8]"
-                style={{ ...f, fontWeight: 700, fontSize: 14, color: "#fff", border: 0, padding: "13px 22px", cursor: "pointer" }}
+                onClick={primary.onClick}
+                disabled={primary.disabled}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl whitespace-nowrap transition-colors bg-[#4f7bff] hover:bg-[#3d68e8] disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{ ...f, fontWeight: 700, fontSize: 14, color: "#fff", border: 0, padding: "13px 22px", minHeight: 48, cursor: primary.disabled ? "default" : "pointer", width: isMobile ? "100%" : undefined }}
               >
-                템플릿·요청 확인 <ArrowRight size={16} aria-hidden />
+                {primary.label} {primary.arrow && <ArrowRight size={16} aria-hidden />}
               </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setStep(0)}
-                className="rounded-xl"
-                style={{ ...f, fontWeight: 700, fontSize: 13.5, color: SUBTITLE_COLOR, background: "#fff", border: "1px solid #e2e8f0", padding: "13px 20px", cursor: "pointer" }}
-              >
-                내용 수정하기
-              </button>
-              <span className="flex-1" />
-              <button
-                type="button"
-                onClick={finish}
-                disabled={submitting}
-                className="rounded-xl bg-[#4f7bff] hover:bg-[#3d68e8] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                style={{ ...f, fontWeight: 700, fontSize: 14, color: "#fff", border: 0, padding: "14px 24px", cursor: submitting ? "default" : "pointer" }}
-              >
-                이 요청으로 시작하기
-              </button>
-            </>
-          )}
+            );
+            const hintEl = hint && (
+              <span aria-live="polite" style={{ ...f, fontWeight: 600, fontSize: 13, color: "#94a3b8" }}>{hint}</span>
+            );
+            if (!isMobile) {
+              return (
+                <div className="flex items-center gap-3">
+                  {secondaryBtn}
+                  <span className="flex-1" />
+                  {hintEl}
+                  {primaryBtn}
+                </div>
+              );
+            }
+            return (
+              <div className="flex flex-col gap-2">
+                {hintEl && <p className="text-center">{hintEl}</p>}
+                <div className={stackCta ? "flex flex-col-reverse gap-2" : "grid gap-2 grid-cols-[minmax(0,4fr)_minmax(0,6fr)]"}>
+                  {secondaryBtn}
+                  {primaryBtn}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
