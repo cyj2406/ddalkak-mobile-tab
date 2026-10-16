@@ -475,6 +475,47 @@
 /* 컴포저 하단 칩 줄 — 가로 스크롤은 살리고 스크롤바만 감춘다(전송 버튼은 이 영역 밖에 고정). */
 .composer-chips-scroll::-webkit-scrollbar { display: none; }
 
+/* 공용 InputField — 칸 안 스크롤바는 얇게, 마우스를 올리거나 입력 중일 때만 보인다(InputField.tsx). */
+.ui-field-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+.ui-field-scroll:hover, .ui-field-scroll:focus { scrollbar-color: #cbd5e1 transparent; }
+.ui-field-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.ui-field-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+.ui-field-scroll:hover::-webkit-scrollbar-thumb, .ui-field-scroll:focus::-webkit-scrollbar-thumb { background: #cbd5e1; }
+/* 여러 줄 칸이 실제로 넘칠 때(AutoGrowTextarea 가 data-overflow 를 단다)는 hover·포커스와 무관하게 늘 보인다 — "내용이 더 있음"을 스크롤바 하나로 알린다 */
+.ui-field-scroll[data-overflow="true"] { scrollbar-color: #cbd5e1 transparent; }
+.ui-field-scroll[data-overflow="true"]::-webkit-scrollbar-thumb { background: #cbd5e1; }
+/* 공용 InputField 상태(2026-10-16) — 셀렉트·한 줄·여러 줄 칸이 같은 규칙을 쓴다.
+   - 바탕은 상태와 무관하게 고정(값이 차도 바뀌지 않는다). 빈 칸/채운 칸은 placeholder 색과 글자 색으로만 구분.
+   - 포커스: 테두리를 브랜드색으로 + 1px 브랜드색 링(합쳐 2px 브랜드 테두리, 바탕 대비 약 3.7:1). 키보드 포커스도 같다.
+   - 칸에 인라인 border 가 있어 위의 전역 input:focus-visible 규칙이 테두리를 못 바꾸므로 !important.
+   - .ui-field: 자기 자신이 상자인 요소(input·textarea·select·트리거 버튼) / .ui-field-within: 안에 입력을 품은 상자(스테퍼·참고 자료). */
+.ui-field:focus-visible,
+.ui-field-within:focus-within {
+  border-color: var(--brand) !important;
+  box-shadow: 0 0 0 1px var(--brand) !important;
+  outline: none !important;
+}
+/* 브라우저 자동 완성(크롬 autofill)이 칸을 파란 바탕으로 칠하지 않게 — 크롬은 자동 완성 바탕을 !important 로 칠해
+   바탕색으로는 못 덮는다. 칸 안쪽을 칸 바탕색(#f8fafc = color.surface.subtle, InputField FIELD_SURFACE)의 inset 그림자로 덮고,
+   포커스 중이면 그 위에 같은 1px 브랜드 링을 더한다. 글자색도 크롬 기본 대신 원래 글자색. */
+.ui-field:-webkit-autofill,
+.ui-field:-webkit-autofill:hover,
+.ui-field-within input:-webkit-autofill,
+.ui-field-within input:-webkit-autofill:hover,
+.ui-field-within input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #f8fafc inset !important;
+  box-shadow: 0 0 0 1000px #f8fafc inset !important;
+  -webkit-text-fill-color: currentColor !important;
+  caret-color: currentColor;
+}
+.ui-field:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #f8fafc inset, 0 0 0 1px var(--brand) !important;
+  box-shadow: 0 0 0 1000px #f8fafc inset, 0 0 0 1px var(--brand) !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+/* 한 줄 입력 placeholder — 글자 크기·색은 InputField 가 CSS 변수로 넘긴다 */
+.ui-field-ph::placeholder { font-size: var(--ph-size, inherit); font-weight: var(--ph-weight, inherit); color: var(--ph-color, #9ca3af); opacity: 1; }
+
 /* ── 홈 "바로 시작하기 좋은 템플릿" 캐러셀 — 이전/다음 버튼 ─────────────────────
    호버 가능한 포인터(마우스)에서는 평소 숨기고, 캐러셀 뷰포트(.carousel-viewport)
    위에 마우스가 있거나 내부에 키보드 포커스가 들어와 있을 때만 보인다. 버튼 자신

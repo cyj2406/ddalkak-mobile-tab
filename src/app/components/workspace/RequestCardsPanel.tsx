@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Info } from "lucide-react";
-import { f } from "@/app/styleTokens";
+import { controlHeight, f } from "@/app/styleTokens";
 import { getTaskById } from "@/app/data/tasks";
-import { AutoGrowTextarea } from "@/app/components/common/AutoGrowTextarea";
-import { cardsForTask, type CardContext, type RequestCardDef } from "@/app/data/requestCards";
+import { FIELD_CLASS, FIELD_SURFACE, InputField } from "@/app/components/common/InputField";
+import { cardsForTask, TEXT_LIMITS, type CardContext, type RequestCardDef } from "@/app/data/requestCards";
 import type { RequestHandoff } from "@/app/components/home/RequestHelpScreen";
 
 /**
@@ -35,8 +35,10 @@ const BRAND = "#3B5BFE";
 const INK = "#1B2440";
 const MUTED = "#98A2B3";
 const LINE = "#E3E6EB";
-/** 기간·연락처처럼 짧은 값만 받는 한 줄 칸 — 넘으면 입력을 막는다(가로로 잘려 안 보이는 긴 글을 막기 위해). */
-const SHORT_LIMIT = 40;
+/** 기간·연락처처럼 짧은 값만 받는 한 줄 칸 — 넘으면 입력을 막는다. 넘침은 InputField singleline(가로 스크롤 + 페이드). */
+const SHORT_LIMIT = TEXT_LIMITS.short;
+/** ◆ 직접 입력이 이 줄 수 이하면 한 줄 칸, 넘으면 여러 줄 칸 */
+const SHORT_CUSTOM_ROWS = 3;
 /** 후보가 모두 이 길이 이하면 2열로 깐다 */
 const SHORT_CHOICE = 12;
 
@@ -47,7 +49,11 @@ const SHELL: React.CSSProperties = {
   maxHeight: "var(--fc-card-max-h, calc(100dvh - 226px))",
 };
 
-const BOX: React.CSSProperties = { ...f, fontSize: 14.5, color: INK, background: "white", border: `1px solid ${LINE}`, borderRadius: 14 };
+const BOX: React.CSSProperties = { ...f, fontSize: 14.5, color: INK, ...FIELD_SURFACE, border: `1px solid ${LINE}`, borderRadius: 14 };
+/** 한 줄 칸 — 드롭다운(48px)과 같은 높이 */
+const LINE_BOX: React.CSSProperties = { ...BOX, width: "100%", height: controlHeight.lg, padding: "0 16px" };
+/** 여러 줄 칸 — 위아래 여백·줄 높이는 InputField 가 fieldOverflow 로 정한다 */
+const TEXT_BOX: React.CSSProperties = { ...BOX, width: "100%", padding: "0 16px" };
 
 const isShortWrite = (c: RequestCardDef) => c.kind === "write" && !c.multiline;
 
@@ -91,8 +97,8 @@ export function RequestCardsPanel({ handoff, onGenerate }: { handoff: RequestHan
   const [error, setError] = useState<string | null>(null);
   const [requestOpen, setRequestOpen] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const customRef = useRef<HTMLTextAreaElement>(null);
-  const topicEditRef = useRef<HTMLTextAreaElement>(null);
+  const customRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const topicEditRef = useRef<HTMLInputElement>(null);
 
   const nameCard = cards.find((c) => c.nameCard);
   const name = nameCard ? writes[nameCard.id] ?? "" : "";
@@ -194,7 +200,7 @@ export function RequestCardsPanel({ handoff, onGenerate }: { handoff: RequestHan
                 if (v === "__custom__") { setPick({ choice: "custom" }); requestAnimationFrame(() => customRef.current?.focus()); }
                 else { setPick({ choice: Number(v) }); setError(null); }
               }}
-              className="w-full appearance-none outline-none truncate focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#3B5BFE]"
+              className={`w-full appearance-none outline-none truncate ${FIELD_CLASS}`}
               style={{ ...BOX, fontWeight: 600, height: 48, padding: "0 40px 0 16px", cursor: "pointer" }}
             >
               {choices.map((cand, i) => <option key={i} value={i}>{i === 0 ? `${cand} (추천)` : cand}</option>)}
@@ -203,21 +209,30 @@ export function RequestCardsPanel({ handoff, onGenerate }: { handoff: RequestHan
             <ChevronDown size={16} color={MUTED} className="absolute pointer-events-none" style={{ right: 16, top: 16 }} aria-hidden />
           </div>
         </div>
-        {customOn && (
-          <AutoGrowTextarea
+        {customOn && ((card.customRows ?? SHORT_CUSTOM_ROWS) <= SHORT_CUSTOM_ROWS ? (
+          <InputField
+            variant="singleline"
             ref={customRef}
             value={answer.custom}
             onChange={(v) => { setPick({ custom: v }); if (v.trim()) setError(null); }}
-            maxRows={card.customRows ?? 3}
-            singleLine={(card.customRows ?? 3) <= 3}
-            lineHeight={22}
-            paddingY={13}
             placeholder={`${card.title}을(를) 직접 적어주세요`}
             aria-label={`${card.title} 직접 입력`}
             aria-invalid={!!error}
-            style={{ ...BOX, padding: "13px 16px", borderColor: error ? "#fca5a5" : LINE }}
+            className="outline-none"
+            style={{ ...LINE_BOX, borderColor: error ? "#fca5a5" : LINE }}
           />
-        )}
+        ) : (
+          <InputField
+            variant="multiline"
+            ref={customRef}
+            value={answer.custom}
+            onChange={(v) => { setPick({ custom: v }); if (v.trim()) setError(null); }}
+            placeholder={`${card.title}을(를) 직접 적어주세요`}
+            aria-label={`${card.title} 직접 입력`}
+            aria-invalid={!!error}
+            style={{ ...TEXT_BOX, borderColor: error ? "#fca5a5" : LINE }}
+          />
+        ))}
         {error && <span role="alert" style={{ ...f, fontWeight: 600, fontSize: 12, color: "#d4183d" }}>{error}</span>}
       </div>
     );
@@ -227,27 +242,26 @@ export function RequestCardsPanel({ handoff, onGenerate }: { handoff: RequestHan
     <div key={card.id} className="flex flex-col gap-2 min-w-0">
       {grouped && <label htmlFor={`rc-${card.id}`} style={{ ...f, fontWeight: 600, fontSize: 13, color: "#4B5262" }}>{card.title}</label>}
       {card.multiline ? (
-        <AutoGrowTextarea
+        <InputField
+          variant="multiline"
           id={`rc-${card.id}`}
           value={writes[card.id] ?? ""}
           onChange={(v) => setWrites((w) => ({ ...w, [card.id]: v }))}
-          maxRows={8}
           placeholder={card.placeholder}
           aria-labelledby="rc-q"
-          lineHeight={22}
-          paddingY={13}
-          style={{ ...BOX, padding: "13px 17px" }}
+          style={TEXT_BOX}
         />
       ) : (
-        <input
+        <InputField
+          variant="singleline"
           id={`rc-${card.id}`}
           value={writes[card.id] ?? ""}
-          onChange={(e) => setWrites((w) => ({ ...w, [card.id]: e.target.value }))}
+          onChange={(v) => setWrites((w) => ({ ...w, [card.id]: v }))}
           maxLength={SHORT_LIMIT}
           placeholder={card.placeholder}
           aria-labelledby={grouped ? undefined : "rc-q"}
-          className="w-full outline-none px-[17px] py-[13px]"
-          style={BOX}
+          className="outline-none"
+          style={LINE_BOX}
         />
       )}
       {!card.multiline && (writes[card.id] ?? "").length >= SHORT_LIMIT && (
@@ -312,20 +326,19 @@ export function RequestCardsPanel({ handoff, onGenerate }: { handoff: RequestHan
         ) : (
           <div className="flex items-start gap-2">
             <div className="flex-1 min-w-0">
-              <AutoGrowTextarea
+              {/* 요청 작성의 주제 칸과 같은 한 줄 규칙(가로 스크롤 + 페이드). 높이는 옆 저장·취소 버튼(36px)에 맞춘다. */}
+              <InputField
+                variant="singleline"
                 ref={topicEditRef}
                 value={topicDraft}
                 onChange={setTopicDraft}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.nativeEvent.isComposing) saveTopic();
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); saveTopic(); }
                   if (e.key === "Escape") setTopicDraft(null);
                 }}
-                maxRows={3}
-                singleLine
-                lineHeight={20}
-                paddingY={7}
                 aria-label="주제 수정"
-                style={{ ...BOX, fontSize: 13.5, borderRadius: 10, padding: "7px 12px" }}
+                className="outline-none"
+                style={{ ...BOX, width: "100%", fontSize: 13.5, borderRadius: 10, height: 36, padding: "0 12px" }}
               />
             </div>
             <button type="button" onClick={saveTopic} className="shrink-0 rounded-[10px] outline-none focus-visible:ring-2 focus-visible:ring-[#3B5BFE]" style={{ ...f, fontWeight: 700, fontSize: 13, color: "white", background: BRAND, border: 0, height: 36, padding: "0 12px" }}>저장</button>

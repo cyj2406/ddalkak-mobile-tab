@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Check, ChevronDown, FileText, HelpCircle, Link2, Paperclip, RotateCcw, X } from "lucide-react";
-import { color, f, SUBTITLE_COLOR, typography } from "@/app/styleTokens";
+import { color, f, fieldOverflow, pageContainerWidth, SUBTITLE_COLOR, typography } from "@/app/styleTokens";
 import { TASK_GROUPS, getTaskById, templateKey, visibleTasksOf, type Task, type TaskTemplate } from "@/app/data/tasks";
 import { rankTemplatesForTopic } from "@/app/data/templateRanking";
 import { clampNumberField, formatForTask, formatSummary, optionText, resolveFormat, type FormatField } from "@/app/data/requestCards";
@@ -8,7 +8,9 @@ import { isTemplatePreviewMode, previewSamplesFor } from "@/app/data/templatePre
 import { SelectedTemplateCard } from "@/app/components/home/SelectedTemplateCard";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/app/components/ui/tooltip";
 import { Button } from "@/app/components/common/Button";
-import { AutoGrowTextarea } from "@/app/components/common/AutoGrowTextarea";
+import { FIELD_CLASS, FIELD_SURFACE, FIELD_WITHIN_CLASS, InputField } from "@/app/components/common/InputField";
+import { MiddleEllipsisText } from "@/app/components/common/MiddleEllipsisText";
+import { isUrlLike } from "@/app/components/common/middleEllipsis";
 import { Modal } from "@/app/components/common/Modal";
 import { showToast } from "@/app/components/common/Toast";
 import type { WorkspaceCategory } from "@/app/App";
@@ -47,7 +49,7 @@ function loadDraft(): Draft {
     const parsed = JSON.parse(raw);
     return {
       taskId: typeof parsed.taskId === "string" && !EXCLUDED_TASK_IDS.has(parsed.taskId) ? parsed.taskId : null,
-      topic: typeof parsed.topic === "string" ? parsed.topic : "",
+      topic: typeof parsed.topic === "string" ? oneLine(parsed.topic) : "",
       format: parsed.format && typeof parsed.format === "object"
         ? Object.fromEntries(Object.entries(parsed.format).filter((e): e is [string, string] => typeof e[1] === "string"))
         : {},
@@ -69,8 +71,11 @@ const STEP_COPY = [
   { title: "템플릿과 요청 내용을 확인해 주세요.", sub: "선택한 템플릿과 내용을 확인해 주세요. 필요한 내용은 이전 단계에서 바꿀 수 있어요." },
 ] as const;
 
-/** 두 단계가 공유하는 본문 너비 — 기존 3단계 화면이 쓰던 값 그대로. */
-const STEP_MAX_WIDTH = "var(--home-container)";
+/**
+ * 두 단계가 공유하는 본문 너비 — 화면 폭을 채우다 페이지 최대 폭(1120px)에서 멈춘다.
+ * 태블릿 구간(768~1199px)의 --home-container 720px 를 쓰면 원래 화면보다 폼이 좁아 보여 쓰지 않는다(2026-10-16).
+ */
+const STEP_MAX_WIDTH = `${pageContainerWidth}px`;
 /** 아래 여백은 하단 고정 CTA 바가 맡는다. */
 const STEP_PADDING = "32px var(--gap-screen-x) 0";
 
@@ -99,7 +104,7 @@ function buildRequestText(task: Task | undefined, template: TaskTemplate | undef
     `${task ? task.label : "작업"} 작업을 부탁드려요.`,
     template ? `템플릿: ${template.title}` : "템플릿: 빈 템플릿",
     "",
-    `주제: ${d.topic.trim()}`,
+    `주제: ${oneLine(d.topic).trim()}`,
     d.references.length > 0 ? `참고 자료: ${d.references.join(", ")}` : null,
   ];
   const def = d.taskId ? formatForTask(d.taskId) : undefined;
@@ -107,20 +112,24 @@ function buildRequestText(task: Task | undefined, template: TaskTemplate | undef
   return lines.filter((l) => l !== null).join("\n");
 }
 
+/** 주제를 한 줄 문자열로 — 붙여 넣기·이전 저장값에 줄바꿈이 섞여도 제목처럼 쓰는 곳(요청문 "주제: …" 줄, 워크스페이스 머리)이 깨지지 않게 */
+const oneLine = (s: string) => s.replace(/\s*[\r\n]+\s*/g, " ");
+
 const QUESTION_LABEL_STYLE = typography.formLabel;
 /** 입력값(선택한 작업·형식 값·타이핑한 글자) — 라벨보다 크고 보통 굵기 */
 const FIELD_VALUE_STYLE = typography.formValue;
+/** 셀렉트에서 고른 값 — 원래 화면(dev) 비율 그대로 14px/600 */
+const SELECT_VALUE_STYLE = typography.formSelectValue;
 /** 입력 전 안내(placeholder) — 값보다 작고 한 톤 연하게 */
 const PLACEHOLDER_STYLE = typography.formPlaceholder;
-/** 서술형 칸(주제·꼭 담을 내용) 줄 높이 — 16px 글자 기준. 위아래 여백은 48px 상자에 1줄이 가운데 오도록 (48 − 테두리 2 − 22) / 2. */
-const TEXT_LINE_H = 22;
-const TEXT_PAD_Y = 12;
+/** 주제·꼭 담을 내용 칸의 상자 모양(넘침 규칙·줄 높이는 InputField 가 fieldOverflow 토큰으로 정한다) */
+const TEXT_BOX_STYLE = { ...FIELD_VALUE_STYLE, width: "100%", borderRadius: 12, padding: "0 14px" } as const;
 /** 필수 표시 — 필수 칸이 주제 하나뿐이라 *도 주제에만 붙는다. */
 const REQUIRED_MARK_STYLE = { ...f, fontWeight: 700, fontSize: 15, color: color.brand, lineHeight: 1 } as const;
 const FIELD_ERROR_STYLE = { ...f, fontWeight: 600, fontSize: 12, color: "#d4183d" } as const;
 /** 작업 선택·비율/장수 드롭다운이 함께 쓰는 트리거 모양(기존 작업 선택 트리거 그대로). */
 /** 상자형 입력(작업 선택·형식 값·스테퍼·참고 자료) — 높이는 CSS 변수 --rh-field-h(48px, .rh-form 에서 정의) */
-const FIELD_BOX_STYLE = { height: "var(--rh-field-h, 48px)", background: "#fbfcfe", borderRadius: 12 } as const;
+const FIELD_BOX_STYLE = { height: "var(--rh-field-h, 48px)", ...FIELD_SURFACE, borderRadius: 12 } as const;
 
 /**
  * 작업 선택 — 드롭다운은 유지하되(선택지가 늘어도 높이가 변하지 않는다), 펼친 목록 위에
@@ -227,9 +236,9 @@ function TaskSelectField({
           aria-invalid={!!error}
           value={taskId ?? ""}
           onChange={(e) => e.target.value && onSelect(e.target.value)}
-          className="w-full appearance-none outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff]"
+          className={`w-full appearance-none outline-none ${FIELD_CLASS}`}
           style={{
-            ...FIELD_BOX_STYLE, ...(selectedTask ? FIELD_VALUE_STYLE : PLACEHOLDER_STYLE),
+            ...FIELD_BOX_STYLE, ...(selectedTask ? SELECT_VALUE_STYLE : PLACEHOLDER_STYLE),
             padding: selectedTask ? "0 38px 0 41px" : "0 38px 0 14px", border: `1px solid ${error ? "#fca5a5" : "#e2e8f0"}`, cursor: "pointer",
           }}
         >
@@ -254,13 +263,13 @@ function TaskSelectField({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-invalid={!!error}
-        className="w-full flex items-center gap-2.5 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff]"
+        className={`w-full flex items-center gap-2.5 outline-none ${FIELD_CLASS}`}
         style={{ ...FIELD_BOX_STYLE, padding: "0 14px", border: `1px solid ${error ? "#fca5a5" : "#e2e8f0"}` }}
       >
         {selectedTask ? (
           <>
             <selectedTask.icon size={17} color={color.brand} className="shrink-0" aria-hidden />
-            <span className="flex-1 min-w-0 truncate text-left" style={FIELD_VALUE_STYLE}>
+            <span className="flex-1 min-w-0 truncate text-left" style={SELECT_VALUE_STYLE}>
               {selectedTask.label}
             </span>
           </>
@@ -307,8 +316,8 @@ function FormatSelect({ id, field, value, onChange }: { id: string; field: Extra
         aria-label={field.label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full appearance-none outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff]"
-        style={{ ...FIELD_BOX_STYLE, ...FIELD_VALUE_STYLE, padding: "0 38px 0 14px", border: "1px solid #e2e8f0", cursor: "pointer" }}
+        className={`w-full appearance-none outline-none ${FIELD_CLASS}`}
+        style={{ ...FIELD_BOX_STYLE, ...SELECT_VALUE_STYLE, padding: "0 38px 0 14px", border: "1px solid #e2e8f0", cursor: "pointer" }}
       >
         {field.options.map((o) => (
           <option key={o.value} value={o.value}>{optionText(field, o.value)}</option>
@@ -419,7 +428,7 @@ function NumberStepper({ id, field, value, onChange, onNotice }: {
         // 숫자 폭만큼만 차지해 단위가 숫자 바로 뒤(4px)에 붙고, 숫자+단위 묶음이 가운데에 온다
         width: `calc(${Math.max(1, text.length)}ch + 4px)`, flex: "none",
       } : {
-        ...FIELD_VALUE_STYLE, border: 0, outline: "none", boxShadow: "none",
+        ...SELECT_VALUE_STYLE, border: 0, outline: "none", boxShadow: "none",
         padding: field.unit ? "0 0 0 14px" : "0 6px 0 14px",
         // 단위가 있으면 숫자 폭만큼만 차지해 단위가 숫자 바로 뒤에 붙는다
         ...(field.unit ? { width: `calc(${Math.max(1, text.length)}ch + 16px)`, flex: "none" } : { flex: 1, minWidth: 0 }),
@@ -433,7 +442,7 @@ function NumberStepper({ id, field, value, onChange, onNotice }: {
     <div className="min-w-0">
       {touchLayout ? (
         // ── 768px 미만: [ − | 15 초 | + ] ─────────────────────────
-        <div className="relative min-w-0 flex items-stretch focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-[#4f7bff]" style={boxStyle}>
+        <div className={`relative min-w-0 flex items-stretch ${FIELD_WITHIN_CLASS}`} style={boxStyle}>
           <button
             type="button" tabIndex={-1} aria-label={`${field.label} 줄이기`} {...holdProps(-1)}
             className="shrink-0 flex items-center justify-center select-none active:bg-[#F0F3F8]"
@@ -455,7 +464,7 @@ function NumberStepper({ id, field, value, onChange, onNotice }: {
         </div>
       ) : (
         // ── 768px 이상: [ 15 초        |▲|▼| ] ───────────────────
-        <div onClick={focusInput} className="relative min-w-0 flex items-center focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-[#4f7bff]" style={boxStyle}>
+        <div onClick={focusInput} className={`relative min-w-0 flex items-center ${FIELD_WITHIN_CLASS}`} style={boxStyle}>
           {input}
           {field.unit && <span aria-hidden style={{ ...f, fontWeight: 500, fontSize: 14, color: "#94a3b8", marginLeft: 3 }}>{field.unit}</span>}
           <span className="flex-1 self-stretch" />
@@ -507,7 +516,12 @@ function TapTooltip({ content, children }: { content: React.ReactNode; children:
  */
 function ReferenceField({ items, onChange }: { items: string[]; onChange: (items: string[]) => void }) {
   const [url, setUrl] = useState("");
+  // 칩 글자를 누르면 그 칩만 전체 주소로 펼친다 — hover 툴팁은 모바일에서 볼 수 없어 탭으로 연다
+  const [openItem, setOpenItem] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const urlRef = useRef<HTMLInputElement>(null);
+  // 칩이 있을 때 링크 입력은 평소엔 자리를 차지하지 않는다(첨부 진입점은 클립 아이콘 하나) — 칩 영역 빈 곳을 누르거나 Tab 으로 들어오면 나타난다
+  const [urlFocused, setUrlFocused] = useState(false);
   const add = (next: string[]) => onChange([...items, ...next.filter((x) => x && !items.includes(x))].slice(0, 10));
   const addUrl = () => {
     const v = url.trim();
@@ -515,17 +529,35 @@ function ReferenceField({ items, onChange }: { items: string[]; onChange: (items
     add([v]);
     setUrl("");
   };
-  const isUrl = (v: string) => /^https?:\/\/|^www\./i.test(v);
+  const urlHidden = items.length > 0 && !urlFocused && !url;
 
   return (
     <div
-      className="relative flex flex-wrap items-center gap-1.5 focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-[#4f7bff]"
+      // 칩·버튼이 아닌 빈 곳을 누르면 링크 입력으로 — 바로 붙여 넣을 수 있다
+      onMouseDown={(e) => {
+        if ((e.target as HTMLElement).closest("button, input")) return;
+        e.preventDefault();
+        urlRef.current?.focus();
+      }}
+      className={`relative flex flex-wrap items-center gap-1.5 ${FIELD_WITHIN_CLASS}`}
       style={{ minHeight: FIELD_BOX_STYLE.height, background: FIELD_BOX_STYLE.background, borderRadius: FIELD_BOX_STYLE.borderRadius, border: "1px solid #e2e8f0", padding: "6px 44px 6px 8px" }}
     >
-      {items.map((item) => (
-        <span key={item} className="inline-flex items-center gap-1 rounded-lg min-w-0" style={{ maxWidth: "100%", background: "#f1f5f9", padding: "3px 3px 3px 8px" }}>
-          {isUrl(item) ? <Link2 size={13} color="#64748b" className="shrink-0" aria-hidden /> : <FileText size={13} color="#64748b" className="shrink-0" aria-hidden />}
-          <span className="truncate" style={{ ...f, fontWeight: 500, fontSize: 12.5, color: "#334155", maxWidth: 180 }}>{item}</span>
+      {/* 붙인 링크·파일 — 한 줄에 하나씩, 3개까지 보이고 나머지는 "+N개 더"(InputField list). title 은 데스크톱 툴팁. */}
+      <InputField variant="list" toggleStyle={{ background: "#f1f5f9", height: 26 }} items={items.map((item) => ({ key: item, node: (
+        <div className="w-full flex min-w-0">
+        <span title={item} className="inline-flex items-center gap-1 rounded-lg min-w-0" style={{ maxWidth: "100%", background: "#f1f5f9", padding: "3px 3px 3px 8px" }}>
+          {isUrlLike(item) ? <Link2 size={13} color="#64748b" className="shrink-0" aria-hidden /> : <FileText size={13} color="#64748b" className="shrink-0" aria-hidden />}
+          {/* 접힌 칩은 실제 폭에 맞춘 가운데 말줄임(도메인 + 끝 경로 / 파일 이름 뒷부분·확장자가 남는다), 누르면(모바일 탭 포함) 전체 값으로 펼친다 */}
+          <button
+            type="button"
+            onClick={() => setOpenItem((cur) => (cur === item ? null : item))}
+            aria-expanded={openItem === item}
+            aria-label={openItem === item ? `${item} 접기` : `${item} 전체 보기`}
+            className="min-w-0 text-left rounded outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
+            style={{ ...f, fontWeight: 500, fontSize: 12.5, color: "#334155", background: "transparent", border: 0, padding: 0, cursor: "pointer", ...(openItem === item ? { wordBreak: "break-all" } : { flex: "0 1 auto" }) }}
+          >
+            {openItem === item ? item : <MiddleEllipsisText text={item} />}
+          </button>
           <button
             type="button"
             onClick={() => onChange(items.filter((x) => x !== item))}
@@ -536,29 +568,48 @@ function ReferenceField({ items, onChange }: { items: string[]; onChange: (items
             <X size={12} aria-hidden />
           </button>
         </span>
-      ))}
-      <input
+        </div>
+      ) }))} />
+      {/* 링크 입력 — 한 줄 값(InputField singleline): URL 이 중간에 "…"로 잘리지 않게 가로 스크롤 + 오른쪽 페이드 */}
+      <InputField
+        variant="singleline"
         id="req-ref"
+        ref={urlRef}
         value={url}
-        onChange={(e) => setUrl(e.target.value)}
+        onChange={setUrl}
+        containerClassName="flex-1"
+        // 칩이 있고 쓰는 중이 아니면 흐름에서 빼 둔다(빈 줄·"링크 추가" 같은 두 번째 첨부 수단을 만들지 않음). 포커스되면 "+N개 더" 옆이나 마지막 칩 아래에 칩 높이로 나타난다.
+        containerStyle={urlHidden
+          ? { position: "absolute", left: 8, top: 8, width: 1, height: 1, overflow: "hidden", opacity: 0 }
+          : items.length > 0 ? { flex: "1 1 120px", minWidth: 0 } : { minWidth: 120 }}
+        onFocus={() => setUrlFocused(true)}
+        // 붙여 넣은 값이 링크면 Enter 없이 바로 칩으로 — 여러 줄이면 줄마다 하나씩. 링크가 아니면 평소처럼 글자로 들어간다.
+        onPaste={(e) => {
+          const parts = e.clipboardData.getData("text").split(/\s+/).map((x) => x.trim()).filter(Boolean);
+          if (parts.length > 0 && parts.every(isUrlLike)) { e.preventDefault(); add(parts); setUrl(""); }
+        }}
+        bare
+        fadeColor={FIELD_BOX_STYLE.background}
+        placeholderStyle={PLACEHOLDER_STYLE}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); addUrl(); }
           if (e.key === "Backspace" && !url && items.length > 0) onChange(items.slice(0, -1));
         }}
-        onBlur={addUrl}
+        onBlur={() => { addUrl(); setUrlFocused(false); }}
         maxLength={500}
         placeholder={items.length > 0 ? "" : "링크를 붙여 넣거나 파일 첨부"}
-        className="rh-ref-input flex-1 bg-transparent"
+        className="bg-transparent"
         // 포커스 표시는 바깥 상자(focus-within 링)가 맡는다 — 안쪽 입력에는 테두리·outline·그림자를 두지 않는다.
-        style={{ ...FIELD_VALUE_STYLE, minWidth: items.length > 0 ? 60 : 120, height: 32, padding: "0 6px", border: 0, outline: "none", boxShadow: "none" }}
+        style={{ ...FIELD_VALUE_STYLE, height: items.length > 0 ? 26 : 32, padding: "0 6px", border: 0, outline: "none", boxShadow: "none" }}
       />
       <button
         type="button"
         onClick={() => fileRef.current?.click()}
         aria-label="파일 첨부"
         title="파일 첨부"
+        // 우상단 고정 — 칩 개수와 상관없이 같은 자리(빈 칸일 때는 48px 칸의 세로 가운데와 같다)
         className="rh-clip absolute flex items-center justify-center rounded-lg outline-none hover:bg-[#f1f5f9] focus-visible:ring-2 focus-visible:ring-[#4f7bff]"
-        style={{ right: 7, top: "50%", transform: "translateY(-50%)", width: 32, height: 32, background: "transparent", border: 0, color: "#64748b", cursor: "pointer" }}
+        style={{ right: 7, top: 7, width: 32, height: 32, background: "transparent", border: 0, color: "#64748b", cursor: "pointer" }}
       >
         <Paperclip size={16} aria-hidden />
       </button>
@@ -635,7 +686,17 @@ function RequestSummary({ task, template, draft }: { task: Task; template: TaskT
         </div>
       )}
       {draft.content.trim() && <SummaryField label="꼭 담을 내용" value={draft.content.trim()} />}
-      {draft.references.length > 0 && <SummaryField label="참고 자료" value={draft.references.join("\n")} />}
+      {draft.references.length > 0 && (
+        <div className="min-w-0">
+          <p style={{ ...f, fontWeight: 600, fontSize: 13.5, color: "#64748b", letterSpacing: "-0.2px" }}>참고 자료</p>
+          {/* 3개까지 보이고 나머지는 "+N개 더"(InputField list) */}
+          <div className="mt-1.5 flex flex-col items-start">
+            <InputField variant="list" toggleStyle={{ padding: "4px 0" }} items={draft.references.map((r) => ({ key: r, node: (
+              <p className="break-all" style={{ ...f, fontWeight: 500, fontSize: 15.5, color: "#1e293b", lineHeight: 1.6, letterSpacing: "-0.1px" }}>{r}</p>
+            ) }))} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -750,7 +811,7 @@ export default function RequestHelpScreen({
     onComplete(
       {
         taskId: draft.taskId,
-        topic: draft.topic.trim(),
+        topic: oneLine(draft.topic).trim(),
         templateTitle: template?.title ?? null,
         format: resolveFormat(formatDef, draft.format),
         content: draft.content.trim(),
@@ -771,9 +832,7 @@ export default function RequestHelpScreen({
     >
       {/* 모바일 보정 — 인라인 스타일보다 우선해야 해서 !important. 입력 글자 16px(iOS 확대 방지), 터치 영역 44px, 2열 → 1열. */}
       <style>{`
-        .rh-form { --rh-field-h: 48px; --rh-form-w: 600px; --rh-label-gap: 8px; --rh-field-gap: 20px; }
-        .rh-form input { text-overflow: ellipsis; }
-        .rh-ref-input::placeholder { font-size: ${PLACEHOLDER_STYLE.fontSize}px; font-weight: ${PLACEHOLDER_STYLE.fontWeight}; color: ${PLACEHOLDER_STYLE.color}; opacity: 1; }
+        .rh-form { --rh-field-h: 48px; --rh-label-gap: 8px; --rh-field-gap: 24px; }
         @media (max-width: 767px) {
           .rh-form input:not([type=file]):not(.rh-num), .rh-form textarea, .rh-form select { font-size: 16px !important; }
           .rh-pair { grid-template-columns: 1fr !important; gap: 8px !important; }
@@ -782,11 +841,11 @@ export default function RequestHelpScreen({
         .rh-hit::after { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
         @media (max-width: 639px) {
           .rh-card { padding: 16px !important; border-radius: 20px !important; }
-          .rh-clip { width: 44px !important; height: 44px !important; right: 3px !important; }
+          .rh-clip { width: 44px !important; height: 44px !important; right: 1px !important; top: 1px !important; }
         }
       `}</style>
-      {/* 1단계는 폼 한 열이라 폼 폭(600px)에 맞춰 가운데로 모은다 — 단계 표시·제목·하단 버튼도 같은 열에 정렬. 2단계는 2열이라 넓은 폭 그대로. */}
-      <div className="w-full mx-auto flex-1 flex flex-col" style={{ maxWidth: step === 0 ? "min(var(--home-container), calc(var(--rh-form-w) + 2 * var(--gap-screen-x)))" : STEP_MAX_WIDTH, padding: STEP_PADDING }}>
+      {/* 폭은 두 단계 모두 STEP_MAX_WIDTH — 600px 열로 좁혔다가 원래 화면과 비율이 달라져 되돌렸다(2026-10-16). */}
+      <div className="w-full mx-auto flex-1 flex flex-col" style={{ maxWidth: STEP_MAX_WIDTH, padding: STEP_PADDING }}>
         {/* 단계 표시는 상단에 고정한다 — 칸이 늘어나 페이지가 스크롤돼도 지금 어느 단계인지 보인다. */}
         <div className="sticky top-0 z-10 flex items-center gap-2 mb-5 flex-wrap" role="group" aria-label="진행 단계" style={{ background: "#f8fafc", padding: "12px 0 10px", marginTop: -12 }}>
           {isTiny ? (
@@ -820,10 +879,10 @@ export default function RequestHelpScreen({
 
         <div className="flex items-start justify-between gap-4 mb-6">
           <div className="min-w-0">
-            <h1 className="mb-2" style={{ ...f, fontWeight: 800, fontSize: isMobile ? typography.pageTitle.fontSize : 28, color: "#0a0a0a", letterSpacing: "-0.6px" }}>
+            <h1 className="mb-2" style={{ ...f, fontWeight: 800, fontSize: 22, color: "#0a0a0a", letterSpacing: "-0.5px" }}>
               {STEP_COPY[step].title}
             </h1>
-            <p style={{ ...f, fontWeight: 500, fontSize: 14, color: SUBTITLE_COLOR }}>
+            <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: SUBTITLE_COLOR }}>
               {STEP_COPY[step].sub}
             </p>
           </div>
@@ -876,28 +935,25 @@ export default function RequestHelpScreen({
                     </span>
                   </TapTooltip>
                 </div>
-                {/* 서술형이라 한 줄 input 대신 1줄 시작·최대 3줄 자동 확장(넘으면 칸 안 스크롤). */}
-                <AutoGrowTextarea
+                {/* 제목 성격의 서술 — 1줄에서 시작해 3줄까지 늘고 넘치면 세로 스크롤(InputField multiline + fieldOverflow.title).
+                    줄바꿈 문자는 넣지 않는다(singleLine) — 칸 안에서는 자동 줄바꿈으로만 감기고, Enter 는 다음 칸으로 이동한다. */}
+                <InputField
+                  variant="multiline"
+                  rows={fieldOverflow.title}
+                  singleLine
                   id="req-topic"
                   ref={topicRef}
                   value={draft.topic}
                   onChange={setTopic}
-                  maxRows={3}
-                  singleLine
                   aria-required
                   aria-invalid={!!errors.topic}
-                  // 주제는 한 덩어리 문장 — Enter는 줄바꿈 대신 다음 칸(꼭 담아야 할 내용)으로 이동한다.
+                  // 주제는 한 덩어리 문장 — Enter는 줄바꿈·제출이 아니라 다음 칸(꼭 담아야 할 내용)으로 이동한다(Shift+Enter 도 줄바꿈 없음).
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.nativeEvent.isComposing) document.getElementById("req-content")?.focus();
                   }}
-                  placeholder="만들고 싶은 내용이나 주제를 한 줄로 적어주세요."
-                  lineHeight={TEXT_LINE_H}
-                  paddingY={TEXT_PAD_Y}
+                  placeholder="만들고 싶은 내용이나 주제를 짧게 적어주세요."
                   placeholderStyle={PLACEHOLDER_STYLE}
-                  style={{
-                    ...FIELD_VALUE_STYLE, width: "100%",
-                    border: `1px solid ${errors.topic ? "#fca5a5" : "#e2e8f0"}`, borderRadius: 12, padding: "13px 14px", background: "#fbfcfe",
-                  }}
+                  style={{ ...TEXT_BOX_STYLE, border: `1px solid ${errors.topic ? "#fca5a5" : "#e2e8f0"}` }}
                 />
                 {errors.topic && <span role="alert" style={FIELD_ERROR_STYLE}>{errors.topic}</span>}
                 {!errors.topic && topicLen > 0 && topicLen < TOPIC_HINT_UNDER && (
@@ -911,18 +967,15 @@ export default function RequestHelpScreen({
                 <div className="flex items-center gap-1.5">
                   <label htmlFor="req-content" style={QUESTION_LABEL_STYLE}>꼭 담아야 할 내용</label>
                 </div>
-                <AutoGrowTextarea
+                <InputField
+                  variant="multiline"
                   id="req-content"
                   value={draft.content}
                   onChange={(v) => setDraft((d) => ({ ...d, content: v }))}
-                  maxRows={8}
                   placeholder="핵심 내용과 반드시 들어가야 할 이름·날짜·숫자 등을 적어주세요."
-                  lineHeight={TEXT_LINE_H}
-                  paddingY={TEXT_PAD_Y}
                   placeholderStyle={PLACEHOLDER_STYLE}
                   style={{
-                    ...FIELD_VALUE_STYLE, width: "100%",
-                    border: "1px solid #e2e8f0", borderRadius: 12, padding: "13px 14px", background: "#fbfcfe",
+                    ...TEXT_BOX_STYLE, border: "1px solid #e2e8f0",
                   }}
                 />
               </div>

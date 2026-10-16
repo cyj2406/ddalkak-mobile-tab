@@ -62,9 +62,13 @@ CTA 배경)는 **서비스 전용** 기준이다. 랜딩페이지의 CTA 블루(
 | `typography.body` | 13.5px/500, `-0.2px`, `#4b5262` | 안내 문구 본문 |
 | `typography.caption` | 12px/500, `-0.2px`, `color.text.muted` | 라벨, 보조 설명 |
 | `typography.button` | 14px/700, `-0.3px` | 버튼 라벨(참고용 — `Button` 컴포넌트가 size별로 자체 처리) |
-| `typography.formLabel` | 15px/600, `color.text.primary` | 입력 폼 필드 라벨(요청 작성 폼) |
-| `typography.formValue` | 16px/500, `color.text.primary` | 입력값 — 셀렉트에서 고른 값·타이핑한 글자·스테퍼 숫자(데스크톱). 라벨보다 크고 덜 굵게 |
-| `typography.formPlaceholder` | 14px/500, `color.text.placeholder` | 입력칸 placeholder. 값보다 작고 연하게 |
+| `typography.formLabel` | 14px/600, `color.text.primary` | 입력 폼 필드 라벨(요청 작성 폼) |
+| `typography.formSelectValue` | 14px/600, `color.text.primary` | 셀렉트에서 고른 값·스테퍼 숫자(데스크톱) |
+| `typography.formValue` | 14px/500, `color.text.primary` | 타이핑한 글자 |
+| `typography.formPlaceholder` | 14px/500, `color.text.placeholder` | 입력칸 placeholder — 글자 색만 한 톤 연하게 |
+
+요청 작성 폼 글자 크기는 원래 화면(dev 요청 작성 도우미) 비율을 따른다 — 2026-10-16 라벨 15·값 16·제목 28px로 키웠다가 비율이 달라져 같은 날 되돌렸다.
+768px 미만에서는 iOS 확대 방지로 입력 글자만 16px.
 
 크기·굵기·행간이 필요한 만큼만 세트로 묶여 있고(제목 계열은 자간까지, 본문/캡션은
 색까지 포함), 새 프리셋을 추가할 때도 "화면에 실제로 반복되는 조합"만 등록한다 —
@@ -240,6 +244,45 @@ import { Badge } from "@/app/components/common/Badge";
 ESC 닫기)을 뽑아냈다. `PurchaseConfirmDialog`와 `CancelSubscriptionDialog`,
 `PaymentMethodDialog`가 이걸 함께 쓴다 — 확인용 모달이 반복될 때마다 chrome을
 새로 쓰지 않기 위해서다.
+
+### `InputField` — `src/app/components/common/InputField.tsx` (2026-10-16)
+
+긴 입력이 들어갈 수 있는 칸의 넘침 규칙을 `variant` 하나로 고른다. 개별 필드에 넘침 CSS를 덧붙이지 않고,
+새 폼 필드도 이 컴포넌트를 쓰면 같은 규칙이 걸린다. 줄 수·폭·개수는 `styleTokens.ts`의 `fieldOverflow`.
+
+| variant | 쓰는 곳 | 규칙 |
+|---|---|---|
+| `multiline` | 주제(`rows={fieldOverflow.title}` 1~3줄, 줄바꿈 문자 없음), 꼭 담아야 할 내용(3~8줄), 워크스페이스 ★ 여러 줄 칸·◆ 긴 직접 입력(`customRows` > 3), 앞으로 추가될 여러 줄 칸 | 높이는 내용 길이로만 — 3줄(`minRows`, 92px)에서 시작해 8줄(`maxRows`, 202px)까지 자동 확장, 넘치면 칸 안 세로 스크롤. 포커스가 들어오고 나가도 높이·스크롤 위치는 그대로(테두리·링만 바뀜). 저장된 값이 복원돼도 첫 화면부터 내용에 맞는 높이(웹폰트 로드 뒤 한 번 더 잼). 접기·"더 보기"·하단 페이드·글자 수 제한 없음 |
+| `singleline` | 참고 자료 링크 입력, 워크스페이스 ★ 짧은 값(40자)·◆ 짧은 직접 입력·주제 수정 | 줄바꿈·말줄임 없음(값은 `text-overflow: clip`, 비어 있을 때 placeholder만 "…"). 가로 스크롤, Tab으로 들어오면 커서를 끝에 두고 그 위치까지 스크롤. 포커스가 없을 때 넘치면 오른쪽 끝 32px(`fadeWidth`) 페이드, 떠날 때 처음으로 되감음 |
+| `list` | 참고 자료 칩, 2단계 정리한 요청의 참고 자료 | 3개(`visibleCount`)까지 보이고 나머지는 "+N개 더 / 접기". 감싸는 상자 없이 항목을 그대로 내보내 부모 배치(칩 줄바꿈·세로 목록)를 따른다 |
+
+- 칸 안 스크롤바는 `theme.css`의 `.ui-field-scroll` — 6px 얇게. 여러 줄 칸은 실제로 넘칠 때(`data-overflow="true"`)만 늘 보이고, 넘치지 않으면 없다.
+  "내용이 더 있음"은 이 스크롤바 하나로만 알린다(하단 페이드는 보류 — 부족하면 이후 판단).
+- 모바일 키보드: 포커스한 칸이 커지거나 `visualViewport`가 줄면 칸 아래 끝이 보이도록 가장 가까운 스크롤 영역을 올린다
+  (375×360 키보드 가정에서 8줄 입력 중 칸 아래 끝 348px < 보이는 영역 360px 확인).
+- `multiline`은 `AutoGrowTextarea`의 `minRows`(항상 적용)·`collapse="none"` 옵션으로 만든다. 화면 코드에서 `AutoGrowTextarea`를
+  직접 쓰는 곳은 없다(2026-10-16 워크스페이스 카드까지 교체) — 새 칸은 `InputField`를 쓴다.
+- 글자 수: 여러 줄 칸은 제한·카운터 없음(2026-10-16 1,000자 상한·카운터·경고색 제거). 짧은 값만 `requestCards.ts` `TEXT_LIMITS.short` 40자.
+  서버 쪽 길이 제한은 미확인 — `docs/known-issues.md` 3절.
+- 바탕·포커스(2026-10-16): 셀렉트·한 줄·여러 줄 칸 모두 바탕 `FIELD_SURFACE`(`color.surface.subtle` #f8fafc) 고정 — 값이 차도 바뀌지 않는다.
+  빈 칸/채운 칸은 placeholder 색(`color.text.placeholder`)과 글자 색으로만 구분. 포커스는 `FIELD_CLASS`(`.ui-field`, 칸 자신) /
+  `FIELD_WITHIN_CLASS`(`.ui-field-within`, 스테퍼·참고 자료처럼 입력을 품은 상자) — 테두리 `--brand` + 1px `--brand` 링(theme.css, 인라인 테두리를 이기려고 !important).
+  키보드 Tab 이동에서도 같은 표시 확인. 한 줄 칸은 `autoComplete="off"`이고 theme.css가 `:-webkit-autofill` 바탕 전환을 막는다
+  — 크롬 자동 완성이 주제 칸을 파랗게 칠하던 문제(값이 찬 칸만 파래 보여 포커스로 오해됨).
+- 워크스페이스 칸 높이: 한 줄 칸은 드롭다운과 같은 48px(`controlHeight.lg`, 예전 약 50px), 주제 수정은 옆 버튼에 맞춰 36px.
+- 주제 칸(2026-10-16 singleline → multiline): 1줄(48px)에서 시작해 3줄(92px, `fieldOverflow.title`)에서 멈추고 세로 스크롤 — 제목 성격이라 상한을 짧게.
+  줄바꿈 문자는 넣지 않는다(`singleLine` — 칸 안에서는 자동 줄바꿈으로만 감김). Enter·Shift+Enter는 다음 칸(꼭 담아야 할 내용)으로 이동,
+  붙여 넣은 줄바꿈은 공백으로. 이전 저장값에 줄바꿈이 있어도 불러올 때·요청문(`주제: …` 한 줄)·워크스페이스로 넘길 때 공백으로 바꾼다(`oneLine`).
+  placeholder "만들고 싶은 내용이나 주제를 짧게 적어주세요."
+- 칩(참고 자료): 한 줄에 칩 하나씩, 3개 + "+N개 더 / 접기"(`InputField` list), 첨부 진입점은 우측 클립 아이콘 하나("링크 추가" 같은 두 번째 수단 없음). 칩이 있으면 링크 입력은 평소엔 흐름에서 빠져 칸 아래 빈 줄이 없고(위·아래 여백 같음),
+  칩 영역의 빈 곳을 누르거나 Tab으로 들어오면 "+N개 더" 옆이나 마지막 칩 아래에 칩 높이(26px)로 나타난다. 붙여 넣은 값이 링크면 Enter 없이 바로 칩이 되고
+  (여러 줄이면 줄마다 하나), 링크가 아니면 글자로 들어가 Enter·포커스 이탈 때 칩이 된다. 빈 상태 placeholder "링크를 붙여 넣거나 파일 첨부"는 그대로.
+  칩 이름은 `common/MiddleEllipsisText` — 칩이 실제로 차지할 수 있는 폭을 재서(같은 글꼴 canvas measureText) 넘칠 때만 가운데를 줄인다(여유가 있으면 전체).
+  줄일 때는 남길 글자의 65%를 뒤쪽에(`middleEllipsis.ts` `TAIL_SHARE`) — "(붙임10)(2026-2)…" 같은 공통 접두사보다 구분되는 뒷부분·확장자를 남긴다.
+  URL은 `compactUrl` — 스킴·`www.`를 떼고 넘치면 `도메인/…/끝 경로`. 파일 이름은 원본 그대로(맥 자모 분리 NFD도 정규화하지 않음), 글자(grapheme) 단위로 잘라 음절이 갈라지지 않는다.
+  전체 값: 데스크톱은 칩 `title` 툴팁, 칩 글자를 누르면(모바일 탭 포함) 그 칩만 전체 값으로 줄바꿈해 펼친다.
+  클립(첨부) 아이콘은 칸 우상단 고정(데스크톱 위·오른쪽 8px, 640px 미만 44px 터치 영역으로 2px) — 칩 개수와 상관없이 같은 자리.
+- 남은 확인: 실기기 모바일 키보드 동작(iOS Safari `visualViewport`) — `docs/known-issues.md` 2절.
 
 ## 구독·결제(mock) — `src/app/state/subscription.ts`
 
@@ -627,8 +670,8 @@ Hover·focus·selected·disabled 색 로직 자체는 건드리지 않았다(값
 
 - 전제: 템플릿은 디자인만 정한다. 선택형 입력은 전부 드롭다운(라디오·칩 금지, 높이 고정). 생성 엔진이 제어하지 못하는 값은 묻지 않는다.
 - PPT 검수는 요청 작성 도우미의 만들 작업 목록에서 뺀다(`EXCLUDED_TASK_IDS`, 홈 등 다른 목록에는 남는다).
-- 요청 작성 4행: ① 만들 작업(전폭) ② 주제(유일한 필수 `*`, 3줄 자동 확장, 8자 미만이면 "조금 더 자세히" 힌트, 입력칸 아래 예시 링크 없음)
-  ③ 꼭 담아야 할 내용(선택, 1줄 시작·8줄까지 확장, "선택" 표기 없음(필수 `*`는 주제에만)·테두리는 다른 칸과 같음, AI가 채우지 않음 —
+- 요청 작성 4행: ① 만들 작업(전폭) ② 주제(유일한 필수 `*`, 1~3줄 자동 확장 — `InputField` multiline + `fieldOverflow.title`, 8자 미만이면 "조금 더 자세히" 힌트, 입력칸 아래 예시 링크 없음)
+  ③ 꼭 담아야 할 내용(선택, `InputField` multiline — 3줄에서 시작해 8줄까지 확장·넘치면 칸 안 스크롤, 포커스와 무관한 높이, 글자 수 제한 없음, "선택" 표기 없음(필수 `*`는 주제에만)·테두리는 다른 칸과 같음, AI가 채우지 않음 —
   워크스페이스의 `contentCard` ★ 카드에 미리 채워진다) ④ 형식축 + 참고 자료(2열). 형식축은 `requestCards.ts` `FORMAT_BY_TASK`
   드롭다운(기본값 선택·빈 선택지 없음, 필요하면 `?` 툴팁·아래 회색 `helper` 한 줄). 생성 엔진이 실제로 제어하는 값만 둔다 —
   문서 분량·발표 시간·상세페이지 올릴 곳·슬라이드 수는 두지 않는다. 한 라벨 아래 입력이 둘일 수 있다(`FormatDef.fields`).
@@ -637,8 +680,8 @@ Hover·focus·selected·disabled 색 로직 자체는 건드리지 않았다(값
   768px 이상 오른쪽 끝 폭 36px ▲▼ 세로 스택(글리프 10px #9AA0AB, hover #F0F3F8, 숫자 왼쪽 정렬). 길게 누르면 500ms 뒤 120ms 간격 연속 증감,
   경계값 버튼은 opacity .3 + pointer-events none, 직접 입력(inputmode numeric) 후 blur 때 범위 보정 + 회색 안내. 상자형 입력 높이는 모든 폭에서 48px(`--rh-field-h`).
   타이포·간격(2026-10-16): 라벨 `typography.formLabel` · 값 `formValue` · placeholder `formPlaceholder`(위 표). 라벨↔입력 8px(`--rh-label-gap`),
-  필드 간 20px(`--rh-field-gap`). 서술형 칸은 줄 높이 22px · 위아래 여백 12px(1줄일 때 48px). 1단계는 폼 카드 최대 폭 600px(`--rh-form-w`, 안쪽 여백 24px · 640px 미만 16px)이고
-  단계 표시·제목·하단 버튼도 같은 열로 가운데 정렬(2단계는 2열이라 넓은 폭 유지). 제목 28px(640px 미만 24px = `typography.pageTitle`), 설명 14px.
+  필드 간 24px(`--rh-field-gap`). 서술형 칸은 줄 높이 22px · 위아래 여백 12px(1줄일 때 48px). 폼 폭은 두 단계 모두 화면 폭을 채우다 `pageContainerWidth`(1120px)에서 멈춘다(태블릿 구간 `--home-container` 720px는 쓰지 않음)
+  — 600px 가운데 열로 좁혔다가 원래 화면과 비율이 달라져 같은 날 되돌렸다. 카드 안쪽 여백 24px · 640px 미만 16px. 제목 22px/800, 설명 13.5px(원래 값).
   모바일은 `--gap-screen-x`(16px) 여백 안에서 카드가 화면 폭을 채운다.
   영상은 "영상 형식" = 비율 드롭다운(세로 9:16 기본/정사각/가로) + 길이 스테퍼(폭 112px, 두 칸 간격 6px < 참고 자료와의 열 간격 16px). 고른 길이 ÷ 3초가 워크스페이스 장면 흐름 후보의 장면 수 상한이고 자막 카드 안내도 길이를 따른다.
   브로셔 장수는 소개 문구 분량(2장 이하 한 줄)과 "장별 구성" 카드 후보를 바꾼다. 사진·그림은 "화면 비율" 정사각(1:1)/세로(4:5)/가로(16:9)/세로 긴(9:16). 선택지 라벨에 플랫폼 이름·엔진이 못 지키는 수치를 쓰지 않고, 필요하면 `?` 툴팁에 둔다. 형식축이 없는 작업(워드·한글·엑셀)은 참고 자료가 왼쪽, 오른쪽은 비운다(전폭으로 늘리지 않음).
@@ -655,8 +698,8 @@ Hover·focus·selected·disabled 색 로직 자체는 건드리지 않았다(값
 - 워크스페이스 카드(`components/workspace/RequestCardsPanel.tsx`): ◆ = 후보 + "직접 입력"을 드롭다운으로(후보 전부 12자 이하면 반 폭, 아니면 전폭),
   첫 후보 기본·비울 수 없음. ★ = 후보·예시 없는 빈 칸(비우면 `excluded`로 결과물에서 뺀다), 연속한 짧은 ★는 한 장에 2열.
   상단 고정 "주제 ○○○ [수정]", 우측 "전부 추천대로", 진행 점, "요청 내용 보기" 기본 접힘. 요청 작성의 형식축 값은 카드에서 다시 묻지 않는다.
-- 넘침 규칙: 서술형 칸은 `common/AutoGrowTextarea`(1줄 시작, `maxRows` 3/8, 넘으면 칸 안 스크롤, 포커스가 떠나면 2줄 접힘 + "…"(누르면 바로 펼쳐짐, "더 보기" 버튼 없음),
-  높이 변화는 `motion.fast` transition — 거울 textarea로 재서 px→px로만 바뀐다, resize 핸들 없음). 주제·꼭 담을 내용에는 글자 수 제한을 두지 않는다.
+- 넘침 규칙: 요청 작성 폼과 워크스페이스 카드 모두 공용 `InputField`(위 "공통 컴포넌트" 절, 2026-10-16). 높이 변화는 `motion.fast` transition —
+  거울 textarea로 재서 px→px로만 바뀐다, resize 핸들 없음. 주제·꼭 담을 내용 모두 글자 수 제한 없음.
   짧은 사실 값만 1줄 input + 40자 제한.
 - 카드 생김새는 상세 프롬프트 카드(App.tsx `CARD_SHELL`·`FcHeader`·`CardFooter`) 값을 그대로 쓴다.
 

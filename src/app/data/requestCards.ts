@@ -21,6 +21,12 @@
 
 export type CardKind = "pick" | "write";
 
+/**
+ * 입력 글자 수 상한 — 기간·연락처 같은 짧은 사실 값(★ 한 줄 칸)만 40자. 여러 줄 서술(꼭 담을 내용·★ 여러 줄 칸)에는
+ * 상한을 두지 않는다(2026-10-16 1,000자 상한·카운터 제거).
+ */
+export const TEXT_LIMITS = { short: 40 } as const;
+
 
 /** 후보를 만들 때 쓸 수 있는 값 — 주제, ★ 이름 카드의 값, 앞 카드들의 답(id → 값). */
 export interface CardContext {
@@ -39,11 +45,11 @@ export interface RequestCardDef {
   candidates?: (ctx: CardContext) => [string, string, string];
   /** ◆ 정해진 선택지(문서 종류·청중 등) — AI 후보 대신 이 목록을 후보로 쓴다 */
   options?: string[];
-  /** ◆ 직접 입력 칸의 최대 줄 수 — 짧은 서술 3, 긴 서술 8 */
+  /** ◆ 직접 입력 칸 — 3 이하면 한 줄 칸(InputField singleline), 그보다 크면 여러 줄 칸(multiline, fieldOverflow 줄 수) */
   customRows?: number;
   /** ★ 입력 형식 안내(값 예시가 아니라 "무엇을 적는지"만) */
   placeholder?: string;
-  /** ★ 여러 줄 서술(최대 8줄 자동 확장). 아니면 40자 한 줄 칸 */
+  /** ★ 여러 줄 서술(InputField multiline, 글자 수 제한 없음). 아니면 TEXT_LIMITS.short 자 한 줄 칸 */
   multiline?: boolean;
   /** 이 ★ 카드 값이 뒤 카드 후보의 이름(ctx.name)으로 쓰인다 */
   nameCard?: boolean;

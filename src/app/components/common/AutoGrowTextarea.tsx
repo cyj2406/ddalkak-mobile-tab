@@ -12,9 +12,11 @@ import { motion } from "@/app/styleTokens";
  *   - 긴 서술(꼭 담을 내용 등)       maxRows 8
  *   - 기간·비율처럼 짧은 값은 이 컴포넌트가 아니라 40자 제한 input 을 쓴다.
  *
- * 포커스가 떠났을 때 내용이 2줄을 넘으면 2줄로 접고 넘치는 부분은 "…"로 자른다 — 다 쓴 긴 칸이
- * 아래 칸으로 내려간 뒤에도 화면을 계속 차지하지 않게 한다. 접힌 칸을 누르면 바로 펼쳐져 이어서 쓴다
- * ("더 보기" 같은 별도 버튼은 두지 않는다 — 입력칸은 읽는 곳이 아니라 쓰는 곳이다).
+ * collapse="clamp"(기본)면 포커스가 떠났을 때 내용이 collapsedRows(기본 2)줄을 넘으면 그 줄로 접고 마지막 줄을 "…"로 자른다.
+ * 접힌 칸을 누르면 바로 펼쳐져 이어서 쓴다.
+ *
+ * collapse="none"(공용 InputField multiline, 2026-10-16)이면 접지 않는다 — 높이는 포커스와 무관하게 내용 길이로만 정해지고
+ * (minRows ~ maxRows), 포커스가 들어오고 나가도 높이·스크롤이 변하지 않는다. maxRows 를 넘으면 칸 안 스크롤, 그때만 스크롤바가 보인다.
  *
  * singleLine 이면 Enter 로 줄바꿈을 넣지 않는다(주제처럼 "한 줄"로 쓰는 값 — 길면 줄바꿈 없이 감겨 보인다).
  *
@@ -35,13 +37,20 @@ export interface AutoGrowTextareaProps extends Omit<TextareaHTMLAttributes<HTMLT
   style?: CSSProperties;
   /** placeholder 오버레이에만 덮어쓸 글자 스타일(크기·색) — 없으면 입력 글자와 같은 모양, 색만 #9ca3af */
   placeholderStyle?: CSSProperties;
+  /** 최소 줄 수 — 포커스와 무관하게 항상(비어 있어도 이 높이). 없으면 1줄부터 */
+  minRows?: number;
+  /** 포커스가 떠났을 때 접는 줄 수(collapse="clamp" 일 때) */
+  collapsedRows?: number;
+  /** 접는 방식 — "clamp": 포커스가 떠나면 collapsedRows 줄 + 마지막 줄 "…"(기본), "none": 접지 않는다(높이는 내용으로만 정해진다) */
+  collapse?: "clamp" | "none";
 }
 
-const COLLAPSED_ROWS = 2;
+const DEFAULT_COLLAPSED_ROWS = 2;
+
 const BORDER = 1;
 
 export const AutoGrowTextarea = forwardRef<HTMLTextAreaElement, AutoGrowTextareaProps>(function AutoGrowTextarea(
-  { value, onChange, maxRows, singleLine, lineHeight = 22, paddingY = 13, style, placeholderStyle, placeholder, onFocus, onBlur, onKeyDown, ...props },
+  { value, onChange, maxRows, singleLine, lineHeight = 22, paddingY = 13, style, placeholderStyle, minRows, collapsedRows = DEFAULT_COLLAPSED_ROWS, collapse = "clamp", placeholder, className, onFocus, onBlur, onKeyDown, ...props },
   ref,
 ) {
   const innerRef = useRef<HTMLTextAreaElement>(null);
@@ -62,11 +71,13 @@ export const AutoGrowTextarea = forwardRef<HTMLTextAreaElement, AutoGrowTextarea
       if (w !== lastWidth) { lastWidth = w; setWidthTick((t) => t + 1); }
     });
     ro.observe(el);
+    // 웹폰트가 늦게 로드되면 글자 폭이 바뀌어 줄 수가 달라진다 — 저장된 값이 복원된 첫 화면에서도 맞는 높이가 되게 한 번 더 잰다
+    document.fonts?.ready.then(() => setWidthTick((t) => t + 1)).catch(() => {});
     return () => ro.disconnect();
   }, []);
 
   const heightFor = (rows: number) => rows * lineHeight + paddingY * 2 + BORDER * 2;
-  const collapsed = !focused && overflowsCollapsed;
+  const collapsed = collapse === "clamp" && !focused && overflowsCollapsed;
 
   useLayoutEffect(() => {
     const el = innerRef.current;
@@ -75,10 +86,13 @@ export const AutoGrowTextarea = forwardRef<HTMLTextAreaElement, AutoGrowTextarea
     if (collapsed) return; // 접힌 동안엔 아래 미리보기가 대신 보인다(높이 측정은 펼칠 때 다시 한다)
     mirror.value = value || " ";
     const content = mirror.scrollHeight + BORDER * 2;
-    setOverflowsCollapsed(content > heightFor(COLLAPSED_ROWS) + 1);
+    setOverflowsCollapsed(content > heightFor(collapsedRows) + 1);
     const max = heightFor(maxRows);
-    el.style.height = `${Math.min(content, max)}px`;
+    const min = minRows ? heightFor(minRows) : 0;
+    el.style.height = `${Math.max(Math.min(content, max), min)}px`;
     el.style.overflowY = content > max ? "auto" : "hidden";
+    // 넘칠 때만 스크롤바를 보인다(theme.css .ui-field-scroll[data-overflow])
+    el.dataset.overflow = content > max ? "true" : "false";
   });
 
   const boxStyle: CSSProperties = { ...style, lineHeight: `${lineHeight}px`, paddingTop: paddingY, paddingBottom: paddingY, boxSizing: "border-box" };
@@ -108,7 +122,7 @@ export const AutoGrowTextarea = forwardRef<HTMLTextAreaElement, AutoGrowTextarea
         onBlur={(e) => { setFocused(false); onBlur?.(e); }}
         placeholder={placeholder}
         // 실제 placeholder 는 투명하게 두고(스크린리더용) 아래 한 줄 오버레이로 그린다 — textarea placeholder 는 "…" 말줄임이 안 된다.
-        className="w-full outline-none resize-none placeholder:text-transparent"
+        className={`ui-field-scroll w-full outline-none resize-none placeholder:text-transparent ${className ?? ""}`}
         style={{
           ...boxStyle,
           transition: `height ${motion.fast}`,
@@ -125,7 +139,8 @@ export const AutoGrowTextarea = forwardRef<HTMLTextAreaElement, AutoGrowTextarea
           style={{
             ...style, lineHeight: `${lineHeight}px`, paddingTop: paddingY, paddingBottom: paddingY, boxSizing: "border-box",
             position: "absolute", top: 0, left: 0, width: "100%", height: heightFor(1),
-            border: "1px solid transparent", background: "transparent", color: "#9ca3af",
+            // style 에 borderColor·backgroundColor 같은 개별 속성이 있으면 아래 축약형보다 나중에 적용되므로 개별 속성으로도 지운다
+            border: "1px solid transparent", borderColor: "transparent", background: "transparent", backgroundColor: "transparent", color: "#9ca3af",
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", pointerEvents: "none",
             ...placeholderStyle,
           }}
@@ -142,7 +157,7 @@ export const AutoGrowTextarea = forwardRef<HTMLTextAreaElement, AutoGrowTextarea
           className="w-full"
           style={{ ...style, lineHeight: `${lineHeight}px`, paddingTop: paddingY, paddingBottom: paddingY, boxSizing: "border-box", cursor: "text", whiteSpace: "pre-wrap", wordBreak: "break-word" }}
         >
-          <span style={{ display: "-webkit-box", WebkitLineClamp: COLLAPSED_ROWS, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{value}</span>
+          <span style={{ display: "-webkit-box", WebkitLineClamp: collapsedRows, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{value}</span>
         </div>
       )}
     </div>

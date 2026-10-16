@@ -96,11 +96,14 @@ export const typography = {
   /** 버튼 라벨(lg 사이즈 기준 — md 는 컴포넌트가 자체 축소) */
   button: { ...f, fontWeight: 700, fontSize: 14, letterSpacing: "-0.3px" },
   /**
-   * 입력 폼 3단 위계(요청 작성 폼). 라벨은 값보다 작지만 굵게, 값은 크지만 보통 굵기,
-   * placeholder 는 값보다 작고 연하게 — 라벨 ↔ 값 ↔ 입력 전 상태가 한눈에 갈린다.
+   * 입력 폼 글자(요청 작성 폼) — 크기는 원래 화면(dev 요청 작성 도우미) 비율 그대로 14px(2026-10-16, 16px로 키웠다가 되돌림).
+   * 라벨·고른 값은 600, 타이핑한 글자는 500. 입력 전/후 구분은 placeholder 색(한 톤 연한 회색)이 맡는다.
    */
-  formLabel: { ...f, fontWeight: 600, fontSize: 15, color: color.text.primary },
-  formValue: { ...f, fontWeight: 500, fontSize: 16, color: color.text.primary },
+  formLabel: { ...f, fontWeight: 600, fontSize: 14, color: color.text.primary },
+  /** 고른 값(셀렉트) — 라벨과 같은 크기·굵기 */
+  formSelectValue: { ...f, fontWeight: 600, fontSize: 14, color: color.text.primary },
+  /** 타이핑한 글자 — 보통 굵기 */
+  formValue: { ...f, fontWeight: 500, fontSize: 14, color: color.text.primary },
   formPlaceholder: { ...f, fontWeight: 500, fontSize: 14, color: color.text.placeholder },
 } as const;
 
@@ -162,6 +165,24 @@ export const shadow = {
 export const controlHeight = {
   md: 44,
   lg: 48,
+} as const;
+
+/**
+ * 입력 넘침 규칙 — 공용 InputField 의 세 variant 가 쓰는 줄 수·폭·개수(2026-10-16).
+ *   multiline  : 높이는 내용 길이로만 — minRows 줄(22×3 + 24 + 2 = 92px)에서 시작해 maxRows 줄(202px)까지 늘고, 넘치면 칸 안 세로 스크롤
+ *                (그때만 스크롤바). 포커스 여부와 무관(들어오고 나가도 높이 그대로). 접기·"더 보기"·글자 수 제한 없음.
+ *   singleline : 줄바꿈·말줄임 없이 가로 스크롤. 포커스가 없을 때 넘치면 오른쪽 끝 fadeWidth 폭 페이드.
+ *   list       : 항목 visibleCount 개까지 보이고 나머지는 "+N개 더"로 접는다.
+ * lineHeight·paddingY 는 글자 1줄이 48px 상자(controlHeight.lg) 가운데 오도록 맞춘 값 — (48 − 2 − 22) / 2 = 12.
+ */
+export const fieldOverflow = {
+  lineHeight: 22,
+  paddingY: 12,
+  multiline: { minRows: 3, maxRows: 8 },
+  /** 주제처럼 제목 성격의 서술 — 1줄에서 시작해 3줄(22×3 + 24 + 2 = 92px)에서 멈추고 세로 스크롤. 더 길게 쓰면 스크롤이 길이 신호가 된다 */
+  title: { minRows: 1, maxRows: 3 },
+  singleline: { fadeWidth: 32 },
+  list: { visibleCount: 3 },
 } as const;
 
 /** 페이지 콘텐츠 최대 폭 — 홈 화면의 --home-container(theme.css) 데스크톱 상한과 같은 값. */
