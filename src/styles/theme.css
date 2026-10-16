@@ -495,6 +495,11 @@
   box-shadow: 0 0 0 1px var(--brand) !important;
   outline: none !important;
 }
+/* 오류가 있는 칸(aria-invalid)은 포커스 중에도 오류색 테두리·링 — 파란 포커스가 오류 표시를 덮지 않게(기존 오류 토큰 --destructive) */
+.ui-field[aria-invalid="true"]:focus-visible {
+  border-color: var(--destructive) !important;
+  box-shadow: 0 0 0 1px var(--destructive) !important;
+}
 /* 브라우저 자동 완성(크롬 autofill)이 칸을 파란 바탕으로 칠하지 않게 — 크롬은 자동 완성 바탕을 !important 로 칠해
    바탕색으로는 못 덮는다. 칸 안쪽을 칸 바탕색(#f8fafc = color.surface.subtle, InputField FIELD_SURFACE)의 inset 그림자로 덮고,
    포커스 중이면 그 위에 같은 1px 브랜드 링을 더한다. 글자색도 크롬 기본 대신 원래 글자색. */

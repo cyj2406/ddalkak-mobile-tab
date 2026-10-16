@@ -126,7 +126,8 @@ const PLACEHOLDER_STYLE = typography.formPlaceholder;
 const TEXT_BOX_STYLE = { ...FIELD_VALUE_STYLE, width: "100%", borderRadius: 12, padding: "0 14px" } as const;
 /** 필수 표시 — 필수 칸이 주제 하나뿐이라 *도 주제에만 붙는다. */
 const REQUIRED_MARK_STYLE = { ...f, fontWeight: 700, fontSize: 15, color: color.brand, lineHeight: 1 } as const;
-const FIELD_ERROR_STYLE = { ...f, fontWeight: 600, fontSize: 12, color: "#d4183d" } as const;
+/** 필드 아래 오류 — 기존 오류 토큰(theme.css --destructive, #d4183d) */
+const FIELD_ERROR_STYLE = { ...f, fontWeight: 600, fontSize: 12, color: "var(--destructive)" } as const;
 /** 작업 선택·비율/장수 드롭다운이 함께 쓰는 트리거 모양(기존 작업 선택 트리거 그대로). */
 /** 상자형 입력(작업 선택·형식 값·스테퍼·참고 자료) — 높이는 CSS 변수 --rh-field-h(48px, .rh-form 에서 정의) */
 const FIELD_BOX_STYLE = { height: "var(--rh-field-h, 48px)", ...FIELD_SURFACE, borderRadius: 12 } as const;
@@ -139,12 +140,15 @@ function TaskSelectField({
   taskId,
   onSelect,
   error,
+  describedBy,
   triggerRef,
   native,
 }: {
   taskId: string | null;
   onSelect: (id: string) => void;
   error?: string;
+  /** 오류 문구 요소 id — 오류가 있을 때 aria-describedby 로 잇는다 */
+  describedBy?: string;
   triggerRef: React.RefObject<HTMLElement | null>;
   /** 모바일 — 커스텀 목록은 터치 스크롤이 어긋나므로 분류(optgroup)가 있는 네이티브 select 를 쓴다 */
   native?: boolean;
@@ -234,6 +238,7 @@ function TaskSelectField({
           ref={triggerRef as React.RefObject<HTMLSelectElement>}
           aria-label="만들 작업"
           aria-invalid={!!error}
+          aria-describedby={error ? describedBy : undefined}
           value={taskId ?? ""}
           onChange={(e) => e.target.value && onSelect(e.target.value)}
           className={`w-full appearance-none outline-none ${FIELD_CLASS}`}
@@ -263,6 +268,7 @@ function TaskSelectField({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-invalid={!!error}
+        aria-describedby={error ? describedBy : undefined}
         className={`w-full flex items-center gap-2.5 outline-none ${FIELD_CLASS}`}
         style={{ ...FIELD_BOX_STYLE, padding: "0 14px", border: `1px solid ${error ? "#fca5a5" : "#e2e8f0"}` }}
       >
@@ -759,7 +765,6 @@ export default function RequestHelpScreen({
   const formatDef = draft.taskId ? formatForTask(draft.taskId) : undefined;
   const hasAnyInput = !!draft.topic.trim() || Object.keys(draft.format).length > 0 || !!draft.content.trim() || draft.references.length > 0;
   const topicLen = draft.topic.trim().length;
-  const missingHint = !draft.taskId ? "만들 작업을 골라주세요" : !draft.topic.trim() ? "주제를 적어주세요" : null;
 
   useEffect(() => {
     try {
@@ -774,9 +779,10 @@ export default function RequestHelpScreen({
     setSelectedKey(undefined);
   }, [draft.taskId]);
 
+  // 오류 문구는 그 칸을 고치기 시작하면 바로 사라진다(값이 아직 비어 있어도 — 다시 누르면 다시 검사한다)
   const setTopic = (value: string) => {
     setDraft((d) => ({ ...d, topic: value }));
-    if (value.trim()) setErrors((e) => ({ ...e, topic: undefined }));
+    setErrors((e) => (e.topic ? { ...e, topic: undefined } : e));
   };
 
 
@@ -786,13 +792,21 @@ export default function RequestHelpScreen({
     setErrors((e) => ({ ...e, task: undefined }));
   };
 
+  // 필수 칸 — 화면 위에서 아래 순서. 칸이 늘면 여기에 한 줄 추가한다.
+  const requiredFields: { key: keyof typeof errors; empty: boolean; message: string; el: () => HTMLElement | null }[] = [
+    { key: "task", empty: !draft.taskId, message: "만들 작업을 골라주세요", el: () => taskTriggerRef.current },
+    { key: "topic", empty: !draft.topic.trim(), message: "주제를 적어주세요", el: () => topicRef.current },
+  ];
+  // 버튼은 늘 눌린다(비활성으로 막지 않음) — 빈 필수 칸이 있으면 그 칸 아래에 오류를 띄우고 첫 번째 빈 칸으로 스크롤·포커스한다.
   const goNextFromStep0 = () => {
-    const next: typeof errors = {};
-    if (!draft.taskId) next.task = "만들 작업을 선택해 주세요.";
-    if (!draft.topic.trim()) next.topic = "주제를 입력해 주세요.";
-    setErrors(next);
-    if (next.task) { taskTriggerRef.current?.focus(); return; }
-    if (next.topic) { topicRef.current?.focus(); return; }
+    const missing = requiredFields.filter((x) => x.empty);
+    setErrors(Object.fromEntries(missing.map((x) => [x.key, x.message])));
+    const first = missing[0]?.el();
+    if (first) {
+      first.scrollIntoView({ block: "center", behavior: "smooth" });
+      first.focus({ preventScroll: true });
+      return;
+    }
     setStep(1);
   };
 
@@ -914,8 +928,8 @@ export default function RequestHelpScreen({
                 <div style={{ marginBottom: "var(--rh-label-gap)" }}>
                   <span style={QUESTION_LABEL_STYLE}>만들 작업</span>
                 </div>
-                <TaskSelectField taskId={draft.taskId} onSelect={selectTask} error={errors.task} triggerRef={taskTriggerRef} native={isMobile} />
-                {errors.task && <span role="alert" className="block mt-1.5" style={FIELD_ERROR_STYLE}>{errors.task}</span>}
+                <TaskSelectField taskId={draft.taskId} onSelect={selectTask} error={errors.task} describedBy="req-task-error" triggerRef={taskTriggerRef} native={isMobile} />
+                {errors.task && <span id="req-task-error" role="alert" className="block mt-1.5" style={FIELD_ERROR_STYLE}>{errors.task}</span>}
               </div>
 
               {/* 2행 — 주제(유일한 필수). */}
@@ -947,6 +961,7 @@ export default function RequestHelpScreen({
                   onChange={setTopic}
                   aria-required
                   aria-invalid={!!errors.topic}
+                  aria-describedby={errors.topic ? "req-topic-error" : undefined}
                   // 주제는 한 덩어리 문장 — Enter는 줄바꿈·제출이 아니라 다음 칸(꼭 담아야 할 내용)으로 이동한다(Shift+Enter 도 줄바꿈 없음).
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.nativeEvent.isComposing) document.getElementById("req-content")?.focus();
@@ -955,7 +970,7 @@ export default function RequestHelpScreen({
                   placeholderStyle={PLACEHOLDER_STYLE}
                   style={{ ...TEXT_BOX_STYLE, border: `1px solid ${errors.topic ? "#fca5a5" : "#e2e8f0"}` }}
                 />
-                {errors.topic && <span role="alert" style={FIELD_ERROR_STYLE}>{errors.topic}</span>}
+                {errors.topic && <span id="req-topic-error" role="alert" style={FIELD_ERROR_STYLE}>{errors.topic}</span>}
                 {!errors.topic && topicLen > 0 && topicLen < TOPIC_HINT_UNDER && (
                   <span aria-live="polite" style={{ ...f, fontWeight: 500, fontSize: 12.5, color: "#94a3b8" }}>조금 더 자세히 적으면 추천이 정확해져요</span>
                 )}
@@ -1046,7 +1061,8 @@ export default function RequestHelpScreen({
         <div className="flex-1" />
 
         {/* 하단 CTA — 스크롤과 무관하게 화면 아래에 고정한다(모바일에서 글을 입력하는 동안은 고정을 풀어 키보드에 가리지 않게).
-            데스크톱: [보조] … 안내 [주 버튼] 한 줄. 모바일: 안내를 위 전폭으로, 버튼 둘은 4:6 한 줄 — 아주 좁으면 주 버튼을 위로 쌓는다. */}
+            데스크톱: [보조] … [주 버튼] 한 줄. 모바일: 버튼 둘은 4:6 한 줄 — 아주 좁으면 주 버튼을 위로 쌓는다.
+            빈 필수 칸 안내는 버튼 옆이 아니라 그 칸 바로 아래(goNextFromStep0). */}
         <div
           className={`${typing ? "" : "sticky bottom-0"} z-10 mt-6`}
           style={{ background: "#f8fafc", borderTop: "1px solid #eef2f6", padding: "14px 0 calc(20px + env(safe-area-inset-bottom))" }}
@@ -1058,7 +1074,6 @@ export default function RequestHelpScreen({
             const primary = step === 0
               ? { label: "템플릿·요청 확인", onClick: goNextFromStep0, arrow: true, disabled: false }
               : { label: "이 요청으로 시작하기", onClick: finish, arrow: false, disabled: submitting };
-            const hint = step === 0 ? missingHint : null;
             const secondaryBtn = (
               <button
                 type="button"
@@ -1080,26 +1095,19 @@ export default function RequestHelpScreen({
                 {primary.label} {primary.arrow && <ArrowRight size={16} aria-hidden />}
               </button>
             );
-            const hintEl = hint && (
-              <span aria-live="polite" style={{ ...f, fontWeight: 600, fontSize: 13, color: "#94a3b8" }}>{hint}</span>
-            );
             if (!isMobile) {
               return (
                 <div className="flex items-center gap-3">
                   {secondaryBtn}
                   <span className="flex-1" />
-                  {hintEl}
                   {primaryBtn}
                 </div>
               );
             }
             return (
-              <div className="flex flex-col" style={{ gap: "var(--rh-label-gap)" }}>
-                {hintEl && <p className="text-center">{hintEl}</p>}
-                <div className={stackCta ? "flex flex-col-reverse gap-2" : "grid gap-2 grid-cols-[minmax(0,4fr)_minmax(0,6fr)]"}>
-                  {secondaryBtn}
-                  {primaryBtn}
-                </div>
+              <div className={stackCta ? "flex flex-col-reverse gap-2" : "grid gap-2 grid-cols-[minmax(0,4fr)_minmax(0,6fr)]"}>
+                {secondaryBtn}
+                {primaryBtn}
               </div>
             );
           })()}
