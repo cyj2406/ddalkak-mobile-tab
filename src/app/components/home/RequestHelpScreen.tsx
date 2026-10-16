@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Check, ChevronDown, FileText, HelpCircle, Link2, Paperclip, RotateCcw, X } from "lucide-react";
-import { color, f, SUBTITLE_COLOR } from "@/app/styleTokens";
+import { color, f, SUBTITLE_COLOR, typography } from "@/app/styleTokens";
 import { TASK_GROUPS, getTaskById, templateKey, visibleTasksOf, type Task, type TaskTemplate } from "@/app/data/tasks";
 import { rankTemplatesForTopic } from "@/app/data/templateRanking";
 import { clampNumberField, formatForTask, formatSummary, optionText, resolveFormat, type FormatField } from "@/app/data/requestCards";
@@ -107,12 +107,19 @@ function buildRequestText(task: Task | undefined, template: TaskTemplate | undef
   return lines.filter((l) => l !== null).join("\n");
 }
 
-const QUESTION_LABEL_STYLE = { ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a" } as const;
+const QUESTION_LABEL_STYLE = typography.formLabel;
+/** 입력값(선택한 작업·형식 값·타이핑한 글자) — 라벨보다 크고 보통 굵기 */
+const FIELD_VALUE_STYLE = typography.formValue;
+/** 입력 전 안내(placeholder) — 값보다 작고 한 톤 연하게 */
+const PLACEHOLDER_STYLE = typography.formPlaceholder;
+/** 서술형 칸(주제·꼭 담을 내용) 줄 높이 — 16px 글자 기준. 위아래 여백은 48px 상자에 1줄이 가운데 오도록 (48 − 테두리 2 − 22) / 2. */
+const TEXT_LINE_H = 22;
+const TEXT_PAD_Y = 12;
 /** 필수 표시 — 필수 칸이 주제 하나뿐이라 *도 주제에만 붙는다. */
 const REQUIRED_MARK_STYLE = { ...f, fontWeight: 700, fontSize: 15, color: color.brand, lineHeight: 1 } as const;
 const FIELD_ERROR_STYLE = { ...f, fontWeight: 600, fontSize: 12, color: "#d4183d" } as const;
 /** 작업 선택·비율/장수 드롭다운이 함께 쓰는 트리거 모양(기존 작업 선택 트리거 그대로). */
-/** 상자형 입력(작업 선택·형식 값·스테퍼·참고 자료) — 높이는 CSS 변수로: 데스크톱 48px, 768px 미만 52px(.rh-form 에서 정의) */
+/** 상자형 입력(작업 선택·형식 값·스테퍼·참고 자료) — 높이는 CSS 변수 --rh-field-h(48px, .rh-form 에서 정의) */
 const FIELD_BOX_STYLE = { height: "var(--rh-field-h, 48px)", background: "#fbfcfe", borderRadius: 12 } as const;
 
 /**
@@ -222,7 +229,7 @@ function TaskSelectField({
           onChange={(e) => e.target.value && onSelect(e.target.value)}
           className="w-full appearance-none outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff]"
           style={{
-            ...FIELD_BOX_STYLE, ...f, fontWeight: selectedTask ? 600 : 500, fontSize: 14, color: selectedTask ? "#0a0a0a" : "#94a3b8",
+            ...FIELD_BOX_STYLE, ...(selectedTask ? FIELD_VALUE_STYLE : PLACEHOLDER_STYLE),
             padding: selectedTask ? "0 38px 0 41px" : "0 38px 0 14px", border: `1px solid ${error ? "#fca5a5" : "#e2e8f0"}`, cursor: "pointer",
           }}
         >
@@ -253,12 +260,12 @@ function TaskSelectField({
         {selectedTask ? (
           <>
             <selectedTask.icon size={17} color={color.brand} className="shrink-0" aria-hidden />
-            <span className="flex-1 min-w-0 truncate text-left" style={{ ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a" }}>
+            <span className="flex-1 min-w-0 truncate text-left" style={FIELD_VALUE_STYLE}>
               {selectedTask.label}
             </span>
           </>
         ) : (
-          <span className="flex-1 text-left" style={{ ...f, fontWeight: 500, fontSize: 14, color: "#94a3b8" }}>
+          <span className="flex-1 text-left" style={PLACEHOLDER_STYLE}>
             만들 작업을 선택해 주세요
           </span>
         )}
@@ -301,7 +308,7 @@ function FormatSelect({ id, field, value, onChange }: { id: string; field: Extra
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full appearance-none outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#4f7bff]"
-        style={{ ...FIELD_BOX_STYLE, ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a", padding: "0 38px 0 14px", border: "1px solid #e2e8f0", cursor: "pointer" }}
+        style={{ ...FIELD_BOX_STYLE, ...FIELD_VALUE_STYLE, padding: "0 38px 0 14px", border: "1px solid #e2e8f0", cursor: "pointer" }}
       >
         {field.options.map((o) => (
           <option key={o.value} value={o.value}>{optionText(field, o.value)}</option>
@@ -412,7 +419,7 @@ function NumberStepper({ id, field, value, onChange, onNotice }: {
         // 숫자 폭만큼만 차지해 단위가 숫자 바로 뒤(4px)에 붙고, 숫자+단위 묶음이 가운데에 온다
         width: `calc(${Math.max(1, text.length)}ch + 4px)`, flex: "none",
       } : {
-        ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a", border: 0, outline: "none", boxShadow: "none",
+        ...FIELD_VALUE_STYLE, border: 0, outline: "none", boxShadow: "none",
         padding: field.unit ? "0 0 0 14px" : "0 6px 0 14px",
         // 단위가 있으면 숫자 폭만큼만 차지해 단위가 숫자 바로 뒤에 붙는다
         ...(field.unit ? { width: `calc(${Math.max(1, text.length)}ch + 16px)`, flex: "none" } : { flex: 1, minWidth: 0 }),
@@ -541,9 +548,9 @@ function ReferenceField({ items, onChange }: { items: string[]; onChange: (items
         onBlur={addUrl}
         maxLength={500}
         placeholder={items.length > 0 ? "" : "링크를 붙여 넣거나 파일 첨부"}
-        className="flex-1 bg-transparent placeholder:text-[#9ca3af]"
+        className="rh-ref-input flex-1 bg-transparent"
         // 포커스 표시는 바깥 상자(focus-within 링)가 맡는다 — 안쪽 입력에는 테두리·outline·그림자를 두지 않는다.
-        style={{ ...f, fontWeight: 500, fontSize: 14, color: "#0a0a0a", minWidth: items.length > 0 ? 60 : 120, height: 32, padding: "0 6px", border: 0, outline: "none", boxShadow: "none" }}
+        style={{ ...FIELD_VALUE_STYLE, minWidth: items.length > 0 ? 60 : 120, height: 32, padding: "0 6px", border: 0, outline: "none", boxShadow: "none" }}
       />
       <button
         type="button"
@@ -664,8 +671,6 @@ export default function RequestHelpScreen({
   const isMobile = useMediaQuery("(max-width: 639px)");
   const isTiny = useMediaQuery("(max-width: 359px)");
   // 768px 미만은 입력칸 52px(데스크톱 48px) — 1줄 텍스트 칸도 같은 높이가 되도록 위아래 여백을 맞춘다(줄 높이 21 + 테두리 2).
-  const tallFields = useMediaQuery("(max-width: 767px)");
-  const fieldPadY = tallFields ? 14.5 : 12.5;
   const stackCta = useMediaQuery("(max-width: 339px)");
   // 모바일에서 글을 입력하는 동안에는 하단 고정 버튼을 풀어 둔다 — 키보드에 밀려 올라와 입력칸을 가리지 않게.
   const [typing, setTyping] = useState(false);
@@ -766,11 +771,11 @@ export default function RequestHelpScreen({
     >
       {/* 모바일 보정 — 인라인 스타일보다 우선해야 해서 !important. 입력 글자 16px(iOS 확대 방지), 터치 영역 44px, 2열 → 1열. */}
       <style>{`
-        .rh-form { --rh-field-h: 48px; }
+        .rh-form { --rh-field-h: 48px; --rh-form-w: 600px; --rh-label-gap: 8px; --rh-field-gap: 20px; }
         .rh-form input { text-overflow: ellipsis; }
+        .rh-ref-input::placeholder { font-size: ${PLACEHOLDER_STYLE.fontSize}px; font-weight: ${PLACEHOLDER_STYLE.fontWeight}; color: ${PLACEHOLDER_STYLE.color}; opacity: 1; }
         @media (max-width: 767px) {
-          .rh-form { --rh-field-h: 52px; }
-          .rh-form input:not([type=file]):not(.rh-num), .rh-form textarea, .rh-form select, .rh-form .ag-placeholder { font-size: 16px !important; }
+          .rh-form input:not([type=file]):not(.rh-num), .rh-form textarea, .rh-form select { font-size: 16px !important; }
           .rh-pair { grid-template-columns: 1fr !important; gap: 8px !important; }
         }
         .rh-hit { position: relative; }
@@ -780,7 +785,8 @@ export default function RequestHelpScreen({
           .rh-clip { width: 44px !important; height: 44px !important; right: 3px !important; }
         }
       `}</style>
-      <div className="w-full mx-auto flex-1 flex flex-col" style={{ maxWidth: STEP_MAX_WIDTH, padding: STEP_PADDING }}>
+      {/* 1단계는 폼 한 열이라 폼 폭(600px)에 맞춰 가운데로 모은다 — 단계 표시·제목·하단 버튼도 같은 열에 정렬. 2단계는 2열이라 넓은 폭 그대로. */}
+      <div className="w-full mx-auto flex-1 flex flex-col" style={{ maxWidth: step === 0 ? "min(var(--home-container), calc(var(--rh-form-w) + 2 * var(--gap-screen-x)))" : STEP_MAX_WIDTH, padding: STEP_PADDING }}>
         {/* 단계 표시는 상단에 고정한다 — 칸이 늘어나 페이지가 스크롤돼도 지금 어느 단계인지 보인다. */}
         <div className="sticky top-0 z-10 flex items-center gap-2 mb-5 flex-wrap" role="group" aria-label="진행 단계" style={{ background: "#f8fafc", padding: "12px 0 10px", marginTop: -12 }}>
           {isTiny ? (
@@ -814,10 +820,10 @@ export default function RequestHelpScreen({
 
         <div className="flex items-start justify-between gap-4 mb-6">
           <div className="min-w-0">
-            <h1 className="mb-2" style={{ ...f, fontWeight: 800, fontSize: 22, color: "#0a0a0a", letterSpacing: "-0.5px" }}>
+            <h1 className="mb-2" style={{ ...f, fontWeight: 800, fontSize: isMobile ? typography.pageTitle.fontSize : 28, color: "#0a0a0a", letterSpacing: "-0.6px" }}>
               {STEP_COPY[step].title}
             </h1>
-            <p style={{ ...f, fontWeight: 500, fontSize: 13.5, color: SUBTITLE_COLOR }}>
+            <p style={{ ...f, fontWeight: 500, fontSize: 14, color: SUBTITLE_COLOR }}>
               {STEP_COPY[step].sub}
             </p>
           </div>
@@ -843,10 +849,10 @@ export default function RequestHelpScreen({
 
         {step === 0 && (
           <div className="rh-card rounded-[26px]" style={{ background: "#fff", border: "1px solid #e2e8f0", padding: 24 }}>
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col" style={{ gap: "var(--rh-field-gap)" }}>
               {/* 1행 — 만들 작업(전폭). 아이콘 + 라벨이 들어가고 선택지가 14종이라 넓게 둔다. */}
               <div>
-                <div className="mb-2.5">
+                <div style={{ marginBottom: "var(--rh-label-gap)" }}>
                   <span style={QUESTION_LABEL_STYLE}>만들 작업</span>
                 </div>
                 <TaskSelectField taskId={draft.taskId} onSelect={selectTask} error={errors.task} triggerRef={taskTriggerRef} native={isMobile} />
@@ -854,7 +860,7 @@ export default function RequestHelpScreen({
               </div>
 
               {/* 2행 — 주제(유일한 필수). */}
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col" style={{ gap: "var(--rh-label-gap)" }}>
                 <div className="flex items-center gap-1">
                   <label htmlFor="req-topic" style={QUESTION_LABEL_STYLE}>어떤 주제로 만들까요?</label>
                   {/* * 하나만으로는 필수인지 모를 수 있어, 마우스를 올리거나 키보드로 포커스하면 이유까지 알려 준다. */}
@@ -885,10 +891,11 @@ export default function RequestHelpScreen({
                     if (e.key === "Enter" && !e.nativeEvent.isComposing) document.getElementById("req-content")?.focus();
                   }}
                   placeholder="만들고 싶은 내용이나 주제를 한 줄로 적어주세요."
-                  lineHeight={21}
-                  paddingY={fieldPadY}
+                  lineHeight={TEXT_LINE_H}
+                  paddingY={TEXT_PAD_Y}
+                  placeholderStyle={PLACEHOLDER_STYLE}
                   style={{
-                    ...f, fontWeight: 500, fontSize: 14, color: "#0a0a0a", width: "100%",
+                    ...FIELD_VALUE_STYLE, width: "100%",
                     border: `1px solid ${errors.topic ? "#fca5a5" : "#e2e8f0"}`, borderRadius: 12, padding: "13px 14px", background: "#fbfcfe",
                   }}
                 />
@@ -900,7 +907,7 @@ export default function RequestHelpScreen({
 
               {/* 3행 — 꼭 담아야 할 내용(선택). 사용자만 아는 실제 값의 통로라 AI가 채우지 않는다(테두리는 다른 칸과 같다). 필수 표시는 주제에만 있으므로 "선택" 표기는 두지 않는다.
                   비워 두면 워크스페이스 ★ 카드에서 다시 묻고, 적으면 그 카드에 미리 채워진다. */}
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col" style={{ gap: "var(--rh-label-gap)" }}>
                 <div className="flex items-center gap-1.5">
                   <label htmlFor="req-content" style={QUESTION_LABEL_STYLE}>꼭 담아야 할 내용</label>
                 </div>
@@ -910,10 +917,11 @@ export default function RequestHelpScreen({
                   onChange={(v) => setDraft((d) => ({ ...d, content: v }))}
                   maxRows={8}
                   placeholder="핵심 내용과 반드시 들어가야 할 이름·날짜·숫자 등을 적어주세요."
-                  lineHeight={21}
-                  paddingY={fieldPadY}
+                  lineHeight={TEXT_LINE_H}
+                  paddingY={TEXT_PAD_Y}
+                  placeholderStyle={PLACEHOLDER_STYLE}
                   style={{
-                    ...f, fontWeight: 500, fontSize: 14, color: "#0a0a0a", width: "100%",
+                    ...FIELD_VALUE_STYLE, width: "100%",
                     border: "1px solid #e2e8f0", borderRadius: 12, padding: "13px 14px", background: "#fbfcfe",
                   }}
                 />
@@ -922,10 +930,10 @@ export default function RequestHelpScreen({
               {/* 4행 — 형식 값 + 참고 자료(2열, 둘 다 짧은 칸). 형식 값이 없는 작업은 참고 자료가
                   왼쪽 절반에 오고 오른쪽은 비운다(전폭으로 늘리지 않는다). 두 라벨 줄은 높이 22px로 맞춘다. */}
               {/* 열 간격(16px)을 영상 형식 안 두 칸 간격(6px)보다 넓게 둬, 비율·길이가 한 그룹으로 읽힌다. */}
-              <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2">
+              <div className="grid gap-x-4 sm:grid-cols-2" style={{ rowGap: "var(--rh-field-gap)" }}>
                 {formatDef && (
                   <div className="min-w-0">
-                    <div className="mb-2.5 flex items-center gap-1" style={{ height: 22 }}>
+                    <div className="flex items-center gap-1" style={{ height: 22, marginBottom: "var(--rh-label-gap)" }}>
                       <label htmlFor="req-format" className="truncate" style={QUESTION_LABEL_STYLE}>{formatDef.label}</label>
                       {formatDef.tooltip && (
                         <TapTooltip content={formatDef.tooltip}>
@@ -955,7 +963,7 @@ export default function RequestHelpScreen({
                   </div>
                 )}
                 <div className="min-w-0">
-                  <div className="mb-2.5 flex items-center gap-1.5" style={{ height: 22 }}>
+                  <div className="flex items-center gap-1.5" style={{ height: 22, marginBottom: "var(--rh-label-gap)" }}>
                     <label htmlFor="req-ref" style={QUESTION_LABEL_STYLE}>참고 자료</label>
                   </div>
                   <ReferenceField items={draft.references} onChange={(references) => setDraft((d) => ({ ...d, references }))} />
@@ -1033,7 +1041,7 @@ export default function RequestHelpScreen({
               );
             }
             return (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col" style={{ gap: "var(--rh-label-gap)" }}>
                 {hintEl && <p className="text-center">{hintEl}</p>}
                 <div className={stackCta ? "flex flex-col-reverse gap-2" : "grid gap-2 grid-cols-[minmax(0,4fr)_minmax(0,6fr)]"}>
                   {secondaryBtn}

@@ -56,6 +56,8 @@ export const color = {
     secondary: "#64748b",
     /** 더 옅은 보조 텍스트(카드 라벨 등) */
     muted: "#9ca3af",
+    /** 입력칸 placeholder — muted 보다 한 톤 연하게 둬 입력 전/후가 갈린다(요청 작성 폼) */
+    placeholder: "#b0b8c4",
   },
   surface: {
     default: "#ffffff",
@@ -93,6 +95,13 @@ export const typography = {
   caption: { ...f, fontWeight: 500, fontSize: 12, color: color.text.muted, letterSpacing: "-0.2px" },
   /** 버튼 라벨(lg 사이즈 기준 — md 는 컴포넌트가 자체 축소) */
   button: { ...f, fontWeight: 700, fontSize: 14, letterSpacing: "-0.3px" },
+  /**
+   * 입력 폼 3단 위계(요청 작성 폼). 라벨은 값보다 작지만 굵게, 값은 크지만 보통 굵기,
+   * placeholder 는 값보다 작고 연하게 — 라벨 ↔ 값 ↔ 입력 전 상태가 한눈에 갈린다.
+   */
+  formLabel: { ...f, fontWeight: 600, fontSize: 15, color: color.text.primary },
+  formValue: { ...f, fontWeight: 500, fontSize: 16, color: color.text.primary },
+  formPlaceholder: { ...f, fontWeight: 500, fontSize: 14, color: color.text.placeholder },
 } as const;
 
 /**

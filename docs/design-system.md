@@ -38,6 +38,7 @@
 | `color.text.primary` | `#0a0a0a` | 제목, 강조 숫자(잔액 등), 다크 CTA 배경(`Button`의 `dark` variant) |
 | `color.text.secondary` | `#64748b` | 라벨, 보조 설명. 기존 `SUBTITLE_COLOR`와 동일(이름은 하위 호환을 위해 그대로 둠) |
 | `color.text.muted` | `#9ca3af` | 카드 안 옅은 라벨, 장식용 아이콘 등 "읽지 않아도 되는" 부가 정보 전용. **대비 4.5:1 미만(2.54:1, 흰 배경 기준) — 아래 "대비 확인 결과" 참고, 이번엔 값을 바꾸지 않았다.** 읽어야 하는 작은 텍스트에는 쓰지 않는다(2026-09-18 대비 재확인 이후 원칙 — "회색 계열" 절 참고) |
+| `color.text.placeholder` | `#b0b8c4` | 입력칸 placeholder 전용(요청 작성 폼, 2026-10-16). `muted`보다 한 톤 연하게 둬 입력 전/후가 갈린다. 입력 전 안내라 읽기 대비 기준 대상이 아니며, 다른 텍스트에는 쓰지 않는다 |
 | `color.surface.default` | `#ffffff` | 카드/팝오버 기본 배경 |
 | `color.surface.subtle` | `#f8fafc` | 카드 안 보조 박스, 새로고침 버튼 배경 |
 | `color.surface.accent` | `#eff6ff` | 브랜드 톤 옅은 배경(선택된 상태, "내 크레딧" 배지 배경) |
@@ -61,6 +62,9 @@ CTA 배경)는 **서비스 전용** 기준이다. 랜딩페이지의 CTA 블루(
 | `typography.body` | 13.5px/500, `-0.2px`, `#4b5262` | 안내 문구 본문 |
 | `typography.caption` | 12px/500, `-0.2px`, `color.text.muted` | 라벨, 보조 설명 |
 | `typography.button` | 14px/700, `-0.3px` | 버튼 라벨(참고용 — `Button` 컴포넌트가 size별로 자체 처리) |
+| `typography.formLabel` | 15px/600, `color.text.primary` | 입력 폼 필드 라벨(요청 작성 폼) |
+| `typography.formValue` | 16px/500, `color.text.primary` | 입력값 — 셀렉트에서 고른 값·타이핑한 글자·스테퍼 숫자(데스크톱). 라벨보다 크고 덜 굵게 |
+| `typography.formPlaceholder` | 14px/500, `color.text.placeholder` | 입력칸 placeholder. 값보다 작고 연하게 |
 
 크기·굵기·행간이 필요한 만큼만 세트로 묶여 있고(제목 계열은 자간까지, 본문/캡션은
 색까지 포함), 새 프리셋을 추가할 때도 "화면에 실제로 반복되는 조합"만 등록한다 —
@@ -629,9 +633,13 @@ Hover·focus·selected·disabled 색 로직 자체는 건드리지 않았다(값
   드롭다운(기본값 선택·빈 선택지 없음, 필요하면 `?` 툴팁·아래 회색 `helper` 한 줄). 생성 엔진이 실제로 제어하는 값만 둔다 —
   문서 분량·발표 시간·상세페이지 올릴 곳·슬라이드 수는 두지 않는다. 한 라벨 아래 입력이 둘일 수 있다(`FormatDef.fields`).
   컴포넌트 규칙: 값끼리 의미가 다른 소수 선택지 → 드롭다운, 연속 수치·범위가 넓은 값 → 스테퍼(`NumberStepper`). 스테퍼는
-  768px 미만 [ − | 숫자 | + ](버튼 52×52, 1px 구분선 #E6EAF2, 숫자 가운데 18px 굵게·단위 13px #8A909C, 누르는 동안 #F0F3F8),
+  768px 미만 [ − | 숫자 | + ](버튼 폭 52 · 높이 48, 1px 구분선 #E6EAF2, 숫자 가운데 18px 굵게·단위 13px #8A909C, 누르는 동안 #F0F3F8),
   768px 이상 오른쪽 끝 폭 36px ▲▼ 세로 스택(글리프 10px #9AA0AB, hover #F0F3F8, 숫자 왼쪽 정렬). 길게 누르면 500ms 뒤 120ms 간격 연속 증감,
-  경계값 버튼은 opacity .3 + pointer-events none, 직접 입력(inputmode numeric) 후 blur 때 범위 보정 + 회색 안내. 상자형 입력 높이는 데스크톱 48px · 768px 미만 52px(`--rh-field-h`).
+  경계값 버튼은 opacity .3 + pointer-events none, 직접 입력(inputmode numeric) 후 blur 때 범위 보정 + 회색 안내. 상자형 입력 높이는 모든 폭에서 48px(`--rh-field-h`).
+  타이포·간격(2026-10-16): 라벨 `typography.formLabel` · 값 `formValue` · placeholder `formPlaceholder`(위 표). 라벨↔입력 8px(`--rh-label-gap`),
+  필드 간 20px(`--rh-field-gap`). 서술형 칸은 줄 높이 22px · 위아래 여백 12px(1줄일 때 48px). 1단계는 폼 카드 최대 폭 600px(`--rh-form-w`, 안쪽 여백 24px · 640px 미만 16px)이고
+  단계 표시·제목·하단 버튼도 같은 열로 가운데 정렬(2단계는 2열이라 넓은 폭 유지). 제목 28px(640px 미만 24px = `typography.pageTitle`), 설명 14px.
+  모바일은 `--gap-screen-x`(16px) 여백 안에서 카드가 화면 폭을 채운다.
   영상은 "영상 형식" = 비율 드롭다운(세로 9:16 기본/정사각/가로) + 길이 스테퍼(폭 112px, 두 칸 간격 6px < 참고 자료와의 열 간격 16px). 고른 길이 ÷ 3초가 워크스페이스 장면 흐름 후보의 장면 수 상한이고 자막 카드 안내도 길이를 따른다.
   브로셔 장수는 소개 문구 분량(2장 이하 한 줄)과 "장별 구성" 카드 후보를 바꾼다. 사진·그림은 "화면 비율" 정사각(1:1)/세로(4:5)/가로(16:9)/세로 긴(9:16). 선택지 라벨에 플랫폼 이름·엔진이 못 지키는 수치를 쓰지 않고, 필요하면 `?` 툴팁에 둔다. 형식축이 없는 작업(워드·한글·엑셀)은 참고 자료가 왼쪽, 오른쪽은 비운다(전폭으로 늘리지 않음).
   참고 자료는 한 칸 — 파일 첨부는 입력칸 안쪽 오른쪽 클립 아이콘, 붙인 링크·파일은 칸 안 칩(×로 제거).

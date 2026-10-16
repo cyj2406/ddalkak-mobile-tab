@@ -33,13 +33,15 @@ export interface AutoGrowTextareaProps extends Omit<TextareaHTMLAttributes<HTMLT
   /** 위아래 안쪽 여백(px) */
   paddingY?: number;
   style?: CSSProperties;
+  /** placeholder 오버레이에만 덮어쓸 글자 스타일(크기·색) — 없으면 입력 글자와 같은 모양, 색만 #9ca3af */
+  placeholderStyle?: CSSProperties;
 }
 
 const COLLAPSED_ROWS = 2;
 const BORDER = 1;
 
 export const AutoGrowTextarea = forwardRef<HTMLTextAreaElement, AutoGrowTextareaProps>(function AutoGrowTextarea(
-  { value, onChange, maxRows, singleLine, lineHeight = 22, paddingY = 13, style, placeholder, onFocus, onBlur, onKeyDown, ...props },
+  { value, onChange, maxRows, singleLine, lineHeight = 22, paddingY = 13, style, placeholderStyle, placeholder, onFocus, onBlur, onKeyDown, ...props },
   ref,
 ) {
   const innerRef = useRef<HTMLTextAreaElement>(null);
@@ -125,6 +127,7 @@ export const AutoGrowTextarea = forwardRef<HTMLTextAreaElement, AutoGrowTextarea
             position: "absolute", top: 0, left: 0, width: "100%", height: heightFor(1),
             border: "1px solid transparent", background: "transparent", color: "#9ca3af",
             whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", pointerEvents: "none",
+            ...placeholderStyle,
           }}
         >
           {placeholder}
