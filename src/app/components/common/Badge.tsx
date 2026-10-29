@@ -12,21 +12,25 @@ import { f, color } from "@/app/styleTokens";
  *     (같은 값의 badge용 배경 쌍이 없었다 — 다른 톤과 같은 "옅은 배경 + 진한 텍스트"
  *     패턴을 그대로 따랐을 뿐 색 자체는 새로 만들지 않았다).
  */
-export type BadgeTone = "brand" | "neutral" | "warning" | "danger";
+export type BadgeTone = "brand" | "brandSolid" | "neutral" | "warning" | "danger";
 
 const TONE_STYLE: Record<BadgeTone, { bg: string; text: string }> = {
   brand: { bg: color.surface.accent, text: color.brand },
+  /** 채움형 — "NEW"처럼 작은 공간에서 눈에 띄어야 하는 표시(홈 에디터 아이콘 줄). brand 채움 + 흰 글자 */
+  brandSolid: { bg: color.brand, text: "#ffffff" },
   neutral: { bg: "#f1f5f9", text: "#475569" },
   warning: { bg: "#fffbeb", text: "#92400e" },
   danger: { bg: "#fef2f2", text: "#ef4444" },
 };
 
-export function Badge({ tone = "neutral", children }: { tone?: BadgeTone; children: ReactNode }) {
+/** size "sm" — 아이콘 모서리에 얹는 작은 배지(10px · 높이 16). 기본 "md"는 기존 그대로. */
+export function Badge({ tone = "neutral", size = "md", children }: { tone?: BadgeTone; size?: "md" | "sm"; children: ReactNode }) {
   const t = TONE_STYLE[tone];
+  const sm = size === "sm";
   return (
     <span
-      className="inline-flex items-center rounded-full px-2.5 py-0.5"
-      style={{ ...f, fontWeight: 700, fontSize: 12, letterSpacing: "-0.2px", background: t.bg, color: t.text }}
+      className={`inline-flex items-center rounded-full whitespace-nowrap ${sm ? "px-1.5" : "px-2.5 py-0.5"}`}
+      style={{ ...f, fontWeight: 700, fontSize: sm ? 10 : 12, lineHeight: sm ? "16px" : undefined, letterSpacing: sm ? "0.2px" : "-0.2px", background: t.bg, color: t.text }}
     >
       {children}
     </span>

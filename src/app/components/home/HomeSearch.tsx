@@ -3,8 +3,8 @@ import { ArrowRight, Sparkles } from "lucide-react";
 import { color, controlHeight, f, motion, radius, typography } from "@/app/styleTokens";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/app/components/ui/tooltip";
 
-const PLACEHOLDER_DESKTOP = "어떤 작업이 필요한가요? 예: 행사 안내문, 카페 홍보 이미지";
-const PLACEHOLDER_MOBILE = "어떤 작업이 필요한가요?";
+const PLACEHOLDER_DESKTOP = "무엇을 만들까요? 예: 행사 안내문, 카페 홍보 이미지";
+const PLACEHOLDER_MOBILE = "무엇을 만들까요?";
 
 /** HomeSearch 안에서만 쓰는 최소 미디어쿼리 훅 — App.tsx의 useIsTabletUp과 같은 768px
  *  기준이지만, 훅 하나 재사용하려고 App.tsx 내부 함수를 export하지 않고 여기서 짧게 둔다. */
@@ -95,7 +95,7 @@ export default function HomeSearch({
     <section aria-label="시작하기" className="w-full mx-auto flex flex-col items-center" style={{ maxWidth: 760, gap: 20 }}>
       <div className="w-full flex flex-col items-center sm:flex-row sm:justify-center" style={{ gap: 12 }}>
         <span style={{ ...f, fontWeight: 400, fontSize: 14, lineHeight: "20px", color: color.text.secondary }}>
-          무엇부터 쓸지 막막하다면
+          뭘 써야 할지 모르겠다면
         </span>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -134,7 +134,7 @@ export default function HomeSearch({
               }}
             >
               <Sparkles size={16} aria-hidden className="shrink-0" />
-              <span>요청 작성 도우미</span>
+              <span>요청 도우미</span>
               <ArrowRight
                 size={16}
                 aria-hidden
@@ -169,7 +169,7 @@ export default function HomeSearch({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-          aria-label="필요한 작업 검색"
+          aria-label="만들 작업 입력"
           placeholder={isTabletUp ? PLACEHOLDER_DESKTOP : PLACEHOLDER_MOBILE}
           // placeholder 색 — muted(#9ca3af, 2.54:1)는 흰 배경에서 대비가 너무 낮아 여기서는
           // secondary(#64748b, 4.76:1)를 쓴다(다른 화면의 placeholder 관례와 다르지만,
@@ -198,7 +198,7 @@ export default function HomeSearch({
             color: "#fff",
           }}
         >
-          검색
+          시작하기
         </button>
       </div>
     </section>

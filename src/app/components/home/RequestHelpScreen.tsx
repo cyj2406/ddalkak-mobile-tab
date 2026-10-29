@@ -18,7 +18,7 @@ import type { WorkspaceCategory } from "@/app/App";
 const DRAFT_KEY = "ddalkkak.requestHelp.draft";
 
 /** 요청 작성 도우미에서만 고를 수 없는 작업 — 홈 등 다른 목록에는 그대로 남는다. */
-const EXCLUDED_TASK_IDS = new Set(["typo"]);
+const EXCLUDED_TASK_IDS = new Set(["typo", "formfill"]); // formfill: 서식 채우기 화면이 따로 있다
 const helperTasksOf = (g: (typeof TASK_GROUPS)[number]) => visibleTasksOf(g).filter((t) => !EXCLUDED_TASK_IDS.has(t.id));
 
 /** 주제가 이보다 짧으면 "조금 더 자세히" 힌트를 보여 준다(업종·문서 종류를 주제에서 추론하므로) */
@@ -655,8 +655,8 @@ function useIsDesktopSplit() {
   return match;
 }
 
-/** "정리한 요청" 안의 항목 하나 — 라벨(작은 회색) + 값, `big`이면 주제 전용 크기. */
-function SummaryField({ label, value, big }: { label: string; value: string; big?: boolean }) {
+/** "정리한 요청" 안의 항목 하나 — 라벨(작은 회색) + 값, `big`이면 주제 전용 크기. note 는 값 아래 회색 한 줄. */
+function SummaryField({ label, value, big, note }: { label: string; value: string; big?: boolean; note?: string }) {
   return (
     <div className="min-w-0">
       <p style={{ ...f, fontWeight: 600, fontSize: 13.5, color: "#64748b", letterSpacing: "-0.2px" }}>{label}</p>
@@ -666,6 +666,7 @@ function SummaryField({ label, value, big }: { label: string; value: string; big
       >
         {value}
       </p>
+      {note && <p className="mt-1" style={{ ...f, fontWeight: 500, fontSize: 12.5, color: "#94a3b8" }}>{note}</p>}
     </div>
   );
 }
@@ -688,7 +689,8 @@ function RequestSummary({ task, template, draft }: { task: Task; template: TaskT
       </div>
       {def && (
         <div className={def.fields.length > 1 ? "grid sm:grid-cols-2 gap-4" : undefined}>
-          {def.fields.map((fd) => <SummaryField key={fd.key} label={fd.label} value={optionText(fd, values[fd.key])} />)}
+          {/* 템플릿을 골랐으면 템플릿이 정하는 값(비율)에 그 사실을 붙인다 — 빈 템플릿이면 고른 값이 그대로 쓰여 붙이지 않는다 */}
+          {def.fields.map((fd) => <SummaryField key={fd.key} label={fd.label} value={optionText(fd, values[fd.key])} note={template && fd.kind === "select" ? fd.templateNote : undefined} />)}
         </div>
       )}
       {draft.content.trim() && <SummaryField label="꼭 담을 내용" value={draft.content.trim()} />}

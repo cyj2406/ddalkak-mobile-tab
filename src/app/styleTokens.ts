@@ -65,6 +65,8 @@ export const color = {
     subtle: "#f8fafc",
     /** 브랜드 톤 옅은 배경 — 선택된 패키지/배지 등 */
     accent: "#eff6ff",
+    /** 중립 hover 배경 — 배경 위 항목에 마우스를 올렸을 때(홈 에디터 아이콘 줄 등). Badge neutral 배경과 같은 값 */
+    hover: "#f1f5f9",
   },
   border: {
     /** 가장 흔한 테두리 — 랜딩페이지 실측값과도 동일(xn--il0b54k.net 비교 결과) */
@@ -108,7 +110,7 @@ export const typography = {
 } as const;
 
 /**
- * 홈 화면 섹션 제목("바로 시작하기 좋은 템플릿", "전체 기능") 전용 — 위 typography 항목들과
+ * 홈 화면 섹션 제목("템플릿으로 시작하기", "AI에게 맡기기") 전용 — 위 typography 항목들과
  * 달리 PC/모바일 크기가 달라야 해서(PC 22px·행간 30px / 모바일 20px·행간 28px, 둘 다
  * fontWeight 600 — 2026-09-18에 24/32·700에서 한 단계 낮췄다) 반응형 className과 고정
  * 스타일을 나눠 내보낸다. 두 섹션 제목이 항상 같은 값을 쓰도록 이 상수 하나만 참조한다 —
@@ -118,10 +120,18 @@ export const typography = {
  * 600은 그보다 훨씬 안전한 굵기) 합성 볼드 걱정 없이 600을 그대로 쓴다.
  */
 export const homeSectionTitleClassName = "text-[20px] wide:text-[22px] leading-[28px] wide:leading-[30px]";
-export const homeSectionTitleStyle = { ...f, fontWeight: 600, letterSpacing: "-0.5px", color: color.text.primary } as const;
+export const homeSectionTitleStyle = { ...f, fontWeight: 700, letterSpacing: "-0.5px", color: color.text.primary } as const;
 
 /**
- * 홈 "전체 기능" 그룹 제목("이미지", "문서", "발표자료"...) 전용(2026-09-18) — 섹션
+ * 홈 섹션 제목 아래 보조문구("고르고 바로 편집하면 끝" 등, 2026-10-16) — 제목(700·primary)보다
+ * 한 톤 연한 `color.text.secondary`, 보통 굵기. 섹션 제목은 이때 600 → 700(bold)으로 올렸다.
+ * 제목과 보조문구 사이 4px, 보조문구 아래 → 섹션 내용은 기존 제목 아래 간격(24px) 그대로.
+ */
+export const homeSectionSubtitleClassName = "text-[14px] wide:text-[15px] leading-[20px] wide:leading-[22px]";
+export const homeSectionSubtitleStyle = { ...f, fontWeight: 400, letterSpacing: "-0.2px", color: color.text.secondary } as const;
+
+/**
+ * 홈 "AI에게 맡기기" 그룹 제목("이미지", "문서", "발표자료"...) 전용(2026-09-18) — 섹션
  * 제목(위)보다 한 단계 낮은 위계라 크기를 더 낮췄다(PC 18px·행간 26px / 모바일 16px·
  * 행간 24px, 둘 다 600). `typography.sectionTitle`(17px/700, 플랜 카드·프로필 팝오버 등
  * 다른 화면에서도 쓰는 공용 토큰)을 그대로 손대지 않고 홈 전용으로 새로 뺐다 — 값을
@@ -133,14 +143,37 @@ export const taskGroupTitleClassName = "text-[16px] wide:text-[18px] leading-[24
 export const taskGroupTitleStyle = { ...f, fontWeight: 600, letterSpacing: "-0.3px", color: typography.body.color } as const;
 
 /**
- * 홈 상단 카테고리 버튼("이미지"/"문서"/...·"전체 보기") 전용(2026-09-18) — 그룹
- * 제목보다도 낮은 위계라 굵기를 500(medium)까지 낮췄다(PC 16px·행간 24px / 모바일
- * 14px·행간 20px). 2026-10-01부터 선택 상태만 600으로 올리고(기본 500), 색상·테두리로도
- * 함께 구분한다 — 굵기 차이로 버튼 폭이 몇 px 달라질 수 있다. 기본(미선택) 텍스트 색도
- * 그룹 제목과 같은 이유로 `typography.body.color`를 쓴다 — 선택 시에만 `color.brand`로
- * 바뀐다(기존 그대로).
+ * 홈 상단 에디터 진입 아이콘 줄(2026-10-16, 2026-10-22 재구성) — 크기·간격은 여기서만 정한다.
+ * 구조: [── 무료 편집기 바로 열기 ──] 아래 [이미지 워드 한글 PPT 엑셀 영상] | [레이어 분리](2026-10-29 전체 템플릿 제거).
+ * 세로 합계는 이전 줄과 같은 130px로 고정한다(아래 섹션이 밀리지 않게):
+ *   captionLineHeight 16 + captionGap 10 + (pad 6 + icon 64 + space 8 + labelLineHeight 20 + pad 6) = 130.
+ *   icon        : 아이콘 칸 크기. 모든 항목이 같다.
+ *   item        : 항목(=클릭 영역·hover 배경) 폭. 아이콘 좌우 안쪽 여백 (item − icon) / 2 = pad 와 같다.
+ *   pad         : 항목 안쪽 여백(상하좌우 동일) — hover 배경이 아이콘·이름을 고르게 감싼다.
+ *   space       : 아이콘 ↔ 이름, 항목 ↔ 항목 간격(같은 값 하나).
+ *   groupGap    : 그룹 ↔ 구분선 간격(구분선 양옆). space 보다 넓다.
+ *   captionGap  : "무료 편집기 바로 열기" 라벨 ↔ 아이콘 줄 — space 보다 넓다.
+ *   모서리는 radius.card(hover 배경 16)를 그대로 쓴다.
+ *   badgeTop/badgeRight: NEW 배지를 아이콘 칸 우상단 기준으로 고정하는 거리.
  */
-export const categoryButtonClassName = "text-[14px] wide:text-[16px] leading-[20px] wide:leading-[24px]";
+export const editorEntry = {
+  icon: 64,
+  item: 76,
+  pad: 6,
+  space: 8,
+  groupGap: 16,
+  captionGap: 10,
+  /** 이름 글자 — 500·본문 회색, 크기는 좁은 칸에 맞춰 14px 고정 */
+  labelSize: 14,
+  labelLineHeight: 20,
+  /** 설명 라벨 — typography.caption(12px·500) 크기에 color.text.secondary */
+  captionLineHeight: 16,
+  dividerHeight: 48,
+  badgeTop: -6,
+  badgeRight: -12,
+  /** 검색창 ↔ 아이콘 줄 — 부모 세로 간격(24px, App HomeScreen)에 더하는 값. 합 48px */
+  searchGapExtra: 24,
+} as const;
 
 /**
  * 라운드 — 요금제 페이지 기준 값. 버튼·입력창 등 "조작 가능한 요소"는 control 하나로

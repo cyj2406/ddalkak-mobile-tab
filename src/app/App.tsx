@@ -35,12 +35,12 @@ import FormFillDesktop from "@/app/components/formfill/FormFillDesktop";
 import TaskGrid from "@/app/components/home/TaskGrid";
 import RecommendedCarousel from "@/app/components/home/RecommendedCarousel";
 import HomeSearch from "@/app/components/home/HomeSearch";
-import { CategoryQuickLinks } from "@/app/components/home/CategoryQuickLinks";
-import { CategoryFeatureStrip } from "@/app/components/home/CategoryFeatureStrip";
+import { EditorQuickLinks, type EditorKind } from "@/app/components/home/EditorQuickLinks";
 import SearchResultsScreen from "@/app/components/home/SearchResultsScreen";
+import AllTemplatesScreen from "@/app/components/home/AllTemplatesScreen";
 import RequestHelpScreen, { type RequestHandoff } from "@/app/components/home/RequestHelpScreen";
 import { RequestCardsPanel } from "@/app/components/workspace/RequestCardsPanel";
-import { getTaskById, TASK_GROUPS, type TaskTemplate } from "@/app/data/tasks";
+import { getTaskById, type TaskTemplate } from "@/app/data/tasks";
 // [formfill 임시] ?formfill=1 확인용. 컴포넌트 단품 확인 화면이라 3단 레이아웃과 별개로 남겨둔다.
 import FormFillPlayground from "@/app/components/formfill/__dev__/FormFillPlayground";
 import { useCreditBalance } from "@/app/state/creditBalance";
@@ -52,7 +52,7 @@ import { SettingsBillingTab } from "@/app/components/settings/SettingsBillingTab
 
 
 // ─── 타입 ──────────────────────────────────────────────────────────────────────
-type Screen = "home" | "image-ai" | "landing-ai" | "forms-ai" | "forms-fill" | "docs-ai" | "audio-ai" | "ppt-ai" | "video-ai" | "favorites" | "mywork" | "notifications-all" | "search" | "request-help" | "pricing" | "subscription-complete";
+type Screen = "home" | "templates" | "image-ai" | "landing-ai" | "forms-ai" | "forms-fill" | "docs-ai" | "audio-ai" | "ppt-ai" | "video-ai" | "favorites" | "mywork" | "notifications-all" | "search" | "request-help" | "pricing" | "subscription-complete";
 export type WorkspaceCategory = "docs" | "ppt" | "video" | "landing" | "image" | "detail";
 const WS_LABEL: Record<WorkspaceCategory, string> = { docs: "문서", ppt: "PPT", video: "영상", landing: "랜딩페이지", image: "이미지", detail: "상세페이지" };
 const WS_COLOR: Record<WorkspaceCategory, string> = { docs: "#3B82F6", ppt: "#8B5CF6", video: "#EF4444", landing: "#22C55E", image: "#F59E0B", detail: "#EC4899" };
@@ -1501,7 +1501,7 @@ function ComposerChips({ showUpload = true }: { showUpload?: boolean }) {
               style={chipStyle(false)}
             >
               <Upload size={13} strokeWidth={1.9} color="#62748e" />
-              <span style={{ ...chipText(false), whiteSpace: "nowrap" }}>양식 업로드</span>
+              <span style={{ ...chipText(false), whiteSpace: "nowrap" }}>내 양식 올리기</span>
             </button>
             <span className="shrink-0 w-px h-5 bg-[#e2e8f0]" />
           </>
@@ -1517,7 +1517,7 @@ function ComposerChips({ showUpload = true }: { showUpload?: boolean }) {
           style={chipStyle(autoOn)}
         >
           {autoOn ? <Check size={13} strokeWidth={2.6} color="#4f7bff" /> : <IconAutoPrompt />}
-          <span style={{ ...chipText(autoOn), whiteSpace: "nowrap" }}>자동 프롬프트</span>
+          <span style={{ ...chipText(autoOn), whiteSpace: "nowrap" }}>프롬프트 다듬기</span>
         </button>
 
         {/* 원문 사용 — 토글 + 툴팁 */}
@@ -1530,7 +1530,7 @@ function ComposerChips({ showUpload = true }: { showUpload?: boolean }) {
           style={chipStyle(docOn)}
         >
           {docOn ? <Check size={13} strokeWidth={2.6} color="#4f7bff" /> : <IconDocRef />}
-          <span style={{ ...chipText(docOn), whiteSpace: "nowrap" }}>원문 사용</span>
+          <span style={{ ...chipText(docOn), whiteSpace: "nowrap" }}>원문 그대로 쓰기</span>
         </button>
       </div>
 
@@ -2142,8 +2142,12 @@ function FormsAIScreen({ activeTab, onTabChange, sortOption, onSortChange, scrol
 
 // ─── 화면 컴포넌트 ────────────────────────────────────────────────────────────
 
-function HomeScreen({ onSelectTask, onSearch, onHelp, autoFocusHelper, onAutoFocusHelperHandled }: {
+function HomeScreen({ onSelectTask, onOpenEditor, onSearch, onHelp, onViewAllTemplates, autoFocusHelper, onAutoFocusHelperHandled }: {
   onSelectTask: (taskId: string) => void;
+  /** "인기 템플릿으로 시작하기" 제목 줄의 "전체 보기" — 전체 템플릿 화면을 연다 */
+  onViewAllTemplates: () => void;
+  /** 상단 아이콘 줄 — 포맷 에디터를 빈 템플릿으로 바로 연다 */
+  onOpenEditor: (kind: EditorKind) => void;
   onSearch: (query: string) => void;
   onHelp: () => void;
   /** "요청 작성 도움받기"를 취소하고 홈으로 돌아왔을 때만 true — 도우미 버튼에 포커스를 되돌린다. */
@@ -2153,11 +2157,6 @@ function HomeScreen({ onSelectTask, onSearch, onHelp, autoFocusHelper, onAutoFoc
   // 태블릿에서는 푸터가 화면 하단 고정이 아니라 콘텐츠 흐름 끝에 와야 하므로
   // 셸(App)이 아니라 스크롤 컨테이너인 이 main 안에서 렌더한다.
   const isTabletRange = useIsTabletRange();
-  // 카테고리 선택 — 다시 누르면 접힌다. 선택만으로는 이동·스크롤이 생기지 않는다
-  // (템플릿 목록으로 넘어가는 건 세부 기능 카드를 눌렀을 때뿐).
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
-  const toggleGroup = (groupId: string) => setSelectedGroupId((v) => (v === groupId ? null : groupId));
-  const selectedGroup = TASK_GROUPS.find((g) => g.id === selectedGroupId) ?? null;
 
   return (
     <main
@@ -2175,22 +2174,17 @@ function HomeScreen({ onSelectTask, onSearch, onHelp, autoFocusHelper, onAutoFoc
             <span style={{ color: color.brand }}>딸깍</span> 한 번이면, 작업은 더 빠르게
           </p>
         </div>
-        {/* 검색+도움받기+카테고리 · 바로 시작하기 좋은 템플릿 · 전체 기능 — 전부 같은 폭
+        {/* 검색+도움받기+에디터 아이콘 줄 · 인기 템플릿으로 시작하기 · 작업별로 시작하기 — 전부 같은 폭
             (--home-container)에 맞춘다. 섹션 사이 간격은 여기(부모 flex gap)가 아니라 각
-            섹션 자신의 margin-top으로 관리한다(RecommendedCarousel의 --home-block-gap,
-            TaskGrid의 mt-10/wide:mt-16) — 위 섹션 padding-bottom과 중복 합산되지 않도록
+            섹션 자신의 margin-top으로 관리한다(RecommendedCarousel·TaskGrid 둘 다
+            --home-section-gap) — 위 섹션 padding-bottom과 중복 합산되지 않도록
             한 곳(아래 섹션의 margin-top)에서만 정한다. */}
         <div className="home-body w-full mx-auto flex flex-col" style={{ maxWidth: "var(--home-container)" }}>
           <div className="flex flex-col items-center" style={{ gap: 24 }}>
             <HomeSearch onSearch={onSearch} onHelp={onHelp} autoFocusHelper={autoFocusHelper} onAutoFocusHelperHandled={onAutoFocusHelperHandled} />
-            <CategoryQuickLinks selectedGroupId={selectedGroupId} onToggle={toggleGroup} />
-            {selectedGroup && (
-              <div className="w-full">
-                <CategoryFeatureStrip group={selectedGroup} onSelectTask={onSelectTask} />
-              </div>
-            )}
+            <EditorQuickLinks onOpenEditor={onOpenEditor} />
           </div>
-          <RecommendedCarousel onSelectTemplate={onSelectTask} />
+          <RecommendedCarousel onSelectTemplate={onSelectTask} onViewAll={onViewAllTemplates} />
           <TaskGrid onSelectTask={onSelectTask} />
         </div>
       </div>
@@ -5390,6 +5384,18 @@ export default function App() {
   const [focusHelperCta, setFocusHelperCta] = useState(false);
 
   const openSearch = (query: string) => { setSearchQuery(query); navigate("search"); };
+  /** 레이어 분리 — 홈 아이콘 줄에서 바로 여는 이미지 미니 에디터(텍스트 분리 패널 포함). 워크스페이스를 거치지 않는다. */
+  const [layerEditorOpen, setLayerEditorOpen] = useState(false);
+  /** 홈 아이콘 줄 → 포맷 에디터(빈 템플릿 워크스페이스). 레이어 분리만 이미지 미니 에디터를 바로 연다. */
+  const openEditor = (kind: EditorKind) => {
+    if (kind === "layer") { setLayerEditorOpen(true); return; }
+    const target: Record<Exclude<EditorKind, "layer">, [WorkspaceCategory, string]> = {
+      image: ["image", "전체"], word: ["docs", "워드"], hangul: ["docs", "한글"],
+      excel: ["docs", "엑셀"], ppt: ["ppt", "전체"], video: ["video", "영상"],
+    };
+    const [category, tabLabel] = target[kind];
+    openWorkspace(category)("빈 템플릿", tabLabel);
+  };
   const openTemplate = (template: TaskTemplate) => {
     const task = getTaskById(template.taskId);
     if (task?.wsCategory) openWorkspace(task.wsCategory)(template.title, task.tabLabel ?? "전체");
@@ -5482,7 +5488,7 @@ export default function App() {
   const inWorkspace = !!workspace;
   useEffect(() => { setSidebarCollapsed(inWorkspace); }, [inWorkspace]);
 
-  const isSubScreen = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai", "notifications-all", "search", "request-help", "pricing", "subscription-complete"].includes(screen);
+  const isSubScreen = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai", "notifications-all", "search", "templates", "request-help", "pricing", "subscription-complete"].includes(screen);
 
   // 튜토리얼 다시 보기 — 홈으로 돌아가 1단계부터 다시 실행한다(중복 실행 방지)
   const startTutorial = () => {
@@ -5514,19 +5520,19 @@ export default function App() {
     },
     {
       target: '[data-tutorial="upload"]',
-      title: "양식 업로드",
+      title: "내 양식 올리기",
       description: "올린 양식과 똑같은 형식으로 문서를 만들어줍니다.",
     },
     {
       target: ['[data-tutorial="auto-prompt"]', '[data-tutorial="doc-source"]'],
-      title: "자동 프롬프트 · 원문 사용",
-      description: "자동 프롬프트는 질문을 최적화하고, 원문 사용은 참고문서 전체를 AI 입력에 포함합니다.",
+      title: "프롬프트 다듬기 · 원문 그대로 쓰기",
+      description: "프롬프트 다듬기는 질문을 최적화하고, 원문 그대로 쓰기는 참고문서 전체를 AI 입력에 포함합니다.",
       onExit: () => setScreen("home"),
     },
     {
       target: '[data-tutorial="categories"]',
-      title: "작업 고르기",
-      description: "이미지·문서·발표자료 등 원하는 작업을 고르면 어울리는 템플릿을 보여줘요.",
+      title: "에디터 열기",
+      description: "이미지·워드·PPT 등 형식을 고르면 바로 에디터가 열려요. 템플릿을 누르면 템플릿 목록으로 내려가요.",
     },
     {
       target: '[data-tutorial="template-grid"]',
@@ -5578,14 +5584,19 @@ export default function App() {
           // 화면도 열지 않는다(2026-09-18, "템플릿을 골라 주세요" 목록 화면 제거) —
           // 검색 결과에서 템플릿을 여는 openTemplate과는 다른, 이 진입로만 없앤다.
           onSelectTask={() => {}}
+          onOpenEditor={openEditor}
           onSearch={openSearch}
           onHelp={() => navigate("request-help")}
+          onViewAllTemplates={() => navigate("templates")}
           autoFocusHelper={focusHelperCta}
           onAutoFocusHelperHandled={() => setFocusHelperCta(false)}
         />
       )}
       {screen === "search" && (
         <SearchResultsScreen initialQuery={searchQuery} onBack={() => navigate("home")} onOpenTemplate={openTemplate} />
+      )}
+      {screen === "templates" && (
+        <AllTemplatesScreen onBack={() => navigate("home")} onOpenTemplate={openTemplate} />
       )}
       {screen === "request-help" && (
         <RequestHelpScreen
@@ -5745,6 +5756,16 @@ export default function App() {
       )}
       {/* 서식 채우기 — 데스크톱 3단. TopBar·사이드바까지 덮는 전체 화면이라 최상단에 얹는다.
           좌측 컬럼은 앱 공용 SidebarDrawer 를 docked 로 주입한다(서식 화면 전용 사이드바 없음). */}
+      {layerEditorOpen && (
+        <TabletMiniEditor
+          fileName="레이어 분리.png"
+          ratio="4 / 5"
+          canvasSize="1024 × 1280 px"
+          pages={4}
+          unit="슬라이드"
+          onClose={() => setLayerEditorOpen(false)}
+        />
+      )}
       {screen === "forms-fill" && fillTarget && (
         <FormFillDesktop
           formId={fillTarget.id}

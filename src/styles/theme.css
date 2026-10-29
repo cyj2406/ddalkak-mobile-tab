@@ -59,10 +59,15 @@
      프롬프트 입력창과 카테고리 그리드가 같은 좌우 정렬선을 쓰도록 공유하는 값.
      모바일(<768px)은 화면 폭을 그대로 사용해 기존 레이아웃을 유지한다. */
   --home-container: 100%;
-  /* ── 홈 섹션 간격 — 두 종류만 쓴다 ─────────────
-     섹션 사이(추천 서식 → 검색·도움받기 → 작업 고르기)는 --home-block-gap,
+  /* ── 홈 섹션 간격 ─────────────
+     같은 관계는 화면 전체에서 같은 값을 쓴다(2026-10-22 통일).
+     섹션 ↔ 섹션(히어로 묶음 → 인기 템플릿 → 작업별로 시작하기)은 --home-section-gap 하나.
+     예전 --home-block-gap(44px, 히어로 → 인기 템플릿)은 이 값으로 합쳐 없앴다.
+     섹션 제목 ↔ 서브카피는 --home-title-sub, 서브카피 ↔ 콘텐츠는 --home-sub-content(HomeSectionHeader).
      한 덩어리 안(검색창 ↔ 도움받기 배너)은 --home-cluster-gap. */
-  --home-block-gap: 44px;
+  --home-section-gap: 80px;
+  --home-title-sub: 4px;
+  --home-sub-content: 24px;
   --home-cluster-gap: 12px;
   /* 홈 제목 ↔ 검색창 간격 — 섹션 사이(44px)보다는 좁고, 제목·부제 간격보다는 넓다. */
   --gap-title-search: 26px;

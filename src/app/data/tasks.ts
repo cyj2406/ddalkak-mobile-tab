@@ -14,6 +14,7 @@ import {
   SpellCheck,
   Languages,
   Table2,
+  ClipboardPen,
   Clapperboard,
   Youtube,
   Music2,
@@ -33,6 +34,7 @@ import artWord from "@/assets/home/art/word.png";
 import artHangul from "@/assets/home/art/hangul.png";
 import artLeaflet from "@/assets/home/art/leaflet.png";
 import artThesis from "@/assets/home/art/thesis.png";
+import artFormfill from "@/assets/home/art/formfill.png";
 import artVisa from "@/assets/home/art/visa.png";
 import artPpt from "@/assets/home/art/ppt.png";
 import artWebppt from "@/assets/home/art/webppt.png";
@@ -156,6 +158,8 @@ export const TASK_GROUPS: TaskGroup[] = [
       { id: "word", label: "워드 문서", desc: "보고서와 제안서", status: "available", icon: FileText, illustration: artWord, illustrationArt: { w: 132, right: -6.0, bottom: -2.5 }, wsCategory: "docs", tabLabel: "워드" },
       { id: "hangul", label: "한글 문서", desc: "공문과 신청서", status: "available", icon: FileSignature, illustration: artHangul, illustrationArt: { w: 122, right: -3.9, bottom: 2.6 }, wsCategory: "docs", tabLabel: "한글" },
       { id: "thesis", label: "논문 초안", desc: "논문 구성과 초안", status: "available", icon: GraduationCap, illustration: artThesis, illustrationArt: { w: 127, right: -3.9, bottom: -0.5 }, wsCategory: "docs", tabLabel: "논문" },
+      // 서식 작성(2026-10-22) — 워크스페이스가 아닌 서식 채우기 흐름이라 wsCategory 없음. 요청 작성 도움받기 목록에서는 뺀다(RequestHelpScreen EXCLUDED_TASK_IDS).
+      { id: "formfill", label: "서식 작성", desc: "신청서·양식 빈칸 채우기", status: "available", icon: ClipboardPen, illustration: artFormfill, illustrationArt: { w: 132.7, right: -7.9, bottom: -2.6 } },
       { id: "visa", label: "비자·체류 서류", desc: "비자와 체류 신청서", status: "available", icon: IdCard, illustration: artVisa, illustrationScale: 1.04, illustrationArt: { w: 104, right: 12.7, bottom: 2.9 }, wsCategory: "docs", tabLabel: "전체", hiddenFromListing: true },
     ],
   },

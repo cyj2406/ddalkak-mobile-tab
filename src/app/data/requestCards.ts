@@ -377,6 +377,8 @@ export type FormatField =
       label: string;
       options: FormatOption[];
       defaultValue: string;
+      /** 템플릿을 고르면 이 값 대신 템플릿 값이 쓰일 때 — 2단계 "정리한 요청"에서 템플릿을 골랐을 때만 값 옆에 붙이는 안내 */
+      templateNote?: string;
     }
   | {
       kind: "number";
@@ -401,18 +403,11 @@ export type FormatField =
 export interface FormatDef {
   label: string;
   fields: FormatField[];
-  /** 라벨 옆 ? 툴팁 */
+  /** 라벨 옆 ? 툴팁 — 작업에서 그 값을 어디에 쓰는지 한 줄로("~해요" 체). 템플릿 예외는 여기 두지 않고 필드의 templateNote 로 */
   tooltip?: string;
   /** 드롭다운 아래 회색 한 줄 */
   helper?: string;
 }
-
-const opts = (...values: string[]): FormatOption[] => values.map((value) => ({ value }));
-const single = (label: string, options: FormatOption[], defaultValue: string, extra: Partial<FormatDef> = {}): FormatDef => ({
-  label,
-  fields: [{ kind: "select", key: "value", label, options, defaultValue }],
-  ...extra,
-});
 
 /** 브로셔 장수 — 연속 수치라 스테퍼 */
 const pages = (defaultValue: string): FormatDef => ({
@@ -444,17 +439,20 @@ const slides = (defaultValue: string): FormatDef => ({
   }],
 });
 
+/** 비율은 빈 템플릿으로 시작할 때만 쓰인다(템플릿 모드는 템플릿이 비율을 정한다) — 2단계에서 템플릿을 골랐을 때 값 옆에 붙인다 */
+const TEMPLATE_RATIO_NOTE = "템플릿 비율을 따라요";
+
 const FORMAT_BY_TASK: Record<string, FormatDef> = {
-  photo: single(
-    "비율",
-    [
-      { value: "정사각", note: "1:1" },
-      { value: "가로", note: "16:9" },
-      { value: "세로", note: "9:16" },
-    ],
-    "정사각",
-    { tooltip: "정사각(1:1)은 피드, 가로(16:9)는 블로그·웹 배너, 세로(9:16)는 스토리·릴스 전체 화면에 맞아요. 빈 템플릿으로 시작할 때 적용되고, 템플릿을 고르면 템플릿 비율을 따라요." },
-  ),
+  photo: {
+    label: "비율",
+    fields: [{
+      kind: "select", key: "value", label: "비율",
+      options: [{ value: "정사각", note: "1:1" }, { value: "가로", note: "16:9" }, { value: "세로", note: "9:16" }],
+      defaultValue: "정사각",
+      templateNote: TEMPLATE_RATIO_NOTE,
+    }],
+    tooltip: "정사각은 피드, 가로는 배너, 세로는 스토리에 맞아요.",
+  },
   // 카드뉴스는 비율을 묻지 않는다 — 템플릿이 가진다. 카드 수는 1~20 스테퍼.
   cardnews: {
     label: "카드 수",
@@ -480,14 +478,14 @@ const FORMAT_BY_TASK: Record<string, FormatDef> = {
   shortform: {
     label: "영상 형식",
     fields: [
-      { kind: "select", key: "ratio", label: "비율", options: [{ value: "세로", note: "9:16" }, { value: "정사각", note: "1:1" }, { value: "가로", note: "16:9" }], defaultValue: "세로" },
+      { kind: "select", key: "ratio", label: "비율", options: [{ value: "세로", note: "9:16" }, { value: "정사각", note: "1:1" }, { value: "가로", note: "16:9" }], defaultValue: "세로", templateNote: TEMPLATE_RATIO_NOTE },
       {
         kind: "number", key: "length", label: "영상 길이", min: 5, max: 15, defaultValue: "15", unit: "초", summaryUnit: "초",
         overMaxNotice: "최대 15초까지 만들 수 있어요",
         underMinNotice: "최소 5초부터 만들 수 있어요",
       },
     ],
-    tooltip: "세로는 릴스·쇼츠, 가로는 유튜브에 적합해요. 비율은 빈 템플릿으로 시작할 때 적용돼요.",
+    tooltip: "세로는 쇼츠·릴스, 가로는 유튜브에 맞아요.",
   },
 };
 

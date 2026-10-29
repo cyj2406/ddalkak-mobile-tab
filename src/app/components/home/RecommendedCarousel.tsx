@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { f, homeSectionTitleClassName, homeSectionTitleStyle, shadow, typography } from "@/app/styleTokens";
+import { color, f, motion, shadow, typography } from "@/app/styleTokens";
+import { HomeSectionHeader } from "./HomeSectionHeader";
 import { CAROUSEL_COVERS, type CarouselCover } from "@/app/data/tasks";
 
 const CARD_HEIGHT = 280;
@@ -73,7 +74,7 @@ function TemplateCard({ cover, onSelect }: { cover: CarouselCover; onSelect: () 
 }
 
 /**
- * 바로 시작하기 좋은 템플릿 — 참고 디자인의 실제 표지 이미지를 그대로 쓴다.
+ * 인기 템플릿으로 시작하기 — 참고 디자인의 실제 표지 이미지를 그대로 쓴다.
  *
  * 좌우 화살표 버튼과 별개로 일정 간격마다 한 페이지씩 자동으로 넘어간다 — 끝에 닿으면
  * 다시 처음으로 돌아간다(무한 순환). 사용자가 직접 만지는 동안(마우스 오버·키보드 포커스·
@@ -90,7 +91,11 @@ function TemplateCard({ cover, onSelect }: { cover: CarouselCover; onSelect: () 
  * 네이티브 제스처로만 움직이므로, 마우스 드래그로 스크롤하다 잘못 카드가 클릭되는
  * 경우가 없다.
  */
-export default function RecommendedCarousel({ onSelectTemplate }: { onSelectTemplate: (taskId: string) => void }) {
+export default function RecommendedCarousel({ onSelectTemplate, onViewAll }: {
+  onSelectTemplate: (taskId: string) => void;
+  /** 제목 줄 오른쪽 "전체 보기" — 전체 템플릿 화면을 연다 */
+  onViewAll: () => void;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -144,8 +149,9 @@ export default function RecommendedCarousel({ onSelectTemplate }: { onSelectTemp
 
   return (
     <section
-      aria-label="바로 시작하기 좋은 템플릿"
-      style={{ marginTop: "var(--home-block-gap)" }}
+      id="template-start"
+      aria-label="인기 템플릿으로 시작하기"
+      style={{ marginTop: "var(--home-section-gap)", scrollMarginTop: 24 }}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
@@ -156,7 +162,23 @@ export default function RecommendedCarousel({ onSelectTemplate }: { onSelectTemp
       onPointerUp={(e) => { if (e.pointerType !== "mouse") setPaused(false); }}
       onPointerCancel={(e) => { if (e.pointerType !== "mouse") setPaused(false); }}
     >
-      <h2 className={`mb-6 min-w-0 ${homeSectionTitleClassName}`} style={{ ...homeSectionTitleStyle, wordBreak: "keep-all" }}>바로 시작하기 좋은 템플릿</h2>
+      <style>{`.view-all-link:hover { color: ${color.brand} !important; }`}</style>
+      <HomeSectionHeader
+        title="인기 템플릿으로 시작하기"
+        subtitle="고르고 바로 고치면 끝"
+        action={
+          <button
+            type="button"
+            onClick={onViewAll}
+            aria-label="인기 템플릿 전체 보기"
+            className="view-all-link shrink-0 inline-flex items-center gap-0.5 whitespace-nowrap rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[#4f7bff] focus-visible:ring-offset-2"
+            style={{ ...f, fontWeight: 500, fontSize: 14, lineHeight: "20px", color: color.text.secondary, transition: `color ${motion.fast}` }}
+          >
+            전체 보기
+            <ChevronRight size={16} aria-hidden />
+          </button>
+        }
+      />
 
       {/* carousel-viewport(theme.css) — 이전/다음 버튼의 위치 기준이자 호버 감지 대상.
           스크롤 트랙을 감싸기만 하고 자체 padding은 없어서, 트랙과 좌표계(top=0)를

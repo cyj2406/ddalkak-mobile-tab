@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
-import { color, f, homeSectionTitleClassName, homeSectionTitleStyle, SUBTITLE_COLOR, taskGroupTitleClassName, taskGroupTitleStyle } from "@/app/styleTokens";
-import { TASK_GROUPS, visibleTasksOf, type Task } from "@/app/data/tasks";
+import { color, f, SUBTITLE_COLOR, taskGroupTitleClassName, taskGroupTitleStyle } from "@/app/styleTokens";
+import { TASK_GROUPS, visibleTasksOf, type Task, type TaskGroup } from "@/app/data/tasks";
+import { HomeSectionHeader } from "./HomeSectionHeader";
 
 /** 분류별 카드 색 — 배경 틴트(bg)·아이콘/포인트 색(fg) 짝. 계산된 알파값이 아니라
  * 분류마다 고정된 파스텔 톤을 쓴다(이미지=보라, 문서=파랑, 발표자료=주황, …). */
@@ -16,7 +17,8 @@ export const GROUP_COLORS: Record<string, { bg: string; fg: string }> = {
 };
 
 /**
- * 카테고리 선택 시 펼쳐지는 세부 기능 줄(CategoryFeatureStrip)과 "요청 작성 도움받기"
+ * (예전 홈 카테고리 세부 기능 줄 CategoryFeatureStrip은 2026-10-16 에디터 아이콘 줄로 바뀌며 삭제 — strip variant는 남겨 둠)
+ * "요청 작성 도움받기"
  * 1단계 작업 선택 화면(RequestHelpScreen)도 이 카드를 그대로 쓴다 — "기존 일러스트
  * 카드 재사용" 요구를 새 컴포넌트를 또 만들지 않고 지킨다. 두 화면 모두 스타일·이미지
  * 매핑을 여기 한 곳에서만 가져가므로, 홈 카드를 고치면 두 화면이 함께 바뀐다.
@@ -194,33 +196,49 @@ export function TaskCard({
 }
 
 /**
- * 무엇을 만들까요? — 7개 분류 × 21개 작업 카드.
+ * 홈 "작업별로 시작하기" 카드에서만 쓰는 이름·설명(2026-10-22 워딩 수정). tasks.ts 의 label/desc 는
+ * 요청 작성 도움받기 1단계 등 다른 화면도 함께 쓰므로 원본은 두고 홈 카드에서만 덮어쓴다.
+ */
+const HOME_TASK_COPY: Record<string, { label: string; desc: string }> = {
+  photo: { label: "사진·그림", desc: "한 줄 묘사로 이미지" },
+  cardnews: { label: "카드뉴스", desc: "여러 장짜리 SNS 소식" },
+  product: { label: "상품 상세페이지", desc: "팔리는 상품 소개" },
+  leaflet: { label: "브로셔", desc: "한 장으로 보는 홍보물" },
+  word: { label: "보고서·제안서", desc: "업무 문서" },
+  hangul: { label: "공문·신청서", desc: "제출용 서류" },
+  thesis: { label: "논문", desc: "목차부터 본문까지" },
+  formfill: { label: "서식 작성", desc: "신청서·양식 빈칸 채우기" },
+};
+
+function TaskGroupBlock({ group, onSelectTask }: { group: TaskGroup; onSelectTask: (taskId: string) => void }) {
+  return (
+    <div>
+      <div className="flex items-center gap-2.5 mb-4">
+        <h3 className={taskGroupTitleClassName} style={taskGroupTitleStyle}>{group.name}</h3>
+        <span className="flex-1 h-px" style={{ background: "#e2e8f0" }} aria-hidden />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:max-wide:grid-cols-3! wide:grid-cols-4!" style={{ gap: "var(--gap-card-y) var(--gap-card-x)" }}>
+        {visibleTasksOf(group).map((task) => (
+          <TaskCard key={task.id} task={HOME_TASK_COPY[task.id] ? { ...task, ...HOME_TASK_COPY[task.id] } : task} groupId={group.id} onSelect={onSelectTask} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 작업별로 시작하기(구 "AI에게 맡기기") — 7개 분류 × 작업 카드. 모든 분류를 펼쳐 둔다(접기 없음, 2026-10-16 "더 보기" 접기를 넣었다가 되돌림).
+ * 분류 제목 옆 "›" 링크·섹션 "모두 보기"는 연결할 전체 목록 페이지가 아직 없어 두지 않는다.
  *
- * 분류 이름은 카드 묶음 위에 붙고, 카드는 auto-fill 그리드로 흐른다(1200px 4열 ·
- * 768~1199px 3열 · 그 아래 2열 — 템플릿 카드 그리드와 같은 기준).
- * 작업 카드는 선택 컨트롤이 아니라 링크다 — 누르면 곧바로 해당 작업의 템플릿 목록으로 이동한다.
- * 색은 분류 구분을 거들 뿐이다: 분류 이름과 설명 문구가 같은 정보를 글자로도 전달한다.
+ * 카드는 auto-fill 그리드로 흐른다(1200px 4열 · 768~1199px 3열 · 640~767px 2열 · 그 아래 1열).
+ * 작업 카드는 선택 컨트롤이 아니라 링크다. 색은 분류 구분을 거들 뿐이다: 분류 이름과 설명 문구가 같은 정보를 글자로도 전달한다.
  */
 export default function TaskGrid({ onSelectTask }: { onSelectTask: (taskId: string) => void }) {
   return (
-    <section id="all-features" aria-label="전체 기능" className="mt-10 wide:mt-16">
-      <h2 className={`mb-6 min-w-0 ${homeSectionTitleClassName}`} style={{ ...homeSectionTitleStyle, wordBreak: "keep-all" }}>
-        전체 기능
-      </h2>
+    <section id="all-features" aria-labelledby="all-features-title" style={{ marginTop: "var(--home-section-gap)" }}>
+      <HomeSectionHeader id="all-features-title" title="작업별로 시작하기" subtitle="만들 작업을 고르면 맞는 템플릿을 보여드려요" />
       <div className="flex flex-col gap-8">
-        {TASK_GROUPS.map((group) => (
-          <div key={group.id}>
-            <div className="flex items-center gap-2.5 mb-4">
-              <h3 className={taskGroupTitleClassName} style={taskGroupTitleStyle}>{group.name}</h3>
-              <span className="flex-1 h-px" style={{ background: "#e2e8f0" }} aria-hidden />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:max-wide:grid-cols-3! wide:grid-cols-4!" style={{ gap: "var(--gap-card-y) var(--gap-card-x)" }}>
-              {visibleTasksOf(group).map((task) => (
-                <TaskCard key={task.id} task={task} groupId={group.id} onSelect={onSelectTask} />
-              ))}
-            </div>
-          </div>
-        ))}
+        {TASK_GROUPS.map((group) => <TaskGroupBlock key={group.id} group={group} onSelectTask={onSelectTask} />)}
       </div>
     </section>
   );
