@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { color, controlHeight, f, motion, radius, typography } from "@/app/styleTokens";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/app/components/ui/tooltip";
+import RequestHelperHint from "@/app/components/onboarding/RequestHelperHint";
+import { useOnboardingState } from "@/app/components/onboarding/onboardingStore";
 
 const PLACEHOLDER_DESKTOP = "무엇을 만들까요? 예: 행사 안내문, 카페 홍보 이미지";
 const PLACEHOLDER_MOBILE = "무엇을 만들까요?";
@@ -70,6 +72,9 @@ export default function HomeSearch({
   const [helperHovered, setHelperHovered] = useState(false);
   const [helperPressed, setHelperPressed] = useState(false);
   const helperBtnRef = useRef<HTMLButtonElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // 온보딩 1단계 동안만 예시가 타이핑되는 placeholder(값은 넣지 않는다)
+  const { typingPlaceholder } = useOnboardingState();
 
   useEffect(() => {
     if (autoFocusHelper) {
@@ -152,7 +157,10 @@ export default function HomeSearch({
         </Tooltip>
       </div>
 
+      {/* relative — 요청 도우미 힌트(RequestHelperHint)가 이 묶음 아래에 겹쳐 뜬다 */}
+      <div className="relative w-full">
       <div
+        data-onboarding="search"
         className="field-pill flex items-center gap-4 rounded-full w-full"
         // 오른쪽 안쪽 여백을 버튼의 위아래 여백(컨테이너 높이 78 - 버튼 48 = 30, 위아래 15씩)과
         // 비슷하게 맞춘다 — 버튼을 style로 왼쪽으로 밀지 않고, 컨테이너 padding-right 만으로
@@ -165,12 +173,14 @@ export default function HomeSearch({
           <path d="m20.5 20.5-4.7-4.7" />
         </svg>
         <input
+          ref={inputRef}
+          data-onboarding="search-input"
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
           aria-label="만들 작업 입력"
-          placeholder={isTabletUp ? PLACEHOLDER_DESKTOP : PLACEHOLDER_MOBILE}
+          placeholder={typingPlaceholder ?? (isTabletUp ? PLACEHOLDER_DESKTOP : PLACEHOLDER_MOBILE)}
           // placeholder 색 — muted(#9ca3af, 2.54:1)는 흰 배경에서 대비가 너무 낮아 여기서는
           // secondary(#64748b, 4.76:1)를 쓴다(다른 화면의 placeholder 관례와 다르지만,
           // 이 검색창은 실제로 눈에 잘 띄어야 하는 홈의 1차 진입점이라 가독성을 우선한다).
@@ -200,6 +210,8 @@ export default function HomeSearch({
         >
           시작하기
         </button>
+      </div>
+      <RequestHelperHint inputRef={inputRef} query={query} onHelp={onHelp} />
       </div>
     </section>
   );

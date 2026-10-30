@@ -2,6 +2,7 @@ import { useId, type ReactNode } from "react";
 import { color, editorEntry, f, motion, radius, typography } from "@/app/styleTokens";
 import { Badge } from "@/app/components/common/Badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/app/components/ui/tooltip";
+import { useOnboardingState } from "@/app/components/onboarding/onboardingStore";
 import artImage from "@/assets/home/editor/image.png";
 import artWord from "@/assets/home/editor/word.png";
 import artHangul from "@/assets/home/editor/hangul.png";
@@ -108,9 +109,12 @@ const BUNDLE_WIDTH = 7 * editorEntry.item + 7 * editorEntry.space + (1 + 2 * (ed
 
 export function EditorQuickLinks({ onOpenEditor }: { onOpenEditor: (kind: EditorKind) => void }) {
   const rule = <span aria-hidden className="flex-1 h-px" style={{ background: color.border.default }} />;
+  // 홈 온보딩 2단계('열고 고치는 건 무료예요')가 떠 있는 동안만 라벨의 '무료'를 브랜드 배지로 — 끝나면 원래 글자로 돌아간다
+  const freeEmphasis = useOnboardingState().stepId === "editor-row";
   return (
     <nav
       data-tutorial="categories"
+      data-onboarding="editor-row"
       aria-labelledby="editor-row-label"
       className="flex flex-col self-stretch"
       style={{ marginTop: editorEntry.searchGapExtra, gap: editorEntry.captionGap, ["--row-gutter" as string]: "var(--gap-screen-x)" }}
@@ -132,7 +136,7 @@ export function EditorQuickLinks({ onOpenEditor }: { onOpenEditor: (kind: Editor
             className="whitespace-nowrap"
             style={{ ...typography.caption, color: color.text.secondary, lineHeight: `${editorEntry.captionLineHeight}px` }}
           >
-            무료 편집기 바로 열기
+            {freeEmphasis ? <><Badge tone="brandSolid" size="sm">무료</Badge> 편집기 바로 열기</> : "무료 편집기 바로 열기"}
           </p>
           {rule}
       </div>

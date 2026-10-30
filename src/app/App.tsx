@@ -21,7 +21,7 @@ import {
   FILE_TYPE_META, fileNameFor, resolveFileType,
   type ViewerFileType,
 } from "@/app/components/viewer/viewerChrome";
-import TutorialTour, { type TutorialStepConfig } from "@/app/components/common/TutorialTour";
+import HomeOnboarding from "@/app/components/onboarding/HomeOnboarding";
 import { MobileEditorNotice } from "@/app/components/viewer/MobileEditorNotice";
 import { ScrollableChips } from "@/app/components/common/ScrollableChips";
 import { Button } from "@/app/components/common/Button";
@@ -38,6 +38,7 @@ import HomeSearch from "@/app/components/home/HomeSearch";
 import { EditorQuickLinks, type EditorKind } from "@/app/components/home/EditorQuickLinks";
 import SearchResultsScreen from "@/app/components/home/SearchResultsScreen";
 import AllTemplatesScreen from "@/app/components/home/AllTemplatesScreen";
+import CardNewsEditorScreen from "@/app/components/home/CardNewsEditorScreen";
 import RequestHelpScreen, { type RequestHandoff } from "@/app/components/home/RequestHelpScreen";
 import { RequestCardsPanel } from "@/app/components/workspace/RequestCardsPanel";
 import { getTaskById, type TaskTemplate } from "@/app/data/tasks";
@@ -52,7 +53,7 @@ import { SettingsBillingTab } from "@/app/components/settings/SettingsBillingTab
 
 
 // ─── 타입 ──────────────────────────────────────────────────────────────────────
-type Screen = "home" | "templates" | "image-ai" | "landing-ai" | "forms-ai" | "forms-fill" | "docs-ai" | "audio-ai" | "ppt-ai" | "video-ai" | "favorites" | "mywork" | "notifications-all" | "search" | "request-help" | "pricing" | "subscription-complete";
+type Screen = "home" | "templates" | "cardnews-editor" | "image-ai" | "landing-ai" | "forms-ai" | "forms-fill" | "docs-ai" | "audio-ai" | "ppt-ai" | "video-ai" | "favorites" | "mywork" | "notifications-all" | "search" | "request-help" | "pricing" | "subscription-complete";
 export type WorkspaceCategory = "docs" | "ppt" | "video" | "landing" | "image" | "detail";
 const WS_LABEL: Record<WorkspaceCategory, string> = { docs: "문서", ppt: "PPT", video: "영상", landing: "랜딩페이지", image: "이미지", detail: "상세페이지" };
 const WS_COLOR: Record<WorkspaceCategory, string> = { docs: "#3B82F6", ppt: "#8B5CF6", video: "#EF4444", landing: "#22C55E", image: "#F59E0B", detail: "#EC4899" };
@@ -2142,8 +2143,10 @@ function FormsAIScreen({ activeTab, onTabChange, sortOption, onSortChange, scrol
 
 // ─── 화면 컴포넌트 ────────────────────────────────────────────────────────────
 
-function HomeScreen({ onSelectTask, onOpenEditor, onSearch, onHelp, onViewAllTemplates, autoFocusHelper, onAutoFocusHelperHandled }: {
+function HomeScreen({ onSelectTask, onOpenCardNews, onOpenEditor, onSearch, onHelp, onViewAllTemplates, autoFocusHelper, onAutoFocusHelperHandled }: {
   onSelectTask: (taskId: string) => void;
+  /** 작업별로 시작하기의 카드뉴스 카드 — 카드뉴스 브리프 편집 화면을 연다 */
+  onOpenCardNews: () => void;
   /** "인기 템플릿으로 시작하기" 제목 줄의 "전체 보기" — 전체 템플릿 화면을 연다 */
   onViewAllTemplates: () => void;
   /** 상단 아이콘 줄 — 포맷 에디터를 빈 템플릿으로 바로 연다 */
@@ -2185,7 +2188,7 @@ function HomeScreen({ onSelectTask, onOpenEditor, onSearch, onHelp, onViewAllTem
             <EditorQuickLinks onOpenEditor={onOpenEditor} />
           </div>
           <RecommendedCarousel onSelectTemplate={onSelectTask} onViewAll={onViewAllTemplates} />
-          <TaskGrid onSelectTask={onSelectTask} />
+          <TaskGrid onSelectTask={(taskId) => (taskId === "cardnews" ? onOpenCardNews() : onSelectTask(taskId))} />
         </div>
       </div>
       {isTabletRange && <Footer />}
@@ -2511,7 +2514,7 @@ function FavoritesScreen() {
   );
 }
 
-function MyWorkScreen() {
+function MyWorkScreen({ items = myWorkItems, onGoHome }: { items?: typeof myWorkItems; onGoHome: () => void }) {
   return (
     <main className="flex-1 flex flex-col overflow-y-auto" style={{ scrollbarWidth: "none" }}>
       {/* Page header */}
@@ -2521,15 +2524,28 @@ function MyWorkScreen() {
         </div>
         <span style={{ ...f, fontWeight: 700, fontSize: 22, color: "#0a0a0a", letterSpacing: "-0.6px" }}>내 작업</span>
       </div>
+      {items.length === 0 ? (
+        /* 빈 화면 — 첫 방문자는 여기가 비어 있다. 홈 온보딩에서 '내 작업' 단계를 뺀 대신,
+           필요한 순간(처음 들어왔을 때)에 무엇을 하면 되는지 알려 준다(2026-10-30). */
+        <div className="mx-4 mb-6 flex flex-col items-center justify-center gap-3 rounded-[20px] border border-[#e2e8f0] bg-white px-8 text-center"
+          style={{ paddingTop: 64, paddingBottom: 64, boxShadow: "0px 1px 4px rgba(0,0,0,0.04)" }}>
+          <div className="bg-[#eff6ff] rounded-[14px] size-12 flex items-center justify-center"><IconWorkBlue /></div>
+          <p style={{ ...f, fontWeight: 600, fontSize: 15, color: "#334155", letterSpacing: "-0.3px", wordBreak: "keep-all" }}>
+            아직 만든 작업이 없어요. 홈에서 첫 작업을 만들어 보세요.
+          </p>
+          <Button variant="primary" size="md" onClick={onGoHome} style={{ marginTop: 4 }}>홈으로 가기</Button>
+        </div>
+      ) : (
+      <>
       <SearchFilterBar />
       {/* List (흰색 카드 컨테이너 안에 행을 담는다) */}
       <div className="mx-4 mb-6 bg-white rounded-[20px] border border-[#e2e8f0] overflow-hidden"
         style={{ boxShadow: "0px 1px 4px rgba(0,0,0,0.04)" }}>
-        {myWorkItems.map((item, i) => {
+        {items.map((item, i) => {
           const tag = item.tag ? tagMap[item.tag] : null;
           return (
             <div key={i} className="flex items-center gap-2 px-4 py-4"
-              style={{ borderBottom: i < myWorkItems.length - 1 ? "1px solid #f1f5f9" : "none" }}>
+              style={{ borderBottom: i < items.length - 1 ? "1px solid #f1f5f9" : "none" }}>
               {/* 제목 */}
               <span className="truncate flex-1" style={{ ...f, fontWeight: 600, fontSize: 14, color: "#0a0a0a", letterSpacing: "-0.35px" }}>{item.title}</span>
               {/* 태그 배지 (날짜 앞, 우측 정렬) */}
@@ -2544,6 +2560,8 @@ function MyWorkScreen() {
           );
         })}
       </div>
+      </>
+      )}
     </main>
   );
 }
@@ -5408,7 +5426,8 @@ export default function App() {
   const [formsSort, setFormsSort] = useState<SortOption>("인기순");
   const formsScrollTop = useRef(0);
 
-  const [tutorialOpen, setTutorialOpen] = useState(false);
+  // 홈 온보딩 '다시 보기' 요청 — 값이 바뀔 때마다 HomeOnboarding 이 처음부터 다시 띄운다(첫 방문 자동 노출은 컴포넌트가 직접 판단)
+  const [onboardingReplay, setOnboardingReplay] = useState(0);
   // 알림 팝오버의 앵커(헤더 벨 버튼)
   const bellRef = useRef<HTMLButtonElement>(null);
   const isTabletRange = useIsTabletRange();
@@ -5488,65 +5507,17 @@ export default function App() {
   const inWorkspace = !!workspace;
   useEffect(() => { setSidebarCollapsed(inWorkspace); }, [inWorkspace]);
 
-  const isSubScreen = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai", "notifications-all", "search", "templates", "request-help", "pricing", "subscription-complete"].includes(screen);
+  const isSubScreen = ["image-ai", "landing-ai", "forms-ai", "docs-ai", "audio-ai", "ppt-ai", "video-ai", "notifications-all", "search", "templates", "cardnews-editor", "request-help", "pricing", "subscription-complete"].includes(screen);
 
-  // 튜토리얼 다시 보기 — 홈으로 돌아가 1단계부터 다시 실행한다(중복 실행 방지)
+  // 튜토리얼 다시 보기(프로필 메뉴) — 홈으로 돌아가 홈 온보딩을 1단계부터 다시 띄운다(2026-10-30).
+  // 예전 작성 화면 투어(TutorialTour, 7단계)는 이 진입점에서 빠졌다 — 컴포넌트 파일은 common/ 에 남아 있다.
   const startTutorial = () => {
-    if (tutorialOpen) return;
     setDrawerOpen(false);
     setSettingsOpen(false);
     setWorkspace(null);
     setScreen("home");
-    requestAnimationFrame(() => setTutorialOpen(true));
+    setOnboardingReplay((n) => n + 1);
   };
-
-  const tutorialSteps: TutorialStepConfig[] = [
-    {
-      target: '[data-tutorial="composer"]',
-      title: "메시지 입력",
-      description: "만들고 싶은 작업을 자유롭게 적고 전송 버튼으로 대화를 시작하세요.",
-      // 홈에는 더 이상 입력창이 없다 — 컴포저가 남아 있는 문서 화면을 잠깐 빌려 보여준다.
-      onEnter: () => setScreen("docs-ai"),
-    },
-    {
-      target: '[data-tutorial="attach"]',
-      title: "파일 첨부",
-      description: "이미지·PDF·엑셀 등 파일을 첨부하면 AI가 함께 분석합니다.",
-    },
-    {
-      target: '[data-tutorial="skill"]',
-      title: "스킬 선택",
-      description: "전문 스킬을 선택하면 더 정확하고 풍부한 결과를 얻을 수 있어요.",
-    },
-    {
-      target: '[data-tutorial="upload"]',
-      title: "내 양식 올리기",
-      description: "올린 양식과 똑같은 형식으로 문서를 만들어줍니다.",
-    },
-    {
-      target: ['[data-tutorial="auto-prompt"]', '[data-tutorial="doc-source"]'],
-      title: "프롬프트 다듬기 · 원문 그대로 쓰기",
-      description: "프롬프트 다듬기는 질문을 최적화하고, 원문 그대로 쓰기는 참고문서 전체를 AI 입력에 포함합니다.",
-      onExit: () => setScreen("home"),
-    },
-    {
-      target: '[data-tutorial="categories"]',
-      title: "에디터 열기",
-      description: "이미지·워드·PPT 등 형식을 고르면 바로 에디터가 열려요. 템플릿을 누르면 템플릿 목록으로 내려가요.",
-    },
-    {
-      target: '[data-tutorial="template-grid"]',
-      title: "템플릿 선택",
-      description: "카테고리를 열면 바로 쓸 수 있는 템플릿이 나와요. 카드를 눌러 템플릿을 적용해 보세요.",
-      onEnter: () => setScreen("image-ai"),
-      onExit: () => setScreen("home"),
-    },
-    {
-      target: null,
-      title: "결과 확인하기 (보너스)",
-      description: "작업이 끝나면 파일 카드의 '결과 확인하기'로 결과물을 바로 열어보고 다운로드할 수 있습니다.",
-    },
-  ];
 
   return (
     /* 데스크톱은 가로 2단 — 도킹 사이드바 + 본문 컬럼. 그보다 좁으면 사이드바가
@@ -5584,6 +5555,8 @@ export default function App() {
           // 화면도 열지 않는다(2026-09-18, "템플릿을 골라 주세요" 목록 화면 제거) —
           // 검색 결과에서 템플릿을 여는 openTemplate과는 다른, 이 진입로만 없앤다.
           onSelectTask={() => {}}
+          // 예외: 작업별로 시작하기의 카드뉴스 카드만 카드뉴스 브리프 편집 화면을 연다(2026-10-29, 캐러셀 표지는 그대로 무반응).
+          onOpenCardNews={() => navigate("cardnews-editor")}
           onOpenEditor={openEditor}
           onSearch={openSearch}
           onHelp={() => navigate("request-help")}
@@ -5595,6 +5568,7 @@ export default function App() {
       {screen === "search" && (
         <SearchResultsScreen initialQuery={searchQuery} onBack={() => navigate("home")} onOpenTemplate={openTemplate} />
       )}
+      {screen === "cardnews-editor" && <CardNewsEditorScreen />}
       {screen === "templates" && (
         <AllTemplatesScreen onBack={() => navigate("home")} onOpenTemplate={openTemplate} />
       )}
@@ -5693,7 +5667,7 @@ export default function App() {
         />
       )}
       {screen === "favorites" && <FavoritesScreen />}
-      {screen === "mywork" && <MyWorkScreen />}
+      {screen === "mywork" && <MyWorkScreen onGoHome={() => navigate("home")} />}
       {/* 태블릿(768~1199px)에서는 HomeScreen 이 스크롤 흐름 끝에서 직접 렌더한다. */}
       {screen === "home" && !isTabletRange && <Footer />}
       {screen === "notifications-all" && <NotificationsAllScreen />}
@@ -5744,7 +5718,7 @@ export default function App() {
       ) : (
         <NotificationsPanel onClose={() => setNotifOpen(false)} onViewAll={() => { setNotifOpen(false); navigate("notifications-all"); }} />
       ))}
-      <TutorialTour isOpen={tutorialOpen} steps={tutorialSteps} onClose={() => { setTutorialOpen(false); setScreen("home"); }} />
+      <HomeOnboarding enabled={screen === "home" && !workspace && !settingsOpen} isDesktop={isDesktop} replayToken={onboardingReplay} />
       {settingsOpen && (
         <SettingsModal
           key={settingsNavKey}

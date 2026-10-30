@@ -236,7 +236,9 @@ function TaskGroupBlock({ group, onSelectTask }: { group: TaskGroup; onSelectTas
 export default function TaskGrid({ onSelectTask }: { onSelectTask: (taskId: string) => void }) {
   return (
     <section id="all-features" aria-labelledby="all-features-title" style={{ marginTop: "var(--home-section-gap)" }}>
-      <HomeSectionHeader id="all-features-title" title="작업별로 시작하기" subtitle="만들 작업을 고르면 맞는 템플릿을 보여드려요" />
+      <div data-onboarding="task-grid-title">
+        <HomeSectionHeader id="all-features-title" title="작업별로 시작하기" subtitle="만들 작업을 고르면 맞는 템플릿을 보여드려요" />
+      </div>
       <div className="flex flex-col gap-8">
         {TASK_GROUPS.map((group) => <TaskGroupBlock key={group.id} group={group} onSelectTask={onSelectTask} />)}
       </div>

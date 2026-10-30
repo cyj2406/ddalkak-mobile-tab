@@ -494,6 +494,9 @@ ESC 닫기)을 뽑아냈다. `PurchaseConfirmDialog`와 `CancelSubscriptionDialo
   **"전체 보기 ›"**를 붙였다. `HomeSectionHeader`의 `action` 슬롯(제목과 같은 줄, `justify-between`, 보조문구 줄은 그대로)으로 넣는다.
   스타일: 14/20px·500·`color.text.secondary`, hover `color.brand`, `ChevronRight` 16, 포커스 링 브랜드. aria-label "인기 템플릿 전체 보기".
   전체 템플릿 화면은 검색 결과 화면과 같은 폭·`TemplateResultCard`·그리드를 쓰고 `TASK_GROUPS` 순서로 분류별 묶음(제목 + 개수)으로 보여준다.
+- **2026-10-29 카드뉴스 카드 연결**: 작업별로 시작하기의 카드뉴스 카드만 `home/CardNewsEditorScreen.tsx`(screen `"cardnews-editor"`)를 연다
+  (다른 작업 카드·캐러셀 표지는 그대로 무반응). 화면 본체는 디자이너 전달용 별도 프로젝트를 `public/cardnews-editor/`로 빌드해 iframe(`?embed=1&id=cn-tmpl-29`)으로
+  띄운다 — React 19·자체 테마 변수라 코드로 합치지 않는다. 카드 HTML이 `/placeholder/*.svg`를 절대 경로로 불러 `public/placeholder/`에도 둔다.
 - "AI에게 맡기기"는 7개 분류를 모두 펼쳐 둔다. "더 보기"/"접기"로 나머지 분류를 접던 방식은 같은 날 넣었다가 뺐다.
 
 ### 홈·AI 생성 화면 워딩 수정 + 홈 간격 통일 (2026-10-22)
@@ -798,6 +801,22 @@ Hover·focus·selected·disabled 색 로직 자체는 건드리지 않았다(값
   거울 textarea로 재서 px→px로만 바뀐다, resize 핸들 없음. 주제·꼭 담을 내용 모두 글자 수 제한 없음.
   짧은 사실 값만 1줄 input + 40자 제한.
 - 카드 생김새는 상세 프롬프트 카드(App.tsx `CARD_SHELL`·`FcHeader`·`CardFooter`) 값을 그대로 쓴다.
+
+## 홈 첫 방문 온보딩 (2026-10-30)
+
+- 코드는 `src/app/components/onboarding/` 한 폴더. 단계 데이터(대상·문구·스크롤·말풍선 위치·모바일 덮어쓰기)는 `onboardingSteps.ts` 에서만 고친다.
+- 대상은 클래스가 아니라 `data-onboarding` 속성으로 잡는다: `search`·`search-input`(HomeSearch) · `editor-row`(EditorQuickLinks) · `task-grid-title`(TaskGrid).
+- **3단계, 페이지 순서대로 위→아래 한 방향**: 검색창 → 무료 편집기 줄(고치기) → 작업별로 시작하기. 인기 템플릿·요청 도우미·내 작업은 단계에 넣지 않는다
+  (내 작업은 사이드바에 이름이 있고 첫 방문자에겐 비어 있다 — 대신 '내 작업' 빈 화면에 "아직 만든 작업이 없어요. 홈에서 첫 작업을 만들어 보세요." + 홈으로 가기).
+- 마지막 단계(작업별로 시작하기): 섹션 제목이 위에 오게 스크롤 → 제목부터 **화면 아래 끝까지** 밝히고, 아래 120px 은 잘린 선 대신 서서히 흐려진다
+  (`extendToViewportBottom`). 말풍선은 흐려진 띠 안 오른쪽 아래(모바일은 가운데)에 놓아 밝은 카드를 가리지 않는다.
+  마지막 버튼 '시작하기'는 스크롤 없이 오버레이만 걷는다 — 끝나는 자리 = 고를 수 있는 자리.
+- 말풍선: 머리줄 [단계 점 + n/3 · 건너뛰기(늘 같은 자리)], 아래 [이전 · 다음] — 1단계에서도 '이전' 자리는 비워 둔다. 버튼은 공용 `Button`(secondary/primary, 높이 36).
+  오버레이 클릭 = 다음, ESC = 건너뛰기. 스포트라이트에는 위치 전환 애니메이션을 두지 않는다(스크롤 중 대상을 늦게 따라감).
+- 첫 방문 1회 `localStorage["ddalkkak.onboarding.homeSeen"]`, 홈 렌더(load·글꼴·첫 대상) 뒤 600ms. 다시 보기 = 프로필 메뉴 '튜토리얼 다시 보기'
+  (예전 작성 화면 투어 `common/TutorialTour.tsx` 는 이 진입점에서 빠짐).
+- 요청 도우미 힌트(`RequestHelperHint`): 검색창이 비어 있고 포커스된 채 3초 → 검색창 아래 1회. 세션당 1회 `sessionStorage["ddalkkak.onboarding.helperHintShown"]`.
+- 이벤트는 `onboarding/track.ts` 의 `track()` 한 곳(아직 분석 도구 없음 — `ddalkkak:track` CustomEvent + 개발 모드 로그).
 
 ## AI 작업 규칙 (CLAUDE.md에서 참조)
 
